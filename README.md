@@ -13,7 +13,9 @@ zsh
 
 ### Install zsh
 
-`sudo dnf install zsh autojump-zsh -y`
+```
+sudo dnf install zsh autojump-zsh -y
+```
 
 ### set zsh as default shell
 
@@ -30,13 +32,17 @@ oh-my-zsh
 
 https://github.com/ohmyzsh/ohmyzsh#basic-installation
 
-`sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"`
+```
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+```
 
 ### Theme
 
 https://github.com/romkatv/powerlevel10k#oh-my-zsh
 
-`git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k`
+```
+git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k
+```
 
 #### Font
 
@@ -46,9 +52,13 @@ https://www.nerdfonts.com/font-downloads
 
 ### Tools
 
-`git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-autosuggestions`
+```
+git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
+```
 
-`git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting`
+```
+git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
+```
 
 ### Machine / user specific settings
 
