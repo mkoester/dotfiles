@@ -71,6 +71,8 @@ ln -s `pwd`/.zshrc-update-os-dnf.zsh ~/.zshrc-update-os.zsh
 make the config files `.zshrc` and `.p10k.zsh` available in your home directory
 
 ```
+[ ! -L ~/.zshrc ] || rm ~/.zshrc && [ ! -f ~/.zshrc ] || mv ~/.zshrc ~/.zshrc-manual-backup && \
+[ ! -L ~/.p10k.zsh ] || rm ~/.p10k.zsh && [ ! -f ~/.p10k.zsh ] || mv ~/.p10k.zsh ~/.p10k-manual-backup.zsh && \
 ln -s `pwd`/.zshrc ~/ && \
 ln -s `pwd`/.p10k.zsh ~/
 ```
