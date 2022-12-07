@@ -72,6 +72,11 @@ ZSH_THEME="powerlevel10k/powerlevel10k"
 # Would you like to use another custom folder than $ZSH/custom?
 # ZSH_CUSTOM=/path/to/new-custom-folder
 
+# set variables for plugins as well as Oh My ZSH itself
+if [ -d "$HOME/.oh-my-zsh-config" ] ; then
+    for FILE in `find "$HOME/.oh-my-zsh-config" -type f -name "*.zsh"`; source $FILE
+fi
+
 # Which plugins would you like to load?
 # Standard plugins can be found in $ZSH/plugins/
 # Custom plugins may be added to $ZSH_CUSTOM/plugins/
@@ -84,7 +89,6 @@ source $ZSH/oh-my-zsh.sh
 # User configuration
 
 source ~/.zshrc-update-os.zsh
-[[ ! -f ~/.zshrc-pre.zsh ]] || source ~/.zshrc-pre.zsh
 
 # export MANPATH="/usr/local/man:$MANPATH"
 
@@ -125,4 +129,7 @@ fi
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
-[[ ! -f ~/.zshrc-post.zsh ]] || source ~/.zshrc-post.zsh
+# custom settings like aliases, functions variables, etc.
+if [ -d "$HOME/.oh-my-zsh-custom" ] ; then
+    for FILE in `find "$HOME/.oh-my-zsh-custom" -type f -name "*.zsh"`; source $FILE
+fi
