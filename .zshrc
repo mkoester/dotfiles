@@ -74,7 +74,7 @@ HIST_STAMPS="yyyy-mm-dd"
 
 # set variables for plugins as well as Oh My ZSH itself
 if [ -d "$HOME/.oh-my-zsh-config" ] ; then
-    for FILE in `find "$HOME/.oh-my-zsh-config" -type f -name "*.zsh"`; source $FILE
+    for FILE in `find -L "$HOME/.oh-my-zsh-config" -type f -name "*.zsh"`; source $FILE
 fi
 
 # Which plugins would you like to load?
@@ -131,5 +131,5 @@ fi
 
 # custom settings like aliases, functions variables, etc.
 if [ -d "$HOME/.oh-my-zsh-custom" ] ; then
-    for FILE in `find "$HOME/.oh-my-zsh-custom" -type f -name "*.zsh"`; source $FILE
+    for FILE in `find -L "$HOME/.oh-my-zsh-custom" -type f -name "*.zsh"`; source $FILE
 fi
