@@ -13,5 +13,6 @@ create_new_user_with_shared_config () {
     sudo su -c "mkdir -m 700 ~/.ssh;" $NEW_USER_NAME && \
     sudo su -c "mkdir -m 700 ~/.oh-my-zsh-config;" $NEW_USER_NAME && \
     sudo su -c "ln -s $SHARED_DIR/oh-my-zsh-custom/zsh-disable-compfix.zsh ~/.oh-my-zsh-config/" $NEW_USER_NAME && \
+    sudo su -c "touch ~/.zshrc-update-os.zsh" $NEW_USER_NAME && \
     sudo usermod -s $(which zsh) $NEW_USER_NAME
 }

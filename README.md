@@ -110,7 +110,8 @@ sudo chmod 750 $DOTFILES_REPO
 
 ```
 DOTFILES_REPO="/home/dotfiles"; \
-mv ~/.oh-my-zsh/ $DOTFILES_REPO
+mv ~/.oh-my-zsh/ $DOTFILES_REPO && \
+ln -s `pwd`/.oh-my-zsh/ ~/
 ```
 
 ```
