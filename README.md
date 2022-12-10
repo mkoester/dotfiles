@@ -96,7 +96,7 @@ ln -s `pwd`/.zshrc-update-os-apt.zsh ~/.zshrc-update-os.zsh
 ln -s `pwd`/.zshrc-update-os-brew.zsh ~/.zshrc-update-os.zsh
 ```
 
-### set up oh-my-zsh
+#### set up oh-my-zsh
 
 make the config files `.zshrc` and `.p10k.zsh` available in your home directory
 
