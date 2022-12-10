@@ -13,8 +13,22 @@ zsh
 
 ### Install zsh
 
+#### rpm based distros (e.g. fedora, RHEL (clones), etc.)
+
 ```
 sudo dnf install zsh autojump-zsh -y
+```
+
+#### deb based distros (e.g. Debian, Ubuntu, Mint, etc.)
+
+```
+sudo apt install zsh autojump -y
+```
+
+#### MacOS with Homebrew
+
+```
+brew install zsh autojump
 ```
 
 ### set zsh as default shell
@@ -62,10 +76,24 @@ git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:
 
 ### Machine / user specific settings
 
-make the alias for os updates available, e.g. for fedora Red Hat systems:
+make the alias for os updates available
+
+#### dnf based distros (e.g. fedora, RHEL (clones), etc.)
 
 ```
 ln -s `pwd`/.zshrc-update-os-dnf.zsh ~/.zshrc-update-os.zsh
+```
+
+#### apt based distros (e.g. Debian, Ubuntu, Mint, etc.)
+
+```
+ln -s `pwd`/.zshrc-update-os-apt.zsh ~/.zshrc-update-os.zsh
+```
+
+#### MacOS with Homebrew
+
+```
+ln -s `pwd`/.zshrc-update-os-brew.zsh ~/.zshrc-update-os.zsh
 ```
 
 make the config files `.zshrc` and `.p10k.zsh` available in your home directory
