@@ -96,7 +96,7 @@ ln -s `pwd`/.zshrc-update-os-apt.zsh ~/.zshrc-update-os.zsh
 ln -s `pwd`/.zshrc-update-os-brew.zsh ~/.zshrc-update-os.zsh
 ```
 
-### Sharing config with several users on the same machine
+#### Sharing config with several users on the same machine
 
 ```
 CURRENT_USER_NAME=`whoami`; \
