@@ -16,19 +16,19 @@ zsh
 #### rpm based distros (e.g. fedora, RHEL (clones), etc.)
 
 ```
-sudo dnf install zsh autojump-zsh -y
+sudo dnf install -y zsh autojump-zsh tmux
 ```
 
 #### deb based distros (e.g. Debian, Ubuntu, Mint, etc.)
 
 ```
-sudo apt install zsh autojump -y
+sudo apt install -y zsh autojump tmux
 ```
 
 #### MacOS with Homebrew
 
 ```
-brew install zsh autojump
+brew install zsh autojump tmux
 ```
 
 ### set zsh as default shell
