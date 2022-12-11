@@ -1,3 +1,3 @@
 #!/usr/bin/env zsh
 
-alias update-os="apt update && apt dist-upgrade -y && apt autoremove -y"
+alias update-os="sudo apt update && sudo apt dist-upgrade -y && sudo apt autoremove -y"
