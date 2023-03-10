@@ -16,19 +16,19 @@ zsh
 #### rpm based distros (e.g. fedora, RHEL (clones), etc.)
 
 ```
-sudo dnf install -y zsh autojump-zsh tmux
+sudo dnf install -y zsh autojump-zsh tmux git curl wget lsd
 ```
 
 #### deb based distros (e.g. Debian, Ubuntu, Mint, etc.)
 
 ```
-sudo apt install -y zsh autojump tmux
+sudo apt install -y zsh autojump tmux git curl wget
 ```
 
 #### MacOS with Homebrew
 
 ```
-brew install zsh autojump tmux
+brew install zsh autojump tmux git curl wget lsd
 ```
 
 ### set zsh as default shell
@@ -76,24 +76,14 @@ git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:
 
 ### Machine / user specific settings
 
-make the alias for os updates available
-
-#### dnf based distros (e.g. fedora, RHEL (clones), etc.)
+#### Cloning this repository
 
 ```
-ln -s `pwd`/.zshrc-update-os-dnf.zsh ~/.zshrc-update-os.zsh
-```
-
-#### apt based distros (e.g. Debian, Ubuntu, Mint, etc.)
-
-```
-ln -s `pwd`/.zshrc-update-os-apt.zsh ~/.zshrc-update-os.zsh
-```
-
-#### MacOS with Homebrew
-
-```
-ln -s `pwd`/.zshrc-update-os-brew.zsh ~/.zshrc-update-os.zsh
+cd ~ && \
+mkdir src && \
+cd src && \
+git clone https://github.com/mkoester/dotfiles.git && \
+cd dotfiles
 ```
 
 #### Sharing config with several users on the same machine
@@ -119,6 +109,29 @@ mkdir -p "$HOME/.oh-my-zsh-config" && \
 cd ${DOTFILES_REPO:-$HOME/src/dotfiles}/ && \
 ln -s `pwd`/oh-my-zsh-custom/shared-dotfiles.zsh ~/.oh-my-zsh-config/
 ```
+
+
+#### Make the alias for os updates available
+
+##### dnf based distros (e.g. fedora, RHEL (clones), etc.)
+
+```
+ln -s `pwd`/.zshrc-update-os-dnf.zsh ~/.zshrc-update-os.zsh
+```
+
+##### apt based distros (e.g. Debian, Ubuntu, Mint, etc.)
+
+```
+ln -s `pwd`/.zshrc-update-os-apt.zsh ~/.zshrc-update-os.zsh
+```
+
+##### MacOS with Homebrew
+
+```
+ln -s `pwd`/.zshrc-update-os-brew.zsh ~/.zshrc-update-os.zsh
+```
+
+
 
 #### set up oh-my-zsh
 
