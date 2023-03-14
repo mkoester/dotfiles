@@ -89,22 +89,24 @@ cd dotfiles
 #### Sharing config with several users on the same machine
 
 ```
-CURRENT_USER_NAME=`whoami`; \
-SHARED_GROUP="shared_config"; \
-sudo groupadd --users $CURRENT_USER_NAME $SHARED_GROUP; \
-DOTFILES_REPO="/home/dotfiles"; \
+CURRENT_USER_NAME=`whoami` && \
+SHARED_GROUP="shared_config" && \
+sudo groupadd --users $CURRENT_USER_NAME $SHARED_GROUP && \
+DOTFILES_REPO="/home/dotfiles" && \
 sudo git clone https://github.com/mkoester/dotfiles.git $DOTFILES_REPO && \
 sudo chown -R $CURRENT_USER_NAME:$SHARED_GROUP $DOTFILES_REPO && \
 sudo chmod 750 $DOTFILES_REPO
 ```
 
 ```
-DOTFILES_REPO="/home/dotfiles"; \
+DOTFILES_REPO="/home/dotfiles" && \
 mv ~/.oh-my-zsh/ $DOTFILES_REPO && \
+cd ${DOTFILES_REPO:-$HOME/src/dotfiles}/ && \
 ln -s `pwd`/.oh-my-zsh/ ~/
 ```
 
 ```
+DOTFILES_REPO="/home/dotfiles" && \
 mkdir -p "$HOME/.oh-my-zsh-config" && \
 cd ${DOTFILES_REPO:-$HOME/src/dotfiles}/ && \
 ln -s `pwd`/oh-my-zsh-custom/shared-dotfiles.zsh ~/.oh-my-zsh-config/
