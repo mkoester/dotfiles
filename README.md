@@ -16,7 +16,7 @@ zsh
 #### rpm based distros (e.g. fedora, RHEL (clones), etc.)
 
 ```
-sudo dnf install -y zsh autojump-zsh tmux git curl wget lsd
+sudo dnf install -y zsh autojump-zsh tmux git curl wget lsd sqlite
 ```
 
 #### deb based distros (e.g. Debian, Ubuntu, Mint, etc.)
