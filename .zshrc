@@ -127,6 +127,8 @@ if [ -d "$HOME/bin" ] ; then
     export PATH="$HOME/bin:$PATH"
 fi
 
+[[ -d "$HOME/.local/bin" ]] && export PATH="$HOME/.local/bin:$PATH"
+
 [[ -d /opt/bin ]] && export PATH="/opt/bin:$PATH"
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
