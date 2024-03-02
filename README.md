@@ -50,38 +50,6 @@ https://github.com/ohmyzsh/ohmyzsh#basic-installation
 sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
 ```
 
-### Theme
-
-https://github.com/romkatv/powerlevel10k#oh-my-zsh
-
-```
-git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k
-```
-
-#### Font
-
-https://www.nerdfonts.com/font-downloads
-
-- Meslo Nerd Font
-
-### Tools / Plugins
-
-```
-git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
-```
-
-```
-git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
-```
-
-```
-git clone https://github.com/MichaelAquilina/zsh-you-should-use.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/you-should-use
-```
-
-```
-
-```
-
 ### Machine / user specific settings
 
 #### Cloning this repository
@@ -141,9 +109,42 @@ ln -s `pwd`/.zshrc-update-os-apt.zsh ~/.zshrc-update-os.zsh
 ln -s `pwd`/.zshrc-update-os-brew.zsh ~/.zshrc-update-os.zsh
 ```
 
+### Theme
 
+https://github.com/romkatv/powerlevel10k#oh-my-zsh
 
-#### set up oh-my-zsh
+```
+git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k
+```
+
+#### Font
+
+https://www.nerdfonts.com/font-downloads
+
+- Meslo Nerd Font
+
+### Tools / Plugins
+
+```
+git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
+```
+
+```
+git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
+```
+
+```
+git clone https://github.com/MichaelAquilina/zsh-you-should-use.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/you-should-use
+```
+
+#### auto-notify (optional / Desktop only)
+
+```
+git clone https://github.com/MichaelAquilina/zsh-auto-notify.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/auto-notify && \
+mkdir -p $HOME/.oh-my-zsh-plugins-optional && ln -s `pwd`/oh-my-zsh-plugins-optional/auto-notify.zsh ~/.oh-my-zsh-plugins-optional/
+```
+
+### set up oh-my-zsh
 
 make the config files `.zshrc` and `.p10k.zsh` available in your home directory
 

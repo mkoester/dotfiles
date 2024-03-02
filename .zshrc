@@ -84,6 +84,11 @@ fi
 # Add wisely, as too many plugins slow down shell startup.
 plugins=(git tmux fzf autojump zsh-autosuggestions zsh-syntax-highlighting you-should-use)
 
+# enable OPTIONAL plugins
+if [ -d "$HOME/.oh-my-zsh-plugins-optional" ] ; then
+    for FILE in `find -L "$HOME/.oh-my-zsh-plugins-optional" -type f -name "*.zsh"`; source $FILE
+fi
+
 source $ZSH/oh-my-zsh.sh
 
 # User configuration
