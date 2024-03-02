@@ -139,6 +139,12 @@ git clone https://github.com/MichaelAquilina/zsh-you-should-use.git ${ZSH_CUSTOM
 
 #### auto-notify (optional / Desktop only)
 
+with Ubuntu based distros you might have to install a package
+
+```
+sudo <apt/nala> install libnotify-bin -y
+```
+
 ```
 git clone https://github.com/MichaelAquilina/zsh-auto-notify.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/auto-notify && \
 mkdir -p $HOME/.oh-my-zsh-plugins-optional && ln -s `pwd`/oh-my-zsh-plugins-optional/auto-notify.zsh ~/.oh-my-zsh-plugins-optional/
