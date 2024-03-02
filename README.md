@@ -25,6 +25,14 @@ sudo dnf install -y zsh autojump-zsh tmux git curl wget lsd sqlite fzf
 sudo apt install -y zsh autojump tmux git curl wget fzf
 ```
 
+##### nala (optional)
+
+```
+sudo apt install -y nala
+```
+
+you might have to install it manually (e.g. with Ubuntu 22.04 LTS): https://gitlab.com/volian/nala/-/wikis/Installation
+
 #### MacOS with Homebrew
 
 ```
@@ -67,7 +75,8 @@ cd dotfiles
 ```
 CURRENT_USER_NAME=`whoami` && \
 SHARED_GROUP="shared_config" && \
-sudo groupadd --users $CURRENT_USER_NAME $SHARED_GROUP && \
+sudo groupadd $SHARED_GROUP && \
+sudo usermod -a -G $SHARED_GROUP $CURRENT_USER_NAME && \
 DOTFILES_REPO="/home/dotfiles" && \
 sudo git clone https://github.com/mkoester/dotfiles.git $DOTFILES_REPO && \
 sudo chown -R $CURRENT_USER_NAME:$SHARED_GROUP $DOTFILES_REPO && \
@@ -101,6 +110,13 @@ ln -s `pwd`/.zshrc-update-os-dnf.zsh ~/.zshrc-update-os.zsh
 
 ```
 ln -s `pwd`/.zshrc-update-os-apt.zsh ~/.zshrc-update-os.zsh
+```
+
+###### nala
+
+```
+ln -s `pwd`/.zshrc-update-os-nala.zsh ~/.zshrc-update-os.zsh && \
+ln -s `pwd`/oh-my-zsh-custom/nala.zsh ~/.oh-my-zsh-custom
 ```
 
 ##### MacOS with Homebrew
