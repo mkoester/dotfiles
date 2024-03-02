@@ -16,19 +16,19 @@ zsh
 #### rpm based distros (e.g. fedora, RHEL (clones), etc.)
 
 ```
-sudo dnf install -y zsh autojump-zsh tmux git curl wget lsd sqlite
+sudo dnf install -y zsh autojump-zsh tmux git curl wget lsd sqlite fzf
 ```
 
 #### deb based distros (e.g. Debian, Ubuntu, Mint, etc.)
 
 ```
-sudo apt install -y zsh autojump tmux git curl wget
+sudo apt install -y zsh autojump tmux git curl wget fzf
 ```
 
 #### MacOS with Homebrew
 
 ```
-brew install zsh autojump tmux git curl wget lsd
+brew install zsh autojump tmux git curl wget lsd fzf
 ```
 
 ### set zsh as default shell
@@ -64,7 +64,7 @@ https://www.nerdfonts.com/font-downloads
 
 - Meslo Nerd Font
 
-### Tools
+### Tools / Plugins
 
 ```
 git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
@@ -72,6 +72,14 @@ git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-$HOME/.
 
 ```
 git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
+```
+
+```
+git clone https://github.com/MichaelAquilina/zsh-you-should-use.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/you-should-use
+```
+
+```
+
 ```
 
 ### Machine / user specific settings
@@ -142,6 +150,7 @@ make the config files `.zshrc` and `.p10k.zsh` available in your home directory
 ```
 [ ! -L ~/.zshrc ] || rm ~/.zshrc && [ ! -f ~/.zshrc ] || mv ~/.zshrc ~/.zshrc-manual-backup && \
 [ ! -L ~/.p10k.zsh ] || rm ~/.p10k.zsh && [ ! -f ~/.p10k.zsh ] || mv ~/.p10k.zsh ~/.p10k-manual-backup.zsh && \
+ln -s `pwd`/oh-my-zsh-config/you-should-use.zsh ~/.oh-my-zsh-config/ && \
 ln -s `pwd`/.zshrc ~/ && \
 ln -s `pwd`/.p10k.zsh ~/
 ```
