@@ -125,7 +125,9 @@ alias update-dotfiles="echo -n 'Updating dotfiles repo: ' && git -C ${DOTFILES_R
 alias update-omz-p10k="echo -n 'Updating powerlevel10k: ' && git -C ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k pull"
 alias update-omz-autosuggestions="echo -n 'Updating omz-autosuggestions: ' && git -C ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-autosuggestions pull"
 alias update-omz-syntax-highlighting="echo -n 'Updating zsh-syntax-highlighting: ' && git -C ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting pull"
-alias sys_upgrade="date && uptime && update-os && update-dotfiles && update-omz-autosuggestions && update-omz-syntax-highlighting && update-omz-p10k && omz update"
+alias update-omz-you-should-use="echo -n 'Updating omz-you-should-use: ' && git -C ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/you-should-use pull"
+alias update-omz-auto-notify="if [ -d ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/auto-notify ] ; then echo -n 'Updating omz-auto-notify: ' && git -C ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/auto-notify pull; fi"
+alias sys_upgrade="date && uptime && update-os && update-dotfiles && update-omz-autosuggestions && update-omz-syntax-highlighting && update-omz-you-should-use && update-omz-auto-notify && update-omz-p10k && omz update"
 
 # set PATH so it includes user's private bin if it exists
 if [ -d "$HOME/bin" ] ; then
