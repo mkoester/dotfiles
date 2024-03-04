@@ -1,1 +1,1 @@
-AUTO_NOTIFY_IGNORE+=("pnpm dev" "btop" "tldr")
+AUTO_NOTIFY_IGNORE+=("pnpm dev" "btop" "tldr" "tmux")
