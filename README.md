@@ -163,7 +163,8 @@ sudo <apt/nala> install libnotify-bin -y
 
 ```
 git clone https://github.com/MichaelAquilina/zsh-auto-notify.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/auto-notify && \
-mkdir -p $HOME/.oh-my-zsh-plugins-optional && ln -s `pwd`/oh-my-zsh-plugins-optional/auto-notify.zsh ~/.oh-my-zsh-plugins-optional/
+mkdir -p $HOME/.oh-my-zsh-plugins-optional && ln -s `pwd`/oh-my-zsh-plugins-optional/auto-notify.zsh ~/.oh-my-zsh-plugins-optional/ && \
+mkdir -p $HOME/.oh-my-zsh-custom && ln -s `pwd`/oh-my-zsh-custom/auto-notify.zsh ~/.oh-my-zsh-custom/
 ```
 
 ### set up oh-my-zsh
