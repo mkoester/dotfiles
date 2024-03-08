@@ -22,6 +22,7 @@ alias puil='pnpm update --interactive --latest'
 ## Run scripts
 alias pr='pnpm run'
 alias pd='pnpm run dev'
+alias pdh='pnpm run dev --host'
 alias pb='pnpm run build'
 alias plint='pnpm run lint'
 alias pfmt='pnpm run format'
