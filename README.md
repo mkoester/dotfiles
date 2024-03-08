@@ -116,7 +116,7 @@ ln -s `pwd`/.zshrc-update-os-apt.zsh ~/.zshrc-update-os.zsh
 
 ```
 ln -s `pwd`/.zshrc-update-os-nala.zsh ~/.zshrc-update-os.zsh && \
-ln -s `pwd`/oh-my-zsh-custom/nala.zsh ~/.oh-my-zsh-custom
+mkdir -p $HOME/.oh-my-zsh-custom && ln -s `pwd`/oh-my-zsh-custom/nala.zsh ~/.oh-my-zsh-custom
 ```
 
 ##### MacOS with Homebrew
