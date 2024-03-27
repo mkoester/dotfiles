@@ -4,6 +4,18 @@ dot files / . files
 config files
 ------------
 
+### clone this repository
+
+```
+git clone https://github.com/mkoester/dotfiles.git && cd dotfiles
+```
+
+or via `ssh`
+
+```
+git clone git@github.com:mkoester/dotfiles.git && cd dotfiles
+```
+
 ### install `stow`
 
 #### rpm based distros (e.g. fedora, RHEL (clones), etc.)
@@ -30,7 +42,8 @@ brew install stow
 cd config-stow && \
 stow -t $HOME git && \
 mkdir -p $HOME/.config/Code/User && \
-stow -t $HOME vscode
+stow -t $HOME vscode && \
+cd ..
 ```
 
 (TODO iterate through directory and execute for each package)
