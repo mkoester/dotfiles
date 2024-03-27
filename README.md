@@ -1,6 +1,40 @@
 dot files / . files
 ===================
 
+config files
+------------
+
+### install `stow`
+
+#### rpm based distros (e.g. fedora, RHEL (clones), etc.)
+
+```
+sudo dnf install -y stow
+```
+
+#### deb based distros (e.g. Debian, Ubuntu, Mint, etc.)
+
+```
+sudo apt install -y stow
+```
+
+#### MacOS with Homebrew
+
+```
+brew install stow
+```
+
+### symlink config files via `stow`
+
+```
+cd config-stow && \
+stow -t $HOME git && \
+stow -t $HOME vscode
+```
+
+(TODO iterate through directory and execute for each package)
+
+
 zsh
 ---
 

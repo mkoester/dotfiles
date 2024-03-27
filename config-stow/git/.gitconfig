@@ -1,0 +1,7 @@
+[init]
+	defaultBranch = main
+[user]
+	email = it@mirkokoester.de
+	name = Mirko Köster
+[pull]
+	ff = only
