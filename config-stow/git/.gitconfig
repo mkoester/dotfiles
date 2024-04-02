@@ -5,3 +5,5 @@
 	name = Mirko Köster
 [pull]
 	ff = only
+[core]
+	pager = delta
