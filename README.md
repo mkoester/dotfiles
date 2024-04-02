@@ -70,13 +70,14 @@ sudo dnf install -y zsh autojump-zsh tmux git git-delta gitk curl wget lsd sqlit
 #### deb based distros (e.g. Debian, Ubuntu, Mint, etc.)
 
 ```
-sudo apt install -y zsh autojump tmux git curl wget fzf
+sudo apt install -y zsh autojump tmux git gitk curl wget fzf
 ```
 
 ##### nala (optional)
 
 ```
-sudo apt install -y nala
+sudo apt install -y nala && \
+sudo nala install https://github.com/dandavison/delta/releases/download/0.17.0/git-delta_0.17.0_amd64.deb
 ```
 
 you might have to install it manually (e.g. with Ubuntu 22.04 LTS): https://gitlab.com/volian/nala/-/wikis/Installation
