@@ -1,3 +1,5 @@
+#!/usr/bin/env zsh
+
 export PNPM_HOME="$HOME/.local/share/pnpm"
 case ":$PATH:" in
   *":$PNPM_HOME:"*) ;;
