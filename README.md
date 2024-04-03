@@ -230,6 +230,7 @@ ln -s `pwd`/.p10k.zsh $HOME/
 
 ```sh
 LESSPIPE_VERSION="v2.12" && \
+mkdir -p $HOME/src && \
 cd $HOME/src && \
 git clone https://github.com/wofr06/lesspipe.git && \
 cd lesspipe && git checkout $LESSPIPE_VERSION && ./configure && make && sudo make install
@@ -238,10 +239,11 @@ cd lesspipe && git checkout $LESSPIPE_VERSION && ./configure && make && sudo mak
 go to the dotfiles repo and execute
 
 ```sh
+cd ${DOTFILES_REPO:-$HOME/src/dotfiles} && \
 ln -s `pwd`/oh-my-zsh-custom/lesspipe.zsh $HOME/.oh-my-zsh-custom/
 ```
 
-you might want to install some tools used by lesspipe:
+you might want to install some tools used by `lesspipe`:
 
 ### dnf based distros (e.g. fedora, RHEL (clones), etc.)
 
