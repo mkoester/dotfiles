@@ -225,3 +225,26 @@ ln -s `pwd`/oh-my-zsh-config/you-should-use.zsh ~/.oh-my-zsh-config/ && \
 ln -s `pwd`/.zshrc ~/ && \
 ln -s `pwd`/.p10k.zsh ~/
 ```
+
+## lesspipe
+
+```sh
+LESSPIPE_VERSION="v2.12" && \
+cd $HOME/src && \
+git clone https://github.com/wofr06/lesspipe.git && \
+cd lesspipe && git checkout $LESSPIPE_VERSION && ./configure && make && sudo make install
+```
+
+go to the dotfiles repo and execute
+
+```sh
+ln -s `pwd`/oh-my-zsh-custom/lesspipe.zsh $HOME/.oh-my-zsh-custom/
+```
+
+you might want to install some tools used by lesspipe:
+
+### dnf based distros (e.g. fedora, RHEL (clones), etc.)
+
+```sh
+sudo dnf install p7zip p7zip-plugins unrar cabextract bat
+```
