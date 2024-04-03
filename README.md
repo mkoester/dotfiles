@@ -42,7 +42,9 @@ brew install stow
 cd config-stow && \
 stow -t $HOME git && \
 mkdir -p $HOME/.config/Code/User && \
-stow -t $HOME vscode && \
+stow -t $HOME/.config vscode && \
+mkdir -p $HOME/.var/app/com.visualstudio.code/config/Code/User && \
+stow -t $HOME/.var/app/com.visualstudio.code/config vscode && \
 cd ..
 ```
 

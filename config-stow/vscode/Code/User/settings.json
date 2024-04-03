@@ -1,7 +1,7 @@
 {
     "editor.wordWrap": "on",
     "explorer.sortOrder": "filesFirst",
-    "explorer.compactFolders": false
+    "explorer.compactFolders": false,
     "workbench.editor.labelFormat": "short",
     "svelte.enable-ts-plugin": true,
 }
