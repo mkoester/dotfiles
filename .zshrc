@@ -97,6 +97,9 @@ source $ZSH/oh-my-zsh.sh
 
 source ~/.zshrc-update-os.zsh
 
+
+export DOTFILES_REPO="$(dirname `readlink -f $HOME/.zshrc`)"
+
 # export MANPATH="/usr/local/man:$MANPATH"
 
 # You may need to manually set your language environment
