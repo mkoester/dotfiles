@@ -6,7 +6,8 @@ create_new_user_with_shared_config () {
     NEW_USER_NAME=$1; \
     SHARED_DIR=$DOTFILES_REPO; \
     SHARED_GROUP=shared_config; \
-    sudo adduser --groups $SHARED_GROUP $NEW_USER_NAME && \
+    sudo adduser $NEW_USER_NAME && \
+    sudo usermod -a -G $SHARED_GROUP $NEW_USER_NAME && \
     sudo su -c "ln -s $SHARED_DIR/.oh-my-zsh/ ~" $NEW_USER_NAME && \
     sudo su -c "ln -s $SHARED_DIR/.p10k.zsh ~/" $NEW_USER_NAME && \
     sudo su -c "rm ~/.zshrc; ln -s $SHARED_DIR/.zshrc ~/" $NEW_USER_NAME && \
