@@ -100,6 +100,8 @@ source ~/.zshrc-update-os.zsh
 
 export DOTFILES_REPO="$(dirname `readlink -f $HOME/.zshrc`)"
 
+export XDG_RUNTIME_DIR=/run/user/$(id -u)
+
 # export MANPATH="/usr/local/man:$MANPATH"
 
 # You may need to manually set your language environment
