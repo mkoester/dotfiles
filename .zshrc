@@ -142,6 +142,8 @@ if [ -d "$HOME/bin" ] ; then
 fi
 
 [[ -d "$HOME/.local/bin" ]] && export PATH="$HOME/.local/bin:$PATH"
+[[ -d "$HOME/.cargo/bin" ]] && export PATH="$HOME/.cargo/bin:$PATH" # Rust binaries
+[[ -d "$HOME/go/bin" ]] && export PATH="$HOME/go/bin:$PATH" # Go binaries
 
 [[ -d /opt/bin ]] && export PATH="/opt/bin:$PATH"
 
