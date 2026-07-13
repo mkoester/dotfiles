@@ -252,3 +252,52 @@ you might want to install some tools used by `lesspipe`:
 ```sh
 sudo dnf install p7zip p7zip-plugins unrar cabextract bat
 ```
+
+
+gita — multi-repo git overview + auto-fetch
+-------------------------------------------
+
+[gita](https://github.com/nosarthur/gita) shows the status of all git repos across every
+`~/Projects/workspace_*` on one screen. The `oh-my-zsh-custom/gita.zsh` helpers (auto-sourced)
+add `gitad`/`gitaw`/`gitar`; the `systemd-user` stow package runs a periodic `gita fetch` timer.
+
+### install & register
+
+```sh
+pipx install gita
+```
+
+Register every workspace's repos — **one path per `gita add -a`** (the multi-path form crashes,
+upstream `auto_group` bug). The `gitar` alias does exactly that:
+
+```sh
+gitar   # loops: for ws in ~/Projects/workspace_*/; do gita add -a "$ws"; done
+```
+
+Day-to-day: `gitad` (repos with changes), `gitaw` (live-refreshing), `gita ll` (all).
+
+### periodic auto-fetch timer (systemd user)
+
+Fetches all registered repos every 5 min so `gita ll`'s ahead/behind counts stay fresh — fetch
+only, never pull.
+
+```sh
+cd config-stow && \
+mkdir -p $HOME/.config/systemd/user && \
+stow -t $HOME/.config systemd-user && \
+cd ..
+systemctl --user daemon-reload && \
+systemctl --user enable --now gita-fetch.timer
+```
+
+Verify, and check for SSH-auth failures on private remotes:
+
+```sh
+systemctl --user list-timers gita-fetch.timer
+journalctl --user -u gita-fetch.service -n 30 --no-pager
+```
+
+A user timer does not inherit your login ssh-agent. If the log shows `Permission denied` on SSH
+remotes, set `SSH_AUTH_SOCK` in `config-stow/systemd-user/systemd/user/gita-fetch.service` (match
+`echo $SSH_AUTH_SOCK`), then `systemctl --user daemon-reload && systemctl --user restart
+gita-fetch.timer`. HTTPS remotes fetch regardless.
