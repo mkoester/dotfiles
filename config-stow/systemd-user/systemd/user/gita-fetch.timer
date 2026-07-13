@@ -1,0 +1,15 @@
+[Unit]
+Description=Periodically fetch all gita-registered repos
+Documentation=https://github.com/nosarthur/gita
+
+[Timer]
+# First run shortly after login, then every 5 minutes while the session is up.
+OnStartupSec=2min
+OnUnitActiveSec=5min
+# Fire a missed run on resume (laptop was asleep / machine was off) instead of waiting a full period.
+Persistent=true
+# Small jitter so all remotes aren't hit on the exact same tick.
+RandomizedDelaySec=30
+
+[Install]
+WantedBy=timers.target
