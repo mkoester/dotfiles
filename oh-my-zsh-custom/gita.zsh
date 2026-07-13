@@ -1,6 +1,6 @@
 # gita — multi-repo overview helpers (all monitored repos across every workspace)
-# Setup (once per machine): pipx install gita; register with
-#   gita add -a ~/Projects/workspace_homelab   (repeat per workspace_* root)
+# Setup (once per machine): pipx install gita; then `gitar` (below) to register
+# every workspace's repos with gita.
 # See dotfiles README § "gita multi-repo fetch timer" and
 # OKF practices/git-and-workspaces.md § "Multi-repo overview & auto-fetch (gita)".
 
@@ -20,3 +20,8 @@ gitaw() {
   for a in "$@"; do [[ $a == <-> ]] && interval=$a || group=$a; done
   watch --color --interval "$interval" "gita ll $group | grep -v '\\[\\] '"
 }
+
+# gitar — (re)register every workspace's repos with gita, one path per call.
+# One path per invocation dodges the upstream `gita add -a` multi-path crash
+# (auto_group NoneType when handed several parent dirs at once). Idempotent.
+alias gitar='for ws in ~/Projects/workspace_*/; do echo "== ${ws} =="; gita add -a "$ws"; done'
