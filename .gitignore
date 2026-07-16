@@ -1,1 +1,7 @@
 .oh-my-zsh/
+
+# Machine-specific kanshi profiles — monitor make/model/serial must not land in this
+# public repo. Stowed alongside the tracked skeleton, which `include`s them.
+# The directory itself stays tracked (via .gitkeep) so the include glob always resolves.
+config-stow/kanshi/kanshi/config.d/*
+!config-stow/kanshi/kanshi/config.d/.gitkeep

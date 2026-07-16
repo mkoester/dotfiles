@@ -1,0 +1,33 @@
+# kanshi — output profiles for Niri (arandr + autorandr replacement)
+#
+# Profiles auto-apply on hotplug and can be switched by name:
+#   kanshictl switch <profile>
+#
+# THIS REPO IS PUBLIC. Keep machine-specific identifiers out of this file:
+# monitor serial numbers, make/model strings, and anything that fingerprints a
+# specific desk. Connector names (DP-1, HDMI-A-1) are generic and fine.
+#
+# Real per-machine profiles — including any "Make Model Serial" matching, which is
+# the robust form but leaks hardware identifiers — belong in the include below,
+# which is NOT tracked here.
+include ~/.config/kanshi/config.d/*
+
+# --- Generic skeleton profiles -------------------------------------------------
+# Connector names vary per machine; check with `niri msg outputs`. A profile whose
+# outputs don't match anything connected is simply never applied, so these are inert
+# where they don't fit — override them by defining a same-named profile in config.d/.
+#
+# Do NOT combine kanshi with nwg-displays: it writes ~/.config/niri/monitor.kdl, and
+# the resulting Niri config reload discards every transient change kanshi applied.
+
+# External display plus a second panel to its right.
+profile docked {
+	output DP-1 enable position 0,0
+	output HDMI-A-1 enable position 1920,0
+}
+
+# Primary only.
+profile solo {
+	output DP-1 enable position 0,0
+	output HDMI-A-1 disable
+}

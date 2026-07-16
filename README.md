@@ -334,3 +334,98 @@ A user timer does not inherit your login ssh-agent. If the log shows `Permission
 remotes, set `SSH_AUTH_SOCK` in `config-stow/systemd-user/systemd/user/gita-fetch.service` (match
 `echo $SSH_AUTH_SOCK`), then `systemctl --user daemon-reload && systemctl --user restart
 gita-fetch.timer`. HTTPS remotes fetch regardless.
+
+
+kanshi — monitor layout profiles (Niri / Wayland)
+-------------------------------------------------
+
+The `arandr` + `autorandr` replacement: named output profiles, switched from a keybind with
+`kanshictl switch <profile>`, and auto-applied on hotplug.
+
+### install
+
+```sh
+sudo pacman -S kanshi
+```
+
+```sh
+cd config-stow && \
+stow -t $HOME/.config kanshi && \
+cd ..
+```
+
+### machine-specific profiles go in `config.d/` — not in this repo
+
+**This repo is public.** The tracked `config-stow/kanshi/kanshi/config` is a generic skeleton
+using connector names only. Real per-machine profiles go in `config.d/`, which is gitignored
+and pulled in by the skeleton's `include ~/.config/kanshi/config.d/*`:
+
+```sh
+niri msg outputs                             # real names, modes, make/model/serial
+$EDITOR ~/.config/kanshi/config.d/local.conf # same syntax; same-named profile wins
+```
+
+Because stow links the whole `kanshi` directory, files dropped in the repo's `config.d/` appear
+in `~/.config/kanshi/config.d/` automatically — private, but stow-managed like everything else.
+
+Keep `"Make Model Serial"` matching for `config.d/` only. It's the robust form — connector names
+are non-deterministic with multiple GPUs or thunderbolt docks — but serials are hardware
+identifiers and must not land in a public repo.
+
+### enable
+
+```sh
+systemctl --user enable --now kanshi.service
+```
+
+If the package ships no unit (`pacman -Ql kanshi | grep systemd`), fall back to
+`spawn-at-startup "kanshi"` in the Niri config.
+
+### keybinds
+
+Not tracked yet — no Niri stow package exists (open item). Add to `~/.config/niri/config.kdl`
+by hand:
+
+```kdl
+Mod+Shift+D { spawn "kanshictl" "switch" "docked"; }
+Mod+Shift+S { spawn "kanshictl" "switch" "solo"; }
+```
+
+`kanshictl status` shows the live profile when a switch appears to do nothing; `kanshictl reload`
+re-reads the config.
+
+**Do not also install `nwg-displays`.** It writes `~/.config/niri/monitor.kdl`, and the resulting
+Niri config reload discards every transient change kanshi applied.
+
+
+waybar — supervision drop-in
+----------------------------
+
+Waybar crashes around output add/remove (hotplug, docking, `kanshictl switch`, monitor blanking) —
+an upstream GTK bug ([Waybar #3400](https://github.com/Alexays/Waybar/issues/3400)). Niri's
+`spawn-sh-at-startup "waybar"` doesn't supervise it, so a crash means the bar stays gone. The fix
+is the unit waybar already ships, plus a drop-in.
+
+The drop-in rides along in the **`systemd-user`** package (stow it per the gita-fetch section
+above), and upgrades `/usr/lib/systemd/user/waybar.service` to `Restart=always` with the start
+rate limit disabled — otherwise a burst of crashes during one docking event trips the limit and
+the bar stays dead regardless.
+
+```sh
+systemctl --user daemon-reload && \
+systemctl --user enable --now waybar.service
+```
+
+Then **remove `spawn-sh-at-startup "waybar"`** from `~/.config/niri/config.kdl` — otherwise the
+unit and Niri each start a bar and you get two.
+
+Verify the drop-in actually took effect, and watch for crashes:
+
+```sh
+systemctl --user show waybar.service -p Restart -p StartLimitIntervalUSec
+journalctl --user -u waybar.service -f
+```
+
+This also restores logging: `~/.config/waybar/waybar.sh` and `scripts/waybar-restart.sh` pipe
+waybar's output to `/dev/null`, which is why crashes left no journal trace. Under the unit,
+`systemctl --user restart waybar` replaces both scripts.
