@@ -271,10 +271,43 @@ Register every workspace's repos — **one path per `gita add -a`** (the multi-p
 upstream `auto_group` bug). The `gitar` alias does exactly that:
 
 ```sh
-gitar   # loops: for ws in ~/Projects/workspace_*/; do gita add -a "$ws"; done
+gitar   # loops: for ws in ~/Projects/workspace_*/ ~/Projects/okf/; do gita add -a "$ws"; done
 ```
 
-Day-to-day: `gitad` (repos with changes), `gitaw` (live-refreshing), `gita ll` (all).
+The okf vault is appended explicitly — it lives at `~/Projects/okf`, outside the `workspace_*`
+glob, so it would otherwise be missed on every fresh machine.
+
+Day-to-day: `gitad` (repos with changes), `gitaw` (live-refreshing, grouped by workspace via
+`gita ll -g`), `gita ll` (all).
+
+### rebuilding the groups
+
+`gita add -a` is **add-only**: it skips repos already in `~/.config/gita/repos.csv`
+("No new repos found!"), and a repo's group is assigned only as a side effect of *adding* it.
+So `gitar` can't re-group registered repos or forget deleted ones — removing the groups and
+re-running it just produces no-ops. A rebuild has to wipe both files first:
+
+```sh
+gita clear
+gitar
+gita group ll   # verify: one row per group
+```
+
+`gita clear` also drops per-repo flags and colors — we set none, so this is lossless.
+
+Why it matters: `gita add -a` **appends** a group row rather than merging into an existing one,
+so registering a repo into a workspace that already has a group leaves *two* rows with the same
+name in `groups.csv`. The parse is last-row-wins, so the group silently shrinks to whatever was
+added last, and `gita ll -g` quietly stops showing the rest while plain `gita ll` looks fine
+(hit 2026-07-16: `workspace_homelab` collapsed to just `Workstation-Documentation`).
+
+Two related quirks, both expected — not breakage:
+
+- `gita add -a <dir>` registers `<dir>` **itself** when it's a repo, so each thin workspace repo
+  shows up inside its own group next to its members. `gita group rmrepo` can remove it, but the
+  repo then vanishes from `gita ll -g` entirely and the next rebuild re-adds it anyway.
+- Two repos resolving to the same name are disambiguated by parent dir (`workspace_home/workspace_home`).
+  Treat that as a **red flag** — it usually means a stray duplicate clone, not a naming clash.
 
 ### periodic auto-fetch timer (systemd user)
 
