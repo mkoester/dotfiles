@@ -265,7 +265,12 @@ add `gitad`/`gitaw`/`gitar`; the `systemd-user` stow package runs a periodic `gi
 
 ```sh
 pipx install gita
+mkdir -p $HOME/.oh-my-zsh-custom && ln -s `pwd`/oh-my-zsh-custom/gita.zsh $HOME/.oh-my-zsh-custom/
 ```
+
+The symlink is what makes the helpers "auto-sourced" — `.zshrc` sources every `*.zsh` it finds
+under `~/.oh-my-zsh-custom/`, but nothing puts the file there for you. Without it you get bare
+`gita` and no `gitad`/`gitaw`/`gitar`. Open a new shell (or `exec zsh`) to pick them up.
 
 Register every workspace's repos — **one path per `gita add -a`** (the multi-path form crashes,
 upstream `auto_group` bug). The `gitar` alias does exactly that:
