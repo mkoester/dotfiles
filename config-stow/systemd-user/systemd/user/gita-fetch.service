@@ -11,12 +11,12 @@ Type=oneshot
 ExecStart=%h/.local/bin/gita fetch
 # Ensure the git binary gita shells out to is found regardless of the unit's minimal PATH.
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
-# --- SSH auth for gl.mkde.me:2222 and any other SSH remotes ---
+# --- SSH auth for private remotes ---
 # A user timer does NOT inherit your login shell's ssh-agent. Point this at your agent
 # socket so private-remote fetches don't fail. Adjust to match `ssh-add -l`'s environment:
 #   - systemd/gcr-managed agent:  Environment=SSH_AUTH_SOCK=%t/ssh-agent.socket   (%t = XDG_RUNTIME_DIR)
 #   - keychain/other:             Environment=SSH_AUTH_SOCK=%t/keyring/ssh
-# If your gl.mkde.me key is passphrase-less via ~/.ssh/config IdentityFile, no agent line is needed.
+# If the key is passphrase-less via an ~/.ssh/config IdentityFile, no agent line is needed.
 #Environment=SSH_AUTH_SOCK=%t/ssh-agent.socket
 
 # Don't let a slow/hung remote wedge the run.
