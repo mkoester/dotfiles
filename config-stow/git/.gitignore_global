@@ -1,0 +1,25 @@
+# Global gitignore — stowed to ~/.gitignore_global, wired up via core.excludesFile
+# in .gitconfig (same package).
+#
+# Scope: junk produced by the *machine* or the *editor*, which no repo of mine should
+# ever have to care about. Project-level artifacts (build output, deps, caches) belong
+# in that project's own .gitignore, not here — a global rule that hides a real file is
+# far harder to debug than a missing one.
+
+# OS metadata
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+desktop.ini
+.directory
+
+# Editor / tooling scratch
+*~
+.*.sw[a-p]
+*.bak
+.fuse_hidden*
+.nfs*

@@ -58,6 +58,14 @@ stow -t $HOME/.var/app/com.visualstudio.code/config vscode && \
 cd ..
 ```
 
+The `git` package carries both `.gitconfig` and `.gitignore_global` (wired up via
+`core.excludesFile`), so a machine that stowed it before the global ignore existed needs
+`stow -t $HOME git` re-run once to pick up the new symlink.
+
+The global ignore is deliberately limited to OS and editor scratch — things no repo of mine
+should have to know about. Build output, dependencies and caches stay in each project's own
+`.gitignore`, where a rule that hides a file is visible to whoever hits it.
+
 
 zsh
 ---

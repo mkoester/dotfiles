@@ -7,5 +7,6 @@
 	rebase = false
 [core]
 	pager = delta
+	excludesFile = ~/.gitignore_global
 [delta]
 	side-by-side = true
