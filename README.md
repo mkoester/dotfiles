@@ -6,14 +6,30 @@ config files
 
 ### clone this repository
 
+**Clone location is permanent.** `stow` symlinks point back into the clone, so wherever this
+lands is where `~/.gitconfig` and friends resolve to forever. `~/src/dotfiles` is the canonical
+spot — do this first, before installing or running stow.
+
 ```sh
-git clone https://github.com/mkoester/dotfiles.git && cd dotfiles
+mkdir -p $HOME/src && \
+git clone https://github.com/mkoester/dotfiles.git $HOME/src/dotfiles
 ```
 
 or via `ssh`
 
 ```sh
-git clone git@github.com:mkoester/dotfiles.git && cd dotfiles
+mkdir -p $HOME/src && \
+git clone git@github.com:mkoester/dotfiles.git $HOME/src/dotfiles
+```
+
+Sharing one clone between several users on a machine puts it in `/home/dotfiles` instead —
+see [Sharing config with several users](#sharing-config-with-several-users-on-the-same-machine)
+below, and clone there rather than here.
+
+Everything from here on assumes you are in the repo root:
+
+```sh
+cd ${DOTFILES_REPO:-$HOME/src/dotfiles}
 ```
 
 ### install `stow`
@@ -49,7 +65,7 @@ brew install stow
 ### symlink config files via `stow`
 
 ```sh
-cd config-stow && \
+cd ${DOTFILES_REPO:-$HOME/src/dotfiles}/config-stow && \
 stow -t $HOME git && \
 mkdir -p $HOME/.config/Code/User && \
 stow -t $HOME/.config vscode && \
@@ -57,6 +73,19 @@ mkdir -p $HOME/.var/app/com.visualstudio.code/config/Code/User && \
 stow -t $HOME/.var/app/com.visualstudio.code/config vscode && \
 cd ..
 ```
+
+If a target already exists as a **real file** (a hand-written `~/.gitconfig`, say), stow refuses
+and aborts *every* operation in that run — including the packages that would have succeeded:
+
+```
+cannot stow .gitconfig over existing target .gitconfig
+  since neither a link nor a directory and --adopt not specified
+All operations aborted.
+```
+
+Reconcile the two versions by hand first, then delete the local file and re-run. `stow --adopt`
+does the opposite of what the name suggests — it pulls the local file's *content* into the repo,
+overwriting what is tracked.
 
 The `git` package carries both `.gitconfig` and `.gitignore_global` (wired up via
 `core.excludesFile`), so a machine that stowed it before the global ignore existed needs
@@ -144,11 +173,18 @@ brew install zsh zoxide tmux git curl wget eza fzf
 
 ### set zsh as default shell
 
-- `chsh -s $(which zsh)`
+- `chsh -s $(which zsh)` — works everywhere, MacOS included
 
   or
 
-- `sudo usermod -s $(which zsh) $(whoami)`
+- `sudo usermod -s $(which zsh) $(whoami)` — **Linux only** (shadow-utils; MacOS has no `usermod`)
+
+`chsh` only accepts shells listed in `/etc/shells`. Distro zsh packages add themselves; a
+Homebrew zsh on MacOS does **not**, so add it once first:
+
+```sh
+echo $(which zsh) | sudo tee -a /etc/shells
+```
 
 oh-my-zsh
 ---------
@@ -163,17 +199,20 @@ sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/too
 
 ### Machine / user specific settings
 
-#### Cloning this repository
+The repo is already cloned to `$HOME/src/dotfiles` at the [top of this guide](#clone-this-repository) —
+there is only ever one clone. The steps below assume you are in its root:
 
 ```sh
-cd $HOME && \
-mkdir src && \
-cd src && \
-git clone https://github.com/mkoester/dotfiles.git && \
-cd dotfiles
+cd ${DOTFILES_REPO:-$HOME/src/dotfiles}
 ```
 
 #### Sharing config with several users on the same machine
+
+**Linux only** — `groupadd` / `usermod` are shadow-utils and do not exist on MacOS, which needs
+`dscl` / `sysadminctl` instead.
+
+This is the one case where the clone does *not* live in `$HOME/src/dotfiles`; skip the clone at
+the top of the guide and use `/home/dotfiles` throughout.
 
 ```sh
 CURRENT_USER_NAME=`whoami` && \
@@ -246,9 +285,14 @@ git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${ZSH_CUSTOM:-$
 
 #### Font
 
-https://www.nerdfonts.com/font-downloads
+Meslo Nerd Font — required for p10k's glyphs and for `eza --icons`.
 
-- Meslo Nerd Font
+```sh
+paru -S --needed ttf-meslo-nerd      # arch
+brew install --cask font-meslo-lg-nerd-font   # MacOS
+```
+
+Elsewhere, download it manually: https://www.nerdfonts.com/font-downloads
 
 ### Tools / Plugins
 
@@ -266,10 +310,12 @@ git clone https://github.com/MichaelAquilina/zsh-you-should-use.git ${ZSH_CUSTOM
 
 #### auto-notify (optional / Desktop only)
 
-with Ubuntu based distros you might have to install a package
+needs `notify-send`, which most desktop installs already have:
 
 ```sh
-sudo <apt/nala> install libnotify-bin -y
+sudo apt install -y libnotify-bin    # deb (nala works too)
+sudo dnf install -y libnotify        # rpm
+paru -S --needed libnotify           # arch
 ```
 
 ```sh
@@ -283,12 +329,25 @@ mkdir -p $HOME/.oh-my-zsh-custom && ln -s `pwd`/oh-my-zsh-custom/auto-notify.zsh
 make the config files `.zshrc` and `.p10k.zsh` available in your home directory
 
 ```sh
+mkdir -p $HOME/.oh-my-zsh-config && \
 [ ! -L $HOME/.zshrc ] || rm $HOME/.zshrc && [ ! -f $HOME/.zshrc ] || mv $HOME/.zshrc $HOME/.zshrc-manual-backup && \
 [ ! -L $HOME/.p10k.zsh ] || rm $HOME/.p10k.zsh && [ ! -f $HOME/.p10k.zsh ] || mv $HOME/.p10k.zsh $HOME/.p10k-manual-backup.zsh && \
-ln -s `pwd`/oh-my-zsh-config/you-should-use.zsh $HOME/.oh-my-zsh-config/ && \
-ln -s `pwd`/.zshrc $HOME/ && \
-ln -s `pwd`/.p10k.zsh $HOME/
+ln -sf `pwd`/oh-my-zsh-config/you-should-use.zsh $HOME/.oh-my-zsh-config/ && \
+ln -sf `pwd`/.zshrc $HOME/ && \
+ln -sf `pwd`/.p10k.zsh $HOME/
 ```
+
+Two things this block gets right, both learned the hard way:
+
+- The `mkdir -p` is load-bearing. `.oh-my-zsh-config` used to be created only by the optional
+  multi-user section, so skipping that made the first `ln` fail — and since the whole block is
+  one `&&` chain, `.zshrc` and `.p10k.zsh` were then never linked at all.
+- The `ln -sf` (not `ln -s`) makes it **re-runnable**. Plain `ln -s` fails with "File exists" on
+  a second run, but the `rm` earlier in the chain has *already deleted* the `.zshrc` symlink by
+  then — so the abort left you with no `.zshrc` whatsoever. `-f` replaces instead of failing.
+
+A real (non-symlink) `.zshrc` is moved to `.zshrc-manual-backup` first, so a fresh oh-my-zsh
+install never loses its generated file.
 
 ## lesspipe
 
@@ -304,6 +363,7 @@ go to the dotfiles repo and execute
 
 ```sh
 cd ${DOTFILES_REPO:-$HOME/src/dotfiles} && \
+mkdir -p $HOME/.oh-my-zsh-custom && \
 ln -s `pwd`/oh-my-zsh-custom/lesspipe.zsh $HOME/.oh-my-zsh-custom/
 ```
 
@@ -315,12 +375,35 @@ you might want to install some tools used by `lesspipe`:
 sudo dnf install p7zip p7zip-plugins unrar cabextract bat
 ```
 
+Recent Fedora dropped `p7zip`/`p7zip-plugins` in favour of a `7zip` package — if the above
+errors on "No match", that is why. `unrar` needs RPM Fusion (non-free).
+
+### deb based distros (e.g. Debian, Ubuntu, Mint, etc.)
+
+```sh
+sudo apt install -y p7zip-full unrar-free cabextract bat
+```
+
+Debian ships the binary as `batcat` (the name `bat` collides with another package), which is
+what `oh-my-zsh-custom/bat.zsh` exists for — symlink it **on deb systems only**:
+
+```sh
+mkdir -p $HOME/.oh-my-zsh-custom && \
+ln -s `pwd`/oh-my-zsh-custom/bat.zsh $HOME/.oh-my-zsh-custom/
+```
+
 ### arch based distros (e.g. Arch, CachyOS, EndeavourOS, Manjaro, etc.)
 
 `p7zip` is named `7zip` here.
 
 ```sh
 paru -S --needed 7zip unrar cabextract bat
+```
+
+### MacOS with Homebrew
+
+```sh
+brew install p7zip unrar cabextract bat
 ```
 
 
@@ -333,8 +416,19 @@ add `gitad`/`gitaw`/`gitar`; the `systemd-user` stow package runs a periodic `gi
 
 ### install & register
 
+`pipx` is not part of the zsh package list above — install it first. Note arch names it
+`python-pipx`, everyone else `pipx`:
+
 ```sh
-pipx install gita
+paru -S --needed python-pipx     # arch
+sudo dnf install -y pipx         # rpm
+sudo apt install -y pipx         # deb
+brew install pipx                # MacOS
+```
+
+```sh
+cd ${DOTFILES_REPO:-$HOME/src/dotfiles} && \
+pipx install gita && \
 mkdir -p $HOME/.oh-my-zsh-custom && ln -s `pwd`/oh-my-zsh-custom/gita.zsh $HOME/.oh-my-zsh-custom/
 ```
 

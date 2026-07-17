@@ -1,7 +1,7 @@
 [init]
 	defaultBranch = main
 [user]
-	email = it@mirkokoester.de
+	email = git@mirkokoester.de
 	name = Mirko Köster
 [pull]
 	rebase = false
@@ -10,3 +10,5 @@
 	excludesFile = ~/.gitignore_global
 [delta]
 	side-by-side = true
+	navigate = true
+	line-numbers = true
