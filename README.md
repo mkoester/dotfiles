@@ -349,6 +349,55 @@ Two things this block gets right, both learned the hard way:
 A real (non-symlink) `.zshrc` is moved to `.zshrc-manual-backup` first, so a fresh oh-my-zsh
 install never loses its generated file.
 
+### the three customization directories
+
+`.zshrc` sources three directories at different points during startup. Which one a file belongs
+in is decided by **when it has to run**, not by what it does:
+
+| linked into | sourced | for |
+|---|---|---|
+| `~/.oh-my-zsh-config/` | before `plugins=(…)` and oh-my-zsh | variables and `zstyle` oh-my-zsh reads *as it loads* |
+| `~/.oh-my-zsh-plugins-optional/` | after `plugins=(…)`, before oh-my-zsh | appending to the `plugins` array |
+| `~/.oh-my-zsh-custom/` | last, after oh-my-zsh | aliases, functions, `PATH` |
+
+All three are `[ -d ]`-guarded, so a directory you never create is simply skipped.
+
+**The repo directory is not the target directory.** Three files under `oh-my-zsh-custom/` have
+to be linked into `~/.oh-my-zsh-config/`, because they only take effect before oh-my-zsh loads.
+Use the table below rather than inferring the target from the path.
+
+### catalog
+
+Nothing links itself. Each file needs its own `ln -sf`, and only on the machines it applies to —
+which is why a fresh machine does not automatically match an old one. The shape is always:
+
+```sh
+cd ${DOTFILES_REPO:-$HOME/src/dotfiles} && \
+mkdir -p $HOME/.oh-my-zsh-custom && \
+ln -sf `pwd`/oh-my-zsh-custom/pnpm.zsh $HOME/.oh-my-zsh-custom/
+```
+
+| file in repo | link into | what it does | when |
+|---|---|---|---|
+| `oh-my-zsh-config/you-should-use.zsh` | `.oh-my-zsh-config` | you-should-use settings | always — part of [set up oh-my-zsh](#set-up-oh-my-zsh) |
+| `oh-my-zsh-config/ssh-wsl.zsh` | `.oh-my-zsh-config` | routes `ssh`/`ssh-add` through the Windows `.exe`s | WSL only |
+| `oh-my-zsh-custom/zsh-disable-compfix.zsh` | **`.oh-my-zsh-config`** | `ZSH_DISABLE_COMPFIX` — skips the insecure-directory check | shared/group-writable clone |
+| `oh-my-zsh-custom/omz-no_automatic_updates.zsh` | **`.oh-my-zsh-config`** | disables oh-my-zsh self-update | everywhere `sys_upgrade` drives updates |
+| `oh-my-zsh-custom/shared-dotfiles.zsh` | **`.oh-my-zsh-config`** | `create_new_user_with_shared_config()` | shared multi-user machines |
+| `oh-my-zsh-plugins-optional/auto-notify.zsh` | `.oh-my-zsh-plugins-optional` | adds `auto-notify` to `plugins` | desktops |
+| `oh-my-zsh-plugins-optional/golang.zsh` | `.oh-my-zsh-plugins-optional` | adds the omz `golang` plugin | Go machines |
+| `oh-my-zsh-custom/auto-notify.zsh` | `.oh-my-zsh-custom` | `AUTO_NOTIFY_IGNORE` for long-running commands | with the plugin above |
+| `oh-my-zsh-custom/bat.zsh` | `.oh-my-zsh-custom` | `alias bat='batcat'` | deb only |
+| `oh-my-zsh-custom/brew-path.zsh` | `.oh-my-zsh-custom` | puts `~/homebrew/bin` on `PATH` | Homebrew installed under `$HOME` |
+| `oh-my-zsh-custom/caddy.zsh` | `.oh-my-zsh-custom` | `caddyedit`/`caddyfmt`/`caddyvalidate`/`caddyreload` | hosts running Caddy |
+| `oh-my-zsh-custom/fnm.zsh` | `.oh-my-zsh-custom` | `fnm env --use-on-cd` | Node machines (needs fnm) |
+| `oh-my-zsh-custom/fresh.zsh` | `.oh-my-zsh-custom` | points `EDITOR`/`VISUAL`/`nano` at `fresh` | see [fresh](#fresh--terminal-editor) |
+| `oh-my-zsh-custom/gita.zsh` | `.oh-my-zsh-custom` | `gitad`/`gitaw`/`gitar` | see [gita](#gita--multi-repo-git-overview--auto-fetch) |
+| `oh-my-zsh-custom/lesspipe.zsh` | `.oh-my-zsh-custom` | `LESSOPEN` | see [lesspipe](#lesspipe) |
+| `oh-my-zsh-custom/nala.zsh` | `.oh-my-zsh-custom` | completion setup, `~/.zfunc` on `fpath` | deb + nala |
+| `oh-my-zsh-custom/pnpm.zsh` | `.oh-my-zsh-custom` | `PNPM_HOME`, `p*` aliases, completion | Node machines (needs pnpm) |
+| `oh-my-zsh-custom/ssh-shared-authorized_keys.zsh` | `.oh-my-zsh-custom` | `update-ssh-shared-authorized_keys` | hosts using the shared key repo |
+
 ## lesspipe
 
 ```sh
@@ -405,6 +454,43 @@ paru -S --needed 7zip unrar cabextract bat
 ```sh
 brew install p7zip unrar cabextract bat
 ```
+
+
+fresh — terminal editor
+-----------------------
+
+[fresh](https://github.com/sinelaw/fresh) is a Rust terminal IDE with the UX of a GUI editor:
+standard keybindings (`Ctrl+S`/`Ctrl+F`/`Ctrl+Z`), mouse support, a command palette, LSP, and
+multi-GB file handling. GPL-2.0.
+
+### install
+
+Not in the arch repos — it comes from the AUR. Take the `-bin` package unless you want to
+compile Rust:
+
+```sh
+paru -S --needed fresh-editor-bin      # arch, prebuilt (fresh-editor builds from source)
+brew install fresh-editor              # MacOS
+cargo install --locked fresh-editor    # anywhere with a Rust toolchain
+```
+
+Debian/Ubuntu `.deb` and Fedora `.rpm` packages are on the
+[releases page](https://github.com/sinelaw/fresh/releases), and there is a Flatpak
+(`flatpak install fresh-editor`) plus an AppImage.
+
+**The package is `fresh-editor`, the binary is `fresh`.**
+
+### shell integration
+
+```sh
+cd ${DOTFILES_REPO:-$HOME/src/dotfiles} && \
+mkdir -p $HOME/.oh-my-zsh-custom && \
+ln -sf `pwd`/oh-my-zsh-custom/fresh.zsh $HOME/.oh-my-zsh-custom/
+```
+
+That sets `EDITOR`/`VISUAL` and re-points the `nano` alias at fresh. It overrides `.zshrc`'s own
+`alias nano='nano -c'` because `~/.oh-my-zsh-custom` is sourced *last* — so link it only where
+fresh is actually installed, or `nano` becomes a broken alias.
 
 
 gita — multi-repo git overview + auto-fetch

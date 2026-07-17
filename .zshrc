@@ -95,7 +95,22 @@ source $ZSH/oh-my-zsh.sh
 
 # User configuration
 
-source ~/.zshrc-update-os.zsh
+# Sourced after oh-my-zsh so its aliases win. When the symlink is missing, define stubs that
+# explain instead of failing with "command not found" — and don't print at startup, which would
+# trip p10k's instant-prompt console-output warning.
+if [[ -f ~/.zshrc-update-os.zsh ]]; then
+    source ~/.zshrc-update-os.zsh
+else
+    _dotfiles_no_update_os() {
+        print -u2 "[dotfiles] ~/.zshrc-update-os.zsh is missing — no 'update-os' / 's' aliases."
+        print -u2 "Link the file for this distro, e.g.:"
+        print -u2 "  ln -sf ${DOTFILES_REPO:-$HOME/src/dotfiles}/.zshrc-update-os-arch.zsh ~/.zshrc-update-os.zsh"
+        print -u2 "See README: 'Make the alias for os updates available'."
+        return 1
+    }
+    update-os() { _dotfiles_no_update_os }
+    s() { _dotfiles_no_update_os }
+fi
 
 
 export DOTFILES_REPO="$(dirname `readlink -f $HOME/.zshrc`)"
