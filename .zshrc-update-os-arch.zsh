@@ -1,4 +1,4 @@
 #!/usr/bin/env zsh
 
-alias update-os="sudo paru -Syu"
-alias s="sudo paru -Ss"
+alias update-os="paru -Syu"
+alias s="paru -Ss"

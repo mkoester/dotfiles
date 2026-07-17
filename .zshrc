@@ -84,7 +84,7 @@ fi
 # Custom plugins may be added to $ZSH_CUSTOM/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
-plugins=(git tmux fzf autojump zsh-autosuggestions zsh-syntax-highlighting you-should-use)
+plugins=(git tmux fzf zoxide zsh-autosuggestions zsh-syntax-highlighting you-should-use)
 
 # enable OPTIONAL plugins
 if [ -d "$HOME/.oh-my-zsh-plugins-optional" ] ; then
@@ -125,8 +125,10 @@ export XDG_RUNTIME_DIR=/run/user/$(id -u)
 # Example aliases
 # alias zshconfig="mate ~/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
-alias ll="ls -hal"
-alias lld="lsd -halF"
+alias ll="eza -hal --git --icons=auto --group-directories-first"
+alias lt="eza --tree --level=2 --icons=auto"
+alias lr="eza -l --git-repos --no-user --no-time --no-filesize"
+alias j="z"
 alias nano="nano -c"
 alias update-dotfiles="echo -n 'Updating dotfiles repo: ' && git -C ${DOTFILES_REPO:-$HOME/src/dotfiles}/ pull"
 alias update-omz-p10k="echo -n 'Updating powerlevel10k: ' && git -C ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k pull"

@@ -30,6 +30,16 @@ sudo dnf install -y stow
 sudo apt install -y stow
 ```
 
+#### arch based distros (e.g. Arch, CachyOS, EndeavourOS, Manjaro, etc.)
+
+`paru` is not installed yet at this point in the guide, so `pacman` is used directly here.
+It is only used directly twice: here, and to install paru itself — every other arch step
+uses `paru`.
+
+```sh
+sudo pacman -S --needed stow
+```
+
 #### MacOS with Homebrew
 
 ```sh
@@ -64,14 +74,17 @@ zsh
 #### rpm based distros (e.g. fedora, RHEL (clones), etc.)
 
 ```sh
-sudo dnf install -y zsh autojump-zsh tmux git git-delta gitk curl wget lsd sqlite fzf
+sudo dnf install -y zsh zoxide tmux git git-delta gitk curl wget eza sqlite fzf
 ```
 
 #### deb based distros (e.g. Debian, Ubuntu, Mint, etc.)
 
 ```sh
-sudo apt install -y zsh autojump tmux git gitk curl wget fzf
+sudo apt install -y zsh zoxide tmux git gitk curl wget eza fzf
 ```
+
+`eza` needs Debian 13+ / Ubuntu 24.04+; `zoxide` needs Debian 12+ / Ubuntu 22.04+. On older
+releases install them from the upstream releases instead of `apt`.
 
 ##### nala (optional)
 
@@ -82,10 +95,43 @@ sudo nala install https://github.com/dandavison/delta/releases/download/0.17.0/g
 
 you might have to install it manually (e.g. with Ubuntu 22.04 LTS): https://gitlab.com/volian/nala/-/wikis/Installation
 
+#### arch based distros (e.g. Arch, CachyOS, EndeavourOS, Manjaro, etc.)
+
+##### paru (required, install first)
+
+The `update-os` / `s` aliases below are `paru` wrappers, so it is **not** optional on arch.
+Install it before the packages, since everything below goes through it.
+
+CachyOS ships it in its own repo. This is the other direct `pacman` use, for the obvious
+reason that paru cannot install itself:
+
+```sh
+sudo pacman -S --needed paru
+```
+
+Everywhere else it comes from the AUR and has to be built once:
+
+```sh
+sudo pacman -S --needed base-devel git && \
+git clone https://aur.archlinux.org/paru.git $HOME/src/paru && \
+cd $HOME/src/paru && makepkg -si
+```
+
+**Never call paru with `sudo`** — it escalates on its own and refuses AUR installs when run as
+root (`can't install AUR package as root`).
+
+##### packages
+
+```sh
+paru -S --needed zsh zoxide tmux git git-delta curl wget eza sqlite fzf
+```
+
+`gitk` ships inside the `git` package here, so it needs no separate entry.
+
 #### MacOS with Homebrew
 
 ```sh
-brew install zsh autojump tmux git curl wget lsd fzf
+brew install zsh zoxide tmux git curl wget eza fzf
 ```
 
 ### set zsh as default shell
@@ -166,6 +212,14 @@ ln -s `pwd`/.zshrc-update-os-apt.zsh $HOME/.zshrc-update-os.zsh
 ```sh
 ln -s `pwd`/.zshrc-update-os-nala.zsh $HOME/.zshrc-update-os.zsh && \
 mkdir -p $HOME/.oh-my-zsh-custom && ln -s `pwd`/oh-my-zsh-custom/nala.zsh $HOME/.oh-my-zsh-custom
+```
+
+##### pacman based distros (e.g. Arch, CachyOS, EndeavourOS, Manjaro, etc.)
+
+Requires `paru` — see the arch section above.
+
+```sh
+ln -s `pwd`/.zshrc-update-os-arch.zsh $HOME/.zshrc-update-os.zsh
 ```
 
 ##### MacOS with Homebrew
@@ -251,6 +305,14 @@ you might want to install some tools used by `lesspipe`:
 
 ```sh
 sudo dnf install p7zip p7zip-plugins unrar cabextract bat
+```
+
+### arch based distros (e.g. Arch, CachyOS, EndeavourOS, Manjaro, etc.)
+
+`p7zip` is named `7zip` here.
+
+```sh
+paru -S --needed 7zip unrar cabextract bat
 ```
 
 
@@ -350,7 +412,7 @@ The `arandr` + `autorandr` replacement: named output profiles, switched from a k
 ### install
 
 ```sh
-sudo pacman -S kanshi
+paru -S --needed kanshi
 ```
 
 ```sh
