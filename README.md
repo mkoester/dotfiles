@@ -236,7 +236,7 @@ ln -s `pwd`/.oh-my-zsh/ $HOME/
 DOTFILES_REPO="/home/dotfiles" && \
 mkdir -p "$HOME/.oh-my-zsh-config" && \
 cd ${DOTFILES_REPO:-$HOME/src/dotfiles}/ && \
-ln -s `pwd`/oh-my-zsh-custom/shared-dotfiles.zsh $HOME/.oh-my-zsh-config/
+ln -s `pwd`/oh-my-zsh-config/shared-dotfiles.zsh $HOME/.oh-my-zsh-config/
 ```
 
 
@@ -349,22 +349,30 @@ Two things this block gets right, both learned the hard way:
 A real (non-symlink) `.zshrc` is moved to `.zshrc-manual-backup` first, so a fresh oh-my-zsh
 install never loses its generated file.
 
-### the three customization directories
+### why there are separate config / custom directories
 
-`.zshrc` sources three directories at different points during startup. Which one a file belongs
-in is decided by **when it has to run**, not by what it does:
+oh-my-zsh reads most of its knobs (`ZSH_DISABLE_COMPFIX`, `zstyle ':omz:update'`, per-plugin
+settings) **while it loads**, and applies your `plugins=(…)` list at that same moment. A setting
+made *after* `source $ZSH/oh-my-zsh.sh` is simply too late — compinit has already run, the
+plugins are already loaded. But aliases, functions and `PATH` are the opposite: they want to load
+**last**, so they win over anything oh-my-zsh or a plugin defined.
+
+One directory can't be both "before" and "after" oh-my-zsh, so `.zshrc` sources three, at three
+points around that single `source` line:
 
 | linked into | sourced | for |
 |---|---|---|
-| `~/.oh-my-zsh-config/` | before `plugins=(…)` and oh-my-zsh | variables and `zstyle` oh-my-zsh reads *as it loads* |
-| `~/.oh-my-zsh-plugins-optional/` | after `plugins=(…)`, before oh-my-zsh | appending to the `plugins` array |
-| `~/.oh-my-zsh-custom/` | last, after oh-my-zsh | aliases, functions, `PATH` |
+| `~/.oh-my-zsh-config/` | **before** oh-my-zsh | vars & `zstyle` it reads as it loads (compfix, update mode, plugin config) |
+| `~/.oh-my-zsh-plugins-optional/` | after `plugins=(…)`, still before oh-my-zsh | appending to the `plugins` array |
+| `~/.oh-my-zsh-custom/` | **after** oh-my-zsh | aliases, functions, `PATH` — things that must override |
 
-All three are `[ -d ]`-guarded, so a directory you never create is simply skipped.
+All three are `[ -d ]`-guarded, so a directory you never create is simply skipped. The split is
+load-order, not taste: it is why `config` and `custom` can't be merged (they sit on opposite
+sides of that `source` line), while `config` and `plugins-optional` *could* (both are "before").
 
-**The repo directory is not the target directory.** Three files under `oh-my-zsh-custom/` have
-to be linked into `~/.oh-my-zsh-config/`, because they only take effect before oh-my-zsh loads.
-Use the table below rather than inferring the target from the path.
+**The repo mirrors the targets one-to-one.** A file's repo directory *is* its link target —
+`oh-my-zsh-config/foo.zsh` links into `~/.oh-my-zsh-config/`, and so on. So the repo layout tells
+you when each file loads; the catalog's "link into" column just restates the path.
 
 ### catalog
 
@@ -381,9 +389,9 @@ ln -sf `pwd`/oh-my-zsh-custom/pnpm.zsh $HOME/.oh-my-zsh-custom/
 |---|---|---|---|
 | `oh-my-zsh-config/you-should-use.zsh` | `.oh-my-zsh-config` | you-should-use settings | always — part of [set up oh-my-zsh](#set-up-oh-my-zsh) |
 | `oh-my-zsh-config/ssh-wsl.zsh` | `.oh-my-zsh-config` | routes `ssh`/`ssh-add` through the Windows `.exe`s | WSL only |
-| `oh-my-zsh-custom/zsh-disable-compfix.zsh` | **`.oh-my-zsh-config`** | `ZSH_DISABLE_COMPFIX` — skips the insecure-directory check | shared/group-writable clone |
-| `oh-my-zsh-custom/omz-no_automatic_updates.zsh` | **`.oh-my-zsh-config`** | disables oh-my-zsh self-update | everywhere `sys_upgrade` drives updates |
-| `oh-my-zsh-custom/shared-dotfiles.zsh` | **`.oh-my-zsh-config`** | `create_new_user_with_shared_config()` | shared multi-user machines |
+| `oh-my-zsh-config/zsh-disable-compfix.zsh` | `.oh-my-zsh-config` | `ZSH_DISABLE_COMPFIX` — skips the insecure-directory check | shared/group-writable clone |
+| `oh-my-zsh-config/omz-no_automatic_updates.zsh` | `.oh-my-zsh-config` | disables oh-my-zsh self-update | everywhere `sys_upgrade` drives updates |
+| `oh-my-zsh-config/shared-dotfiles.zsh` | `.oh-my-zsh-config` | `create_new_user_with_shared_config()` | shared multi-user machines |
 | `oh-my-zsh-plugins-optional/auto-notify.zsh` | `.oh-my-zsh-plugins-optional` | adds `auto-notify` to `plugins` | desktops |
 | `oh-my-zsh-plugins-optional/golang.zsh` | `.oh-my-zsh-plugins-optional` | adds the omz `golang` plugin | Go machines |
 | `oh-my-zsh-custom/auto-notify.zsh` | `.oh-my-zsh-custom` | `AUTO_NOTIFY_IGNORE` for long-running commands | with the plugin above |

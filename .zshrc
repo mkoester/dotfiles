@@ -74,7 +74,9 @@ HIST_STAMPS="yyyy-mm-dd"
 # Would you like to use another custom folder than $ZSH/custom?
 # ZSH_CUSTOM=/path/to/new-custom-folder
 
-# set variables for plugins as well as Oh My ZSH itself
+# ~/.oh-my-zsh-config/ — sourced BEFORE oh-my-zsh, for settings it reads as it loads:
+# ZSH_DISABLE_COMPFIX, `zstyle ':omz:update'`, per-plugin config. Set after the source below,
+# these are too late (compinit and the plugins have already run). Repo dir: oh-my-zsh-config/.
 if [ -d "$HOME/.oh-my-zsh-config" ] ; then
     for FILE in `find -L "$HOME/.oh-my-zsh-config" -type f -name "*.zsh"`; source $FILE
 fi
@@ -86,7 +88,9 @@ fi
 # Add wisely, as too many plugins slow down shell startup.
 plugins=(git tmux fzf zoxide zsh-autosuggestions zsh-syntax-highlighting you-should-use)
 
-# enable OPTIONAL plugins
+# ~/.oh-my-zsh-plugins-optional/ — sourced after plugins=() but still BEFORE oh-my-zsh, so a file
+# here can append to the plugins array (e.g. `plugins+=(golang)`) and have oh-my-zsh load it.
+# Same "before" side as oh-my-zsh-config/; kept apart only to isolate plugin-list edits.
 if [ -d "$HOME/.oh-my-zsh-plugins-optional" ] ; then
     for FILE in `find -L "$HOME/.oh-my-zsh-plugins-optional" -type f -name "*.zsh"`; source $FILE
 fi
@@ -167,7 +171,9 @@ fi
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
-# custom settings like aliases, functions variables, etc.
+# ~/.oh-my-zsh-custom/ — sourced LAST, after oh-my-zsh, so these win over anything it or a plugin
+# defined: aliases, functions, PATH. The counterpart to ~/.oh-my-zsh-config/ above; the two exist
+# separately only because one runs before oh-my-zsh and the other after. Repo dir: oh-my-zsh-custom/.
 if [ -d "$HOME/.oh-my-zsh-custom" ] ; then
     for FILE in `find -L "$HOME/.oh-my-zsh-custom" -type f -name "*.zsh"`; source $FILE
 fi
