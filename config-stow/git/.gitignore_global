@@ -23,3 +23,7 @@ desktop.ini
 *.bak
 .fuse_hidden*
 .nfs*
+
+# Claude Code scratch / per-machine settings
+**/.claude/.cc-writes/
+**/.claude/settings.local.json
