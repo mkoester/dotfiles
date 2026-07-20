@@ -5,3 +5,8 @@
 # The directory itself stays tracked (via .gitkeep) so the include glob always resolves.
 config-stow/kanshi/kanshi/config.d/*
 !config-stow/kanshi/kanshi/config.d/.gitkeep
+
+# Machine-/device-specific niri overrides — real output blocks, custom xkb keymap path,
+# Bluetooth device MAC binds. Optionally `include`d by the tracked config.kdl skeleton;
+# supplied per-machine (or by the private machine-config repo). Same reasoning as kanshi.
+config-stow/niri/.config/niri/local.kdl

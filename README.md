@@ -1,25 +1,56 @@
-dot files / . files
-===================
+# dotfiles
 
-config files
-------------
+My cross-machine shell + tool configuration, deployed with [GNU stow](https://www.gnu.org/software/stow/).
+Packages under `config-stow/<pkg>/` symlink into place; the oh-my-zsh material is linked from
+the top-level `oh-my-zsh-*` directories. Works across Arch, Debian, Fedora and macOS.
 
-### clone this repository
+**This repo is public.** Machine- and device-specific data (monitor serials, Bluetooth MACs,
+hostnames) must never be committed here — it lives in the private overlay repo and is pulled in
+via gitignored `include`s (see [kanshi](#kanshi--monitor-profiles) and [niri](#niri--wayland-compositor)).
+
+## Quick start — `./install.sh`
+
+On a fresh machine, clone to the permanent location, then run the installer:
+
+```sh
+mkdir -p "$HOME/src" && git clone https://github.com/mkoester/dotfiles.git "$HOME/src/dotfiles"
+cd "$HOME/src/dotfiles" && ./install.sh
+```
+
+It detects your distro, installs the base tools, stows the config, sets up oh-my-zsh, and asks a
+few host-class questions (Wayland desktop? Niri? Quadlet host? Node? Caddy? …) to link only what
+this machine needs. Niri is its own question, so a desktop that doesn't run it (e.g. a Pi on
+labwc) is fine. It's **idempotent** — safe to re-run. Preview everything first with:
+
+```sh
+./install.sh --dry-run     # print every command instead of running it
+./install.sh --yes         # non-interactive: take defaults + any preseeds
+```
+
+Preseed the questions with `DF_DESKTOP`/`DF_QUADLET`/`DF_NODE`/… = `1`/`0`, or drop a `host.env`
+in the private repo (`./install.sh --help` lists them all). Everything below is the **manual
+reference** the installer automates — read it when a step needs doing by hand.
+
+---
+
+> **Per-distro commands.** Each install step below is given for **Arch** (`paru`), **Debian**
+> (`apt`), **Fedora** (`dnf`) and **macOS** (`brew`). Pick the one for your system. "Arch" covers
+> CachyOS/EndeavourOS/Manjaro; "Debian" covers Ubuntu/Mint; "Fedora" covers RHEL clones.
+
+## Clone this repository
 
 **Clone location is permanent.** `stow` symlinks point back into the clone, so wherever this
 lands is where `~/.gitconfig` and friends resolve to forever. `~/src/dotfiles` is the canonical
 spot — do this first, before installing or running stow.
 
 ```sh
-mkdir -p $HOME/src && \
-git clone https://github.com/mkoester/dotfiles.git $HOME/src/dotfiles
+mkdir -p $HOME/src && git clone https://github.com/mkoester/dotfiles.git $HOME/src/dotfiles
 ```
 
 or via `ssh`
 
 ```sh
-mkdir -p $HOME/src && \
-git clone git@github.com:mkoester/dotfiles.git $HOME/src/dotfiles
+mkdir -p $HOME/src && git clone git@github.com:mkoester/dotfiles.git $HOME/src/dotfiles
 ```
 
 Sharing one clone between several users on a machine puts it in `/home/dotfiles` instead —
@@ -32,37 +63,28 @@ Everything from here on assumes you are in the repo root:
 cd ${DOTFILES_REPO:-$HOME/src/dotfiles}
 ```
 
-### install `stow`
+## Install `stow`
 
-#### rpm based distros (e.g. fedora, RHEL (clones), etc.)
-
-```sh
-sudo dnf install -y stow
-```
-
-#### deb based distros (e.g. Debian, Ubuntu, Mint, etc.)
-
-```sh
-sudo apt install -y stow
-```
-
-#### arch based distros (e.g. Arch, CachyOS, EndeavourOS, Manjaro, etc.)
-
-`paru` is not installed yet at this point in the guide, so `pacman` is used directly here.
-It is only used directly twice: here, and to install paru itself — every other arch step
-uses `paru`.
-
+### Arch
+`paru` isn't built yet at this point, so `pacman` is used directly here. It's only used directly
+twice: here, and to install paru itself — every other Arch step uses `paru`.
 ```sh
 sudo pacman -S --needed stow
 ```
-
-#### MacOS with Homebrew
-
+### Debian
+```sh
+sudo apt install -y stow
+```
+### Fedora
+```sh
+sudo dnf install -y stow
+```
+### macOS
 ```sh
 brew install stow
 ```
 
-### symlink config files via `stow`
+## Stow the config files
 
 ```sh
 cd ${DOTFILES_REPO:-$HOME/src/dotfiles}/config-stow && \
@@ -95,52 +117,36 @@ The global ignore is deliberately limited to OS and editor scratch — things no
 should have to know about. Build output, dependencies and caches stay in each project's own
 `.gitignore`, where a rule that hides a file is visible to whoever hits it.
 
+## zsh
 
-zsh
----
+Check your current shell: `echo $SHELL` (default) / `ps -p $$` (running).
 
-### check current shell
-
-- currently running shell
-  + `ps -p $$`
-- default shell for the user
-  + `echo $SHELL`
-
-### Install zsh
-
-#### rpm based distros (e.g. fedora, RHEL (clones), etc.)
-
+### Arch
+Install `paru` first (see [below](#paru-arch-only)) — the update-os aliases are paru wrappers.
 ```sh
-sudo dnf install -y zsh zoxide tmux git git-delta gitk curl wget eza sqlite fzf
+paru -S --needed zsh zoxide tmux git git-delta curl wget eza sqlite fzf
 ```
-
-#### deb based distros (e.g. Debian, Ubuntu, Mint, etc.)
-
+`gitk` ships inside the `git` package here, so it needs no separate entry.
+### Debian
 ```sh
 sudo apt install -y zsh zoxide tmux git gitk curl wget eza fzf
 ```
-
-`eza` needs Debian 13+ / Ubuntu 24.04+; `zoxide` needs Debian 12+ / Ubuntu 22.04+. On older
-releases install them from the upstream releases instead of `apt`.
-
-##### nala (optional)
-
+`git-delta` isn't in apt — install the `.deb` from the [delta releases](https://github.com/dandavison/delta/releases)
+(or via nala, below). `eza` needs Debian 13+ / Ubuntu 24.04+; `zoxide` needs Debian 12+ /
+Ubuntu 22.04+ — on older releases install them from the upstream releases instead of `apt`.
+### Fedora
 ```sh
-sudo apt install -y nala && \
-sudo nala install https://github.com/dandavison/delta/releases/download/0.17.0/git-delta_0.17.0_amd64.deb
+sudo dnf install -y zsh zoxide tmux git git-delta gitk curl wget eza sqlite fzf
+```
+### macOS
+```sh
+brew install zsh zoxide tmux git curl wget eza fzf
 ```
 
-you might have to install it manually (e.g. with Ubuntu 22.04 LTS): https://gitlab.com/volian/nala/-/wikis/Installation
+### paru (Arch only)
 
-#### arch based distros (e.g. Arch, CachyOS, EndeavourOS, Manjaro, etc.)
-
-##### paru (required, install first)
-
-The `update-os` / `s` aliases below are `paru` wrappers, so it is **not** optional on arch.
-Install it before the packages, since everything below goes through it.
-
-CachyOS ships it in its own repo. This is the other direct `pacman` use, for the obvious
-reason that paru cannot install itself:
+The `update-os` / `s` aliases are `paru` wrappers, so it is **not** optional on Arch. Install it
+before the packages, since everything below goes through it. CachyOS ships it in its own repo:
 
 ```sh
 sudo pacman -S --needed paru
@@ -157,41 +163,33 @@ cd $HOME/src/paru && makepkg -si
 **Never call paru with `sudo`** — it escalates on its own and refuses AUR installs when run as
 root (`can't install AUR package as root`).
 
-##### packages
+### nala (Debian only, optional)
 
 ```sh
-paru -S --needed zsh zoxide tmux git git-delta curl wget eza sqlite fzf
+sudo apt install -y nala && \
+sudo nala install https://github.com/dandavison/delta/releases/download/0.17.0/git-delta_0.17.0_amd64.deb
 ```
 
-`gitk` ships inside the `git` package here, so it needs no separate entry.
+On Ubuntu 22.04 LTS you may have to [install nala manually](https://gitlab.com/volian/nala/-/wikis/Installation).
 
-#### MacOS with Homebrew
+### Set zsh as the default shell
 
-```sh
-brew install zsh zoxide tmux git curl wget eza fzf
-```
-
-### set zsh as default shell
-
-- `chsh -s $(which zsh)` — works everywhere, MacOS included
+- `chsh -s $(which zsh)` — works everywhere, macOS included
 
   or
 
-- `sudo usermod -s $(which zsh) $(whoami)` — **Linux only** (shadow-utils; MacOS has no `usermod`)
+- `sudo usermod -s $(which zsh) $(whoami)` — **Linux only** (shadow-utils; macOS has no `usermod`)
 
 `chsh` only accepts shells listed in `/etc/shells`. Distro zsh packages add themselves; a
-Homebrew zsh on MacOS does **not**, so add it once first:
+Homebrew zsh on macOS does **not**, so add it once first:
 
 ```sh
 echo $(which zsh) | sudo tee -a /etc/shells
 ```
 
-oh-my-zsh
----------
+## oh-my-zsh
 
-### Installation
-
-https://github.com/ohmyzsh/ohmyzsh#basic-installation
+Install it ([upstream](https://github.com/ohmyzsh/ohmyzsh#basic-installation)):
 
 ```sh
 sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
@@ -200,16 +198,13 @@ sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/too
 ### Machine / user specific settings
 
 The repo is already cloned to `$HOME/src/dotfiles` at the [top of this guide](#clone-this-repository) —
-there is only ever one clone. The steps below assume you are in its root:
-
-```sh
-cd ${DOTFILES_REPO:-$HOME/src/dotfiles}
-```
+there is only ever one clone. The steps below assume you are in its root
+(`cd ${DOTFILES_REPO:-$HOME/src/dotfiles}`).
 
 #### Sharing config with several users on the same machine
 
-**Linux only** — `groupadd` / `usermod` are shadow-utils and do not exist on MacOS, which needs
-`dscl` / `sysadminctl` instead.
+**Linux only** — `groupadd` / `usermod` are shadow-utils and do not exist on macOS, which needs
+`dscl` / `sysadminctl` instead. (Kept manual — the installer does not automate this.)
 
 This is the one case where the clone does *not* live in `$HOME/src/dotfiles`; skip the clone at
 the top of the guide and use `/home/dotfiles` throughout.
@@ -239,92 +234,73 @@ cd ${DOTFILES_REPO:-$HOME/src/dotfiles}/ && \
 ln -s `pwd`/oh-my-zsh-config/shared-dotfiles.zsh $HOME/.oh-my-zsh-config/
 ```
 
+#### Make the `update-os` alias available
 
-#### Make the alias for os updates available
-
-##### dnf based distros (e.g. fedora, RHEL (clones), etc.)
-
-```sh
-ln -s `pwd`/.zshrc-update-os-dnf.zsh $HOME/.zshrc-update-os.zsh
-```
-
-##### apt based distros (e.g. Debian, Ubuntu, Mint, etc.)
+Symlink the variant for your package manager:
 
 ```sh
-ln -s `pwd`/.zshrc-update-os-apt.zsh $HOME/.zshrc-update-os.zsh
+# Arch
+ln -sf `pwd`/.zshrc-update-os-arch.zsh $HOME/.zshrc-update-os.zsh
+# Debian
+ln -sf `pwd`/.zshrc-update-os-apt.zsh $HOME/.zshrc-update-os.zsh
+# Debian + nala (also links the nala completion helper)
+ln -sf `pwd`/.zshrc-update-os-nala.zsh $HOME/.zshrc-update-os.zsh && \
+  mkdir -p $HOME/.oh-my-zsh-custom && ln -sf `pwd`/oh-my-zsh-custom/nala.zsh $HOME/.oh-my-zsh-custom/
+# Fedora
+ln -sf `pwd`/.zshrc-update-os-dnf.zsh $HOME/.zshrc-update-os.zsh
+# macOS
+ln -sf `pwd`/.zshrc-update-os-brew.zsh $HOME/.zshrc-update-os.zsh
 ```
 
-###### nala
-
-```sh
-ln -s `pwd`/.zshrc-update-os-nala.zsh $HOME/.zshrc-update-os.zsh && \
-mkdir -p $HOME/.oh-my-zsh-custom && ln -s `pwd`/oh-my-zsh-custom/nala.zsh $HOME/.oh-my-zsh-custom
-```
-
-##### pacman based distros (e.g. Arch, CachyOS, EndeavourOS, Manjaro, etc.)
-
-Requires `paru` — see the arch section above.
-
-```sh
-ln -s `pwd`/.zshrc-update-os-arch.zsh $HOME/.zshrc-update-os.zsh
-```
-
-##### MacOS with Homebrew
-
-```sh
-ln -s `pwd`/.zshrc-update-os-brew.zsh $HOME/.zshrc-update-os.zsh
-```
+The brew variant's `update-os` calls `brew cu -y -a`, which needs the
+[`buo/cask-upgrade`](https://github.com/buo/homebrew-cask-upgrade) tap installed once:
+`brew tap buo/cask-upgrade`.
 
 ### Theme
 
-https://github.com/romkatv/powerlevel10k#oh-my-zsh
+[powerlevel10k](https://github.com/romkatv/powerlevel10k#oh-my-zsh):
 
 ```sh
 git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k
 ```
 
-#### Font
-
-Meslo Nerd Font — required for p10k's glyphs and for `eza --icons`.
+**Font** — Meslo Nerd Font, required for p10k's glyphs and `eza --icons`:
 
 ```sh
-paru -S --needed ttf-meslo-nerd      # arch
-brew install --cask font-meslo-lg-nerd-font   # MacOS
+paru -S --needed ttf-meslo-nerd            # Arch
+brew install --cask font-meslo-lg-nerd-font  # macOS
 ```
 
-Elsewhere, download it manually: https://www.nerdfonts.com/font-downloads
+Elsewhere, download it manually: <https://www.nerdfonts.com/font-downloads>.
 
-### Tools / Plugins
+### Plugins
 
 ```sh
 git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
-```
-
-```sh
 git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
-```
-
-```sh
 git clone https://github.com/MichaelAquilina/zsh-you-should-use.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/you-should-use
 ```
 
-#### auto-notify (optional / Desktop only)
+#### auto-notify (optional / desktop only)
 
 needs `notify-send`, which most desktop installs already have:
 
 ```sh
-sudo apt install -y libnotify-bin    # deb (nala works too)
-sudo dnf install -y libnotify        # rpm
-paru -S --needed libnotify           # arch
+paru -S --needed libnotify      # Arch
+sudo apt install -y libnotify-bin  # Debian (nala works too)
+sudo dnf install -y libnotify      # Fedora
 ```
 
 ```sh
 git clone https://github.com/MichaelAquilina/zsh-auto-notify.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/auto-notify && \
-mkdir -p $HOME/.oh-my-zsh-plugins-optional && ln -s `pwd`/oh-my-zsh-plugins-optional/auto-notify.zsh $HOME/.oh-my-zsh-plugins-optional/ && \
-mkdir -p $HOME/.oh-my-zsh-custom && ln -s `pwd`/oh-my-zsh-custom/auto-notify.zsh $HOME/.oh-my-zsh-custom/
+mkdir -p $HOME/.oh-my-zsh-plugins-optional && ln -sf `pwd`/oh-my-zsh-plugins-optional/auto-notify.zsh $HOME/.oh-my-zsh-plugins-optional/ && \
+mkdir -p $HOME/.oh-my-zsh-custom && ln -sf `pwd`/oh-my-zsh-custom/auto-notify.zsh $HOME/.oh-my-zsh-custom/
 ```
 
-### set up oh-my-zsh
+The `AUTO_NOTIFY_IGNORE` list in `auto-notify.zsh` references `btop` and `tldr`; install those
+too if you use them (both optional, in every distro's repos as `btop` / `tldr`).
+
+### Set up oh-my-zsh
 
 make the config files `.zshrc` and `.p10k.zsh` available in your home directory
 
@@ -349,7 +325,7 @@ Two things this block gets right, both learned the hard way:
 A real (non-symlink) `.zshrc` is moved to `.zshrc-manual-backup` first, so a fresh oh-my-zsh
 install never loses its generated file.
 
-### why there are separate config / custom directories
+### Why there are separate config / custom directories
 
 oh-my-zsh reads most of its knobs (`ZSH_DISABLE_COMPFIX`, `zstyle ':omz:update'`, per-plugin
 settings) **while it loads**, and applies your `plugins=(…)` list at that same moment. A setting
@@ -374,10 +350,11 @@ sides of that `source` line), while `config` and `plugins-optional` *could* (bot
 `oh-my-zsh-config/foo.zsh` links into `~/.oh-my-zsh-config/`, and so on. So the repo layout tells
 you when each file loads; the catalog's "link into" column just restates the path.
 
-### catalog
+### Catalog
 
 Nothing links itself. Each file needs its own `ln -sf`, and only on the machines it applies to —
-which is why a fresh machine does not automatically match an old one. The shape is always:
+which is why a fresh machine does not automatically match an old one. `install.sh` automates
+this via its host-class questions; to link one by hand the shape is always:
 
 ```sh
 cd ${DOTFILES_REPO:-$HOME/src/dotfiles} && \
@@ -394,17 +371,41 @@ ln -sf `pwd`/oh-my-zsh-custom/pnpm.zsh $HOME/.oh-my-zsh-custom/
 | `oh-my-zsh-config/shared-dotfiles.zsh` | `.oh-my-zsh-config` | `create_new_user_with_shared_config()` | shared multi-user machines |
 | `oh-my-zsh-plugins-optional/auto-notify.zsh` | `.oh-my-zsh-plugins-optional` | adds `auto-notify` to `plugins` | desktops |
 | `oh-my-zsh-plugins-optional/golang.zsh` | `.oh-my-zsh-plugins-optional` | adds the omz `golang` plugin | Go machines |
-| `oh-my-zsh-custom/auto-notify.zsh` | `.oh-my-zsh-custom` | `AUTO_NOTIFY_IGNORE` for long-running commands | with the plugin above |
-| `oh-my-zsh-custom/bat.zsh` | `.oh-my-zsh-custom` | `alias bat='batcat'` | deb only |
+| `oh-my-zsh-custom/auto-notify.zsh` | `.oh-my-zsh-custom` | `AUTO_NOTIFY_IGNORE` for long-running commands (`btop`, `tldr`, …) | with the plugin above |
+| `oh-my-zsh-custom/bat.zsh` | `.oh-my-zsh-custom` | `alias bat='batcat'` | Debian only |
 | `oh-my-zsh-custom/brew-path.zsh` | `.oh-my-zsh-custom` | puts `~/homebrew/bin` on `PATH` | Homebrew installed under `$HOME` |
-| `oh-my-zsh-custom/caddy.zsh` | `.oh-my-zsh-custom` | `caddyedit`/`caddyfmt`/`caddyvalidate`/`caddyreload` | hosts running Caddy |
-| `oh-my-zsh-custom/fnm.zsh` | `.oh-my-zsh-custom` | `fnm env --use-on-cd` | Node machines (needs fnm) |
+| `oh-my-zsh-custom/caddy.zsh` | `.oh-my-zsh-custom` | `caddyedit`/`caddyfmt`/`caddyvalidate`/`caddyreload` | hosts running [Caddy](#caddy-hosts) |
+| `oh-my-zsh-custom/fnm.zsh` | `.oh-my-zsh-custom` | `fnm env --use-on-cd` | [Node machines](#node-machines-fnm--pnpm) |
 | `oh-my-zsh-custom/fresh.zsh` | `.oh-my-zsh-custom` | points `EDITOR`/`VISUAL`/`nano` at `fresh` | see [fresh](#fresh--terminal-editor) |
 | `oh-my-zsh-custom/gita.zsh` | `.oh-my-zsh-custom` | `gitad`/`gitaw`/`gitar` | see [gita](#gita--multi-repo-git-overview--auto-fetch) |
 | `oh-my-zsh-custom/lesspipe.zsh` | `.oh-my-zsh-custom` | `LESSOPEN` | see [lesspipe](#lesspipe) |
-| `oh-my-zsh-custom/nala.zsh` | `.oh-my-zsh-custom` | completion setup, `~/.zfunc` on `fpath` | deb + nala |
-| `oh-my-zsh-custom/pnpm.zsh` | `.oh-my-zsh-custom` | `PNPM_HOME`, `p*` aliases, completion | Node machines (needs pnpm) |
+| `oh-my-zsh-custom/nala.zsh` | `.oh-my-zsh-custom` | completion setup, `~/.zfunc` on `fpath` | Debian + nala |
+| `oh-my-zsh-custom/pnpm.zsh` | `.oh-my-zsh-custom` | `PNPM_HOME`, `p*` aliases, completion | [Node machines](#node-machines-fnm--pnpm) |
+| `oh-my-zsh-custom/atuin.zsh` | `.oh-my-zsh-custom` | `atuin init zsh` — synced shell history | see [atuin](#atuin--shell-history-sync) |
+| `oh-my-zsh-custom/quadlet.zsh` | `.oh-my-zsh-custom` | `qctl`/`qlog`/`qexec`/… Podman-quadlet helpers | see [quadlet hosts](#quadlet-hosts-server-side) |
 | `oh-my-zsh-custom/ssh-shared-authorized_keys.zsh` | `.oh-my-zsh-custom` | `update-ssh-shared-authorized_keys` | hosts using the shared key repo |
+
+## Node machines (fnm + pnpm)
+
+`fnm.zsh` and `pnpm.zsh` assume the tools are installed. Install them, then link the catalog rows:
+
+```sh
+paru -S --needed fnm pnpm    # Arch
+brew install fnm pnpm        # macOS
+```
+
+On Debian/Fedora there is no distro package — install [fnm](https://github.com/Schniz/fnm#installation)
+and [pnpm](https://pnpm.io/installation) from upstream.
+
+## Caddy hosts
+
+`caddy.zsh` wraps `caddy fmt`/`validate` and `systemctl reload caddy`, so it needs Caddy present:
+
+```sh
+paru -S --needed caddy       # Arch
+sudo apt install -y caddy    # Debian (see caddyserver.com for the apt repo)
+sudo dnf install -y caddy    # Fedora
+```
 
 ## lesspipe
 
@@ -416,79 +417,49 @@ git clone https://github.com/wofr06/lesspipe.git && \
 cd lesspipe && git checkout $LESSPIPE_VERSION && ./configure && make && sudo make install
 ```
 
-go to the dotfiles repo and execute
+Then link the helper:
 
 ```sh
 cd ${DOTFILES_REPO:-$HOME/src/dotfiles} && \
 mkdir -p $HOME/.oh-my-zsh-custom && \
-ln -s `pwd`/oh-my-zsh-custom/lesspipe.zsh $HOME/.oh-my-zsh-custom/
+ln -sf `pwd`/oh-my-zsh-custom/lesspipe.zsh $HOME/.oh-my-zsh-custom/
 ```
 
-you might want to install some tools used by `lesspipe`:
-
-### dnf based distros (e.g. fedora, RHEL (clones), etc.)
+Optional tools lesspipe shells out to:
 
 ```sh
-sudo dnf install p7zip p7zip-plugins unrar cabextract bat
+paru -S --needed 7zip unrar cabextract bat          # Arch (p7zip is named 7zip here)
+sudo apt install -y p7zip-full unrar-free cabextract bat  # Debian
+sudo dnf install p7zip p7zip-plugins unrar cabextract bat # Fedora (unrar needs RPM Fusion non-free)
+brew install p7zip unrar cabextract bat             # macOS
 ```
 
-Recent Fedora dropped `p7zip`/`p7zip-plugins` in favour of a `7zip` package — if the above
-errors on "No match", that is why. `unrar` needs RPM Fusion (non-free).
-
-### deb based distros (e.g. Debian, Ubuntu, Mint, etc.)
+Debian ships the binary as `batcat` (the name `bat` collides with another package), which is what
+`oh-my-zsh-custom/bat.zsh` exists for — symlink it **on Debian only**:
 
 ```sh
-sudo apt install -y p7zip-full unrar-free cabextract bat
+mkdir -p $HOME/.oh-my-zsh-custom && ln -sf `pwd`/oh-my-zsh-custom/bat.zsh $HOME/.oh-my-zsh-custom/
 ```
 
-Debian ships the binary as `batcat` (the name `bat` collides with another package), which is
-what `oh-my-zsh-custom/bat.zsh` exists for — symlink it **on deb systems only**:
+Recent Fedora dropped `p7zip`/`p7zip-plugins` in favour of a `7zip` package — if the dnf line
+errors on "No match", that is why.
 
-```sh
-mkdir -p $HOME/.oh-my-zsh-custom && \
-ln -s `pwd`/oh-my-zsh-custom/bat.zsh $HOME/.oh-my-zsh-custom/
-```
-
-### arch based distros (e.g. Arch, CachyOS, EndeavourOS, Manjaro, etc.)
-
-`p7zip` is named `7zip` here.
-
-```sh
-paru -S --needed 7zip unrar cabextract bat
-```
-
-### MacOS with Homebrew
-
-```sh
-brew install p7zip unrar cabextract bat
-```
-
-
-fresh — terminal editor
------------------------
+## fresh — terminal editor
 
 [fresh](https://github.com/sinelaw/fresh) is a Rust terminal IDE with the UX of a GUI editor:
 standard keybindings (`Ctrl+S`/`Ctrl+F`/`Ctrl+Z`), mouse support, a command palette, LSP, and
-multi-GB file handling. GPL-2.0.
-
-### install
-
-Not in the arch repos — it comes from the AUR. Take the `-bin` package unless you want to
-compile Rust:
+multi-GB file handling. GPL-2.0. **The package is `fresh-editor`, the binary is `fresh`.**
 
 ```sh
-paru -S --needed fresh-editor-bin      # arch, prebuilt (fresh-editor builds from source)
-brew install fresh-editor              # MacOS
+paru -S --needed fresh-editor-bin      # Arch, prebuilt (fresh-editor builds from source)
+brew install fresh-editor              # macOS
 cargo install --locked fresh-editor    # anywhere with a Rust toolchain
 ```
 
-Debian/Ubuntu `.deb` and Fedora `.rpm` packages are on the
-[releases page](https://github.com/sinelaw/fresh/releases), and there is a Flatpak
-(`flatpak install fresh-editor`) plus an AppImage.
+Debian `.deb` and Fedora `.rpm` packages are on the
+[releases page](https://github.com/sinelaw/fresh/releases), plus a Flatpak and an AppImage.
 
-**The package is `fresh-editor`, the binary is `fresh`.**
-
-### shell integration
+Shell integration:
 
 ```sh
 cd ${DOTFILES_REPO:-$HOME/src/dotfiles} && \
@@ -500,35 +471,31 @@ That sets `EDITOR`/`VISUAL` and re-points the `nano` alias at fresh. It override
 `alias nano='nano -c'` because `~/.oh-my-zsh-custom` is sourced *last* — so link it only where
 fresh is actually installed, or `nano` becomes a broken alias.
 
-
-gita — multi-repo git overview + auto-fetch
--------------------------------------------
+## gita — multi-repo git overview + auto-fetch
 
 [gita](https://github.com/nosarthur/gita) shows the status of all git repos across every
 `~/Projects/workspace_*` on one screen. The `oh-my-zsh-custom/gita.zsh` helpers (auto-sourced)
-add `gitad`/`gitaw`/`gitar`; the `systemd-user` stow package runs a periodic `gita fetch` timer.
+add `gitad`/`gitaw`/`gitar` (the `gitaw` live view uses `watch`, part of procps and usually
+already present); the `systemd-user` stow package runs a periodic `gita fetch` timer.
 
-### install & register
-
-`pipx` is not part of the zsh package list above — install it first. Note arch names it
-`python-pipx`, everyone else `pipx`:
+Install via pipx (Arch names it `python-pipx`, everyone else `pipx`):
 
 ```sh
-paru -S --needed python-pipx     # arch
-sudo dnf install -y pipx         # rpm
-sudo apt install -y pipx         # deb
-brew install pipx                # MacOS
+paru -S --needed python-pipx     # Arch
+sudo dnf install -y pipx         # Fedora
+sudo apt install -y pipx         # Debian
+brew install pipx                # macOS
 ```
 
 ```sh
 cd ${DOTFILES_REPO:-$HOME/src/dotfiles} && \
 pipx install gita && \
-mkdir -p $HOME/.oh-my-zsh-custom && ln -s `pwd`/oh-my-zsh-custom/gita.zsh $HOME/.oh-my-zsh-custom/
+mkdir -p $HOME/.oh-my-zsh-custom && ln -sf `pwd`/oh-my-zsh-custom/gita.zsh $HOME/.oh-my-zsh-custom/
 ```
 
 The symlink is what makes the helpers "auto-sourced" — `.zshrc` sources every `*.zsh` it finds
-under `~/.oh-my-zsh-custom/`, but nothing puts the file there for you. Without it you get bare
-`gita` and no `gitad`/`gitaw`/`gitar`. Open a new shell (or `exec zsh`) to pick them up.
+under `~/.oh-my-zsh-custom/`, but nothing puts the file there for you. Open a new shell (or
+`exec zsh`) to pick them up.
 
 Register every workspace's repos — **one path per `gita add -a`** (the multi-path form crashes,
 upstream `auto_group` bug). The `gitar` alias does exactly that:
@@ -543,7 +510,7 @@ glob, so it would otherwise be missed on every fresh machine.
 Day-to-day: `gitad` (repos with changes), `gitaw` (live-refreshing, grouped by workspace via
 `gita ll -g`), `gita ll` (all).
 
-### rebuilding the groups
+### Rebuilding the groups
 
 `gita add -a` is **add-only**: it skips repos already in `~/.config/gita/repos.csv`
 ("No new repos found!"), and a repo's group is assigned only as a side effect of *adding* it.
@@ -572,7 +539,7 @@ Two related quirks, both expected — not breakage:
 - Two repos resolving to the same name are disambiguated by parent dir (`workspace_home/workspace_home`).
   Treat that as a **red flag** — it usually means a stray duplicate clone, not a naming clash.
 
-### periodic auto-fetch timer (systemd user)
+### Periodic auto-fetch timer (systemd user)
 
 Fetches all registered repos every 5 min so `gita ll`'s ahead/behind counts stay fresh — fetch
 only, never pull.
@@ -598,71 +565,145 @@ remotes, set `SSH_AUTH_SOCK` in `config-stow/systemd-user/systemd/user/gita-fetc
 `echo $SSH_AUTH_SOCK`), then `systemctl --user daemon-reload && systemctl --user restart
 gita-fetch.timer`. HTTPS remotes fetch regardless.
 
+## atuin — shell history sync
 
-kanshi — monitor layout profiles (Niri / Wayland)
--------------------------------------------------
+[atuin](https://atuin.sh) replaces the shell history with a synced, searchable database, backed
+by my self-hosted [quadlet-atuin](https://github.com/mkoester/quadlet-atuin) server. `atuin.zsh`
+runs `atuin init zsh` (guarded by a `command -v` check, so linking it on a machine without atuin
+is harmless).
 
-The `arandr` + `autorandr` replacement: named output profiles, switched from a keybind with
-`kanshictl switch <profile>`, and auto-applied on hotplug.
-
-### install
+Install atuin:
 
 ```sh
-paru -S --needed kanshi
+paru -S --needed atuin       # Arch
+brew install atuin           # macOS
+curl --proto '=https' --tlsv1.2 -LsSf https://setup.atuin.sh | sh   # Debian / Fedora / anywhere
+```
+
+Link the shell integration:
+
+```sh
+mkdir -p $HOME/.oh-my-zsh-custom && ln -sf `pwd`/oh-my-zsh-custom/atuin.zsh $HOME/.oh-my-zsh-custom/
+```
+
+**The server address is private**, so the client `config.toml` (which holds `sync_address`) is
+**not** tracked in this public repo — it lives in `workstation-private/shared/atuin/config.toml`
+and the installer symlinks it to `~/.config/atuin/config.toml`. Set `sync_address` there to your
+real domain. (A TOML config can't be split like the kanshi/niri skeletons, and the address must
+stay out of public git, so the whole file is private.)
+
+Then, **once per machine** (secret — never in a repo):
+
+```sh
+atuin register -u <user> -e <email>   # first machine; or `atuin login -u <user>` on the rest
+atuin import auto                     # seed from the existing shell history
+atuin sync
+```
+
+`atuin sync` runs automatically after commands (`auto_sync`); the daemon is off by default, so
+sync happens in-shell. If you later enable the atuin daemon, keep `sync_address` in `config.toml`
+(the daemon doesn't read the shell environment).
+
+## quadlet hosts (server-side)
+
+`oh-my-zsh-custom/quadlet.zsh` wraps the repetitive commands for managing rootless-Podman
+[quadlet](https://github.com/mkoester?tab=repositories&q=quadlet) services, each of which runs as
+a dedicated user. It collapses the invariant
+`sudo -u <svc> XDG_RUNTIME_DIR=/run/user/$(id -u <svc>) systemctl --user …` prefix into
+`qctl`/`qreload`/`qlog`/`qexec`/`qplog`/`qupdate`/`qvalidate`/`qsh`.
+
+**Server-side only** — link it on the quadlet *host*, never on the workstation; the functions run
+privileged commands against local service users. The installer's "Quadlet host?" question does
+this. Its source of truth is the `quadlet-my-guidelines` Operations section — keep the two in
+sync. To link by hand:
+
+```sh
+mkdir -p $HOME/.oh-my-zsh-custom && ln -sf `pwd`/oh-my-zsh-custom/quadlet.zsh $HOME/.oh-my-zsh-custom/
+```
+
+## kanshi — monitor profiles
+
+The `arandr` + `autorandr` replacement for Wayland: named output profiles, switched from a
+keybind with `kanshictl switch <profile>`, and auto-applied on hotplug.
+
+```sh
+paru -S --needed kanshi      # Arch
 ```
 
 ```sh
-cd config-stow && \
-stow -t $HOME/.config kanshi && \
-cd ..
+cd config-stow && stow -t $HOME/.config kanshi && cd ..
 ```
 
-### machine-specific profiles go in `config.d/` — not in this repo
-
-**This repo is public.** The tracked `config-stow/kanshi/kanshi/config` is a generic skeleton
-using connector names only. Real per-machine profiles go in `config.d/`, which is gitignored
-and pulled in by the skeleton's `include ~/.config/kanshi/config.d/*`:
+**Machine-specific profiles go in `config.d/` — not in this repo.** The tracked
+`config-stow/kanshi/kanshi/config` is a generic skeleton using connector names only. Real
+per-machine profiles go in `config.d/`, which is gitignored and pulled in by the skeleton's
+`include ~/.config/kanshi/config.d/*`:
 
 ```sh
 niri msg outputs                             # real names, modes, make/model/serial
 $EDITOR ~/.config/kanshi/config.d/local.conf # same syntax; same-named profile wins
 ```
 
-Because stow links the whole `kanshi` directory, files dropped in the repo's `config.d/` appear
-in `~/.config/kanshi/config.d/` automatically — private, but stow-managed like everything else.
-
 Keep `"Make Model Serial"` matching for `config.d/` only. It's the robust form — connector names
 are non-deterministic with multiple GPUs or thunderbolt docks — but serials are hardware
-identifiers and must not land in a public repo.
+identifiers and must not land in a public repo. These per-machine profiles live in the private
+overlay repo; `install.sh` symlinks them in from there. Because stow links the whole `kanshi`
+directory, files dropped in `config.d/` appear in `~/.config/kanshi/config.d/` automatically.
 
-### enable
+Enable it:
 
 ```sh
 systemctl --user enable --now kanshi.service
 ```
 
 If the package ships no unit (`pacman -Ql kanshi | grep systemd`), fall back to
-`spawn-at-startup "kanshi"` in the Niri config.
-
-### keybinds
-
-Not tracked yet — no Niri stow package exists (open item). Add to `~/.config/niri/config.kdl`
-by hand:
-
-```kdl
-Mod+Shift+D { spawn "kanshictl" "switch" "docked"; }
-Mod+Shift+S { spawn "kanshictl" "switch" "solo"; }
-```
-
-`kanshictl status` shows the live profile when a switch appears to do nothing; `kanshictl reload`
-re-reads the config.
+`spawn-at-startup "kanshi"` in the Niri config. `kanshictl status` shows the live profile;
+`kanshictl reload` re-reads the config.
 
 **Do not also install `nwg-displays`.** It writes `~/.config/niri/monitor.kdl`, and the resulting
 Niri config reload discards every transient change kanshi applied.
 
+## niri — Wayland compositor
 
-waybar — supervision drop-in
-----------------------------
+The `config-stow/niri/` package tracks a **public skeleton** Niri config plus the helper script.
+niri itself (and waybar, below) are assumed installed on a desktop machine:
+
+```sh
+paru -S --needed niri waybar   # Arch (elsewhere: per each project's own install docs)
+```
+
+```sh
+mkdir -p $HOME/.config/niri $HOME/.local/bin && \
+cd config-stow && stow -t $HOME niri && cd ..
+```
+
+This links:
+
+- `~/.config/niri/config.kdl` — the tracked skeleton: generic keybinds, the kanshi switch binds
+  (`Mod+Shift+D` docked / `Mod+Shift+S` solo), and the Firefox-placement bind (`Mod+Shift+O`).
+  It **omits** `spawn-sh-at-startup "waybar"` on purpose — waybar runs under its supervised unit
+  (see [waybar](#waybar--supervised-restart)), so spawning it here too would give you two bars.
+- `~/.local/bin/place-firefox-windows.sh` — re-homes restored single-profile Firefox windows onto
+  workspaces by title (an i3-`assign` equivalent; see the Workstation-Documentation rationale).
+
+**Machine- and device-specific overrides go in `~/.config/niri/local.kdl`**, `include`d
+(optionally) by the skeleton so it wins: real `output` blocks, a custom xkb keymap path, and
+Bluetooth quick-connect binds (which carry hardware MACs). It's gitignored here and supplied
+per-machine by the private overlay repo — same pattern as kanshi's `config.d/`.
+
+### ydotool (input injection)
+
+For Wayland input injection (Stream Deck / macros), the `systemd-user` package ships a
+`ydotoold.service`. It needs a udev rule for `/dev/uinput` (root, so **not** stow-managed):
+
+```sh
+echo 'KERNEL=="uinput", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput"' | \
+  sudo tee /etc/udev/rules.d/99-uinput.rules
+sudo usermod -aG input "$USER"    # then re-login
+systemctl --user enable --now ydotoold.service
+```
+
+## waybar — supervised restart
 
 Waybar crashes around output add/remove (hotplug, docking, `kanshictl switch`, monitor blanking) —
 an upstream GTK bug ([Waybar #3400](https://github.com/Alexays/Waybar/issues/3400)). Niri's
@@ -679,16 +720,16 @@ systemctl --user daemon-reload && \
 systemctl --user enable --now waybar.service
 ```
 
-Then **remove `spawn-sh-at-startup "waybar"`** from `~/.config/niri/config.kdl` — otherwise the
-unit and Niri each start a bar and you get two.
+Then **ensure `spawn-sh-at-startup "waybar"` is absent** from `~/.config/niri/config.kdl` (the
+tracked skeleton already omits it) — otherwise the unit and Niri each start a bar and you get two.
 
-Verify the drop-in actually took effect, and watch for crashes:
+Verify the drop-in took effect, and watch for crashes:
 
 ```sh
 systemctl --user show waybar.service -p Restart -p StartLimitIntervalUSec
 journalctl --user -u waybar.service -f
 ```
 
-This also restores logging: `~/.config/waybar/waybar.sh` and `scripts/waybar-restart.sh` pipe
-waybar's output to `/dev/null`, which is why crashes left no journal trace. Under the unit,
+This also restores logging: the old `~/.config/waybar/waybar.sh` / `scripts/waybar-restart.sh`
+piped waybar's output to `/dev/null`, which is why crashes left no journal trace. Under the unit,
 `systemctl --user restart waybar` replaces both scripts.

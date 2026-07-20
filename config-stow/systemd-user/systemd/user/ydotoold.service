@@ -1,0 +1,23 @@
+[Unit]
+Description=ydotoold — uinput daemon for Wayland input injection (Stream Deck, macros)
+Documentation=https://github.com/ReimuNotMoe/ydotool
+
+[Service]
+Type=simple
+# ydotoold opens /dev/uinput to create a virtual input device, then listens on a control
+# socket that the `ydotool` client talks to. Injecting input on Wayland is the whole point:
+# clients (e.g. StreamController actions) call `ydotool key`/`ydotool type`.
+#
+# PREREQUISITE (not stow-managed — needs root, so it's an installer/README sudo step):
+# a udev rule granting your user access to /dev/uinput, e.g. in /etc/udev/rules.d/:
+#   KERNEL=="uinput", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput"
+# plus membership in the `input` group. Without it ydotoold fails to open /dev/uinput.
+ExecStart=/usr/bin/ydotoold
+# The client finds the daemon via this socket; export the same path in your shell/session
+# so `ydotool` (and StreamController) reach it: YDOTOOL_SOCKET=%t/.ydotool_socket
+Environment=YDOTOOL_SOCKET=%t/.ydotool_socket
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=default.target
