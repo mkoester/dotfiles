@@ -129,11 +129,11 @@ paru -S --needed zsh zoxide tmux git git-delta curl wget eza sqlite fzf
 `gitk` ships inside the `git` package here, so it needs no separate entry.
 ### Debian
 ```sh
-sudo apt install -y zsh zoxide tmux git gitk curl wget eza fzf
+sudo apt install -y zsh zoxide tmux git git-delta gitk curl wget eza fzf
 ```
-`git-delta` isn't in apt — install the `.deb` from the [delta releases](https://github.com/dandavison/delta/releases)
-(or via nala, below). `eza` needs Debian 13+ / Ubuntu 24.04+; `zoxide` needs Debian 12+ /
-Ubuntu 22.04+ — on older releases install them from the upstream releases instead of `apt`.
+`git-delta` is in apt since Debian 13 "trixie" (0.18.x). `eza` needs Debian 13+ / Ubuntu 24.04+;
+`zoxide` needs Debian 12+ / Ubuntu 22.04+ — on older releases install these from the upstream
+releases (delta ships a `.deb`) instead of `apt`.
 ### Fedora
 ```sh
 sudo dnf install -y zsh zoxide tmux git git-delta gitk curl wget eza sqlite fzf
@@ -167,7 +167,7 @@ root (`can't install AUR package as root`).
 
 ```sh
 sudo apt install -y nala && \
-sudo nala install https://github.com/dandavison/delta/releases/download/0.17.0/git-delta_0.17.0_amd64.deb
+sudo nala install git-delta
 ```
 
 On Ubuntu 22.04 LTS you may have to [install nala manually](https://gitlab.com/volian/nala/-/wikis/Installation).
@@ -264,14 +264,25 @@ The brew variant's `update-os` calls `brew cu -y -a`, which needs the
 git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k
 ```
 
-**Font** — Meslo Nerd Font, required for p10k's glyphs and `eza --icons`:
+**Font** — Meslo Nerd Font, required for p10k's glyphs and `eza --icons`. `install.sh` does this
+automatically (step 4); the manual equivalent:
 
 ```sh
 paru -S --needed ttf-meslo-nerd            # Arch
 brew install --cask font-meslo-lg-nerd-font  # macOS
 ```
 
-Elsewhere, download it manually: <https://www.nerdfonts.com/font-downloads>.
+On Debian/Fedora there's no clean package — download p10k's MesloLGS NF into the **system** font
+dir so every user gets it (this is what `install.sh` runs):
+
+```sh
+base='https://github.com/romkatv/powerlevel10k-media/raw/master'
+sudo mkdir -p /usr/local/share/fonts
+sudo wget -q -P /usr/local/share/fonts "$base/MesloLGS%20NF%20Regular.ttf" "$base/MesloLGS%20NF%20Bold.ttf" "$base/MesloLGS%20NF%20Italic.ttf" "$base/MesloLGS%20NF%20Bold%20Italic.ttf"
+sudo fc-cache -f
+```
+
+Either way, point your terminal emulator's font at **MesloLGS NF** afterward — that part is manual.
 
 ### Plugins
 

@@ -120,6 +120,22 @@ link_omz() {
 	run mkdir -p "$HOME/.$1"
 	run ln -sf "$DOTFILES_REPO/$1/$2" "$HOME/.$1/"
 }
+# install_nerd_font — MesloLGS NF, the font p10k's glyphs (and `eza --icons`) need. Packaged on
+# Arch/macOS; elsewhere download p10k's four styles into the SYSTEM font dir so every user on the
+# machine gets them. (The terminal emulator still has to be pointed at "MesloLGS NF" by hand — that
+# can't be scripted.)
+install_nerd_font() {
+	case "$PM" in
+		pacman) pm_install ttf-meslo-nerd ;;
+		brew)   run brew install --cask font-meslo-lg-nerd-font ;;
+		*)      local base='https://github.com/romkatv/powerlevel10k-media/raw/master' style
+		        run sudo mkdir -p /usr/local/share/fonts
+		        for style in Regular Bold Italic "Bold%20Italic"; do
+		            run sudo wget -q -P /usr/local/share/fonts "$base/MesloLGS%20NF%20$style.ttf"
+		        done
+		        run sudo fc-cache -f ;;
+	esac
+}
 
 # ══════════════════════════════════════════════════════════════════════════
 step "1/8  Install stow"
@@ -139,8 +155,7 @@ if [ "$PM" = "pacman" ] && ! have paru; then
 fi
 case "$PM" in
 	pacman) pm_install zsh zoxide tmux git git-delta curl wget eza sqlite fzf ;;
-	apt)    pm_install zsh zoxide tmux git gitk curl wget eza fzf
-	        info "delta (git-delta) isn't in apt — install the .deb from dandavison/delta releases (see README)." ;;
+	apt)    pm_install zsh zoxide tmux git git-delta gitk curl wget eza fzf ;;
 	dnf)    pm_install zsh zoxide tmux git git-delta gitk curl wget eza sqlite fzf ;;
 	brew)   pm_install zsh zoxide tmux git curl wget eza fzf ;;
 esac
@@ -167,6 +182,9 @@ clone_if_absent https://github.com/romkatv/powerlevel10k.git             "$ZSH_C
 clone_if_absent https://github.com/zsh-users/zsh-autosuggestions          "$ZSH_CUSTOM_DIR/plugins/zsh-autosuggestions"
 clone_if_absent https://github.com/zsh-users/zsh-syntax-highlighting.git   "$ZSH_CUSTOM_DIR/plugins/zsh-syntax-highlighting"
 clone_if_absent https://github.com/MichaelAquilina/zsh-you-should-use.git  "$ZSH_CUSTOM_DIR/plugins/you-should-use"
+
+step "  MesloLGS NF font (p10k glyphs, eza --icons)"
+install_nerd_font
 
 # link .zshrc / .p10k.zsh (replays the README "set up oh-my-zsh" block; ln -sf = re-runnable).
 run mkdir -p "$HOME/.oh-my-zsh-config"
@@ -239,9 +257,12 @@ fi
 
 if ask_yn DF_ATUIN "atuin shell-history sync (self-hosted)?"; then
 	case "$PM" in
-		pacman) pm_install atuin ;;
-		brew)   pm_install atuin ;;
-		*)      have atuin || run_sh "curl --proto '=https' --tlsv1.2 -LsSf https://setup.atuin.sh | sh" ;;
+		# packaged (lands on the system PATH, no ~/.atuin/bin, no shell-rc edit): Arch, Debian 13+
+		# trixie (18.x), Homebrew.
+		pacman|apt|brew) pm_install atuin ;;
+		# fallback installer: --no-modify-path so it can't append to the repo-symlinked ~/.zshrc
+		# (~/.atuin/bin is put on PATH by oh-my-zsh-custom/atuin.zsh instead).
+		*)               have atuin || run_sh "curl --proto '=https' --tlsv1.2 -LsSf https://setup.atuin.sh | sh -s -- --no-modify-path" ;;
 	esac
 	link_omz oh-my-zsh-custom atuin.zsh
 	run mkdir -p "$HOME/.config/atuin"

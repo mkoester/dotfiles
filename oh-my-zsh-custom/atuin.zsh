@@ -11,6 +11,10 @@
 # supplied per machine from the workstation-private repo — never in this public repo.
 # One-time per machine: `atuin register -u <user> -e <email>` (or `atuin login -u <user>`),
 # then `atuin import auto && atuin sync`.
+# A curl-installed atuin lives in ~/.atuin/bin — we run that installer with --no-modify-path (so it
+# never edits this repo's symlinked .zshrc), which means its PATH line is skipped, so add it here.
+# Distro packages (apt/pacman/brew) are already on PATH, so this is a harmless no-op for them.
+[[ -d "$HOME/.atuin/bin" ]] && path=("$HOME/.atuin/bin" $path)
 if command -v atuin >/dev/null 2>&1; then
   eval "$(atuin init zsh)"
 fi
