@@ -588,8 +588,21 @@ Install atuin:
 ```sh
 paru -S --needed atuin       # Arch
 brew install atuin           # macOS
-curl --proto '=https' --tlsv1.2 -LsSf https://setup.atuin.sh | sh   # Debian / Fedora / anywhere
+sudo apt install -y atuin    # Debian 13+ (trixie) — packaged, on the system PATH
+curl --proto '=https' --tlsv1.2 -LsSf https://setup.atuin.sh | sh -s -- --no-modify-path  # Fedora / older / anywhere
 ```
+
+> **Why `--no-modify-path`, and the version caveat.** The upstream installer drops atuin in
+> `~/.atuin/bin` and appends a PATH line to `~/.zshrc` — which is a **symlink into this repo**, so
+> without `--no-modify-path` it silently edits the *tracked* `.zshrc`; `atuin.zsh` adds
+> `~/.atuin/bin` to PATH instead. On Debian, `apt`'s atuin lags upstream (e.g. 18.6.1 vs 18.13.x) —
+> **fine for a fresh install** (it syncs across the version gap; the newer migrations back
+> kv/daemon features the old client doesn't use), so the package is used there. What is *not* fine
+> is **downgrading a client after a newer one has run on the same box**: the newer binary migrates
+> the local DB and the older one then can't open it (`migration … was previously applied but is
+> missing`). That's a *local* DB downgrade, not a server break — fix by running the current client,
+> and **do not delete `records.db`** (the sync source of truth) except on a throwaway box with no
+> sync configured.
 
 Link the shell integration:
 
