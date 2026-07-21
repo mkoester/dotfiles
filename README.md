@@ -558,11 +558,22 @@ only, never pull.
 ```sh
 cd config-stow && \
 mkdir -p $HOME/.config/systemd/user && \
-stow -t $HOME/.config systemd-user && \
+stow --no-folding -t $HOME/.config systemd-user && \
 cd ..
 systemctl --user daemon-reload && \
 systemctl --user enable --now gita-fetch.timer
 ```
+
+> **`--no-folding` is required, not optional.** This package now contains a drop-in
+> directory (`systemd/user/waybar.service.d/`, see [waybar](#waybar--supervised-restart)).
+> Plain `stow` "folds" a directory that doesn't yet exist on the target into a **single
+> symlink** (`~/.config/systemd/user/waybar.service.d` → the package dir) — and **systemd
+> does not traverse a symlinked `.d` drop-in directory**, so the override is silently
+> ignored (`systemctl --user show waybar.service -p DropInPaths` comes back empty and
+> `Restart` stays at the shipped `on-failure`). `--no-folding` makes stow create a **real**
+> directory and symlink `override.conf` *inside* it, which systemd does read. If you already
+> stowed without it, re-do the package: `stow -D -t $HOME/.config systemd-user && stow
+> --no-folding -t $HOME/.config systemd-user`, then `systemctl --user daemon-reload`.
 
 Verify, and check for SSH-auth failures on private remotes:
 
@@ -735,7 +746,8 @@ an upstream GTK bug ([Waybar #3400](https://github.com/Alexays/Waybar/issues/340
 is the unit waybar already ships, plus a drop-in.
 
 The drop-in rides along in the **`systemd-user`** package (stow it per the gita-fetch section
-above), and upgrades `/usr/lib/systemd/user/waybar.service` to `Restart=always` with the start
+above — **with `--no-folding`**, or systemd silently ignores the drop-in; see the note there),
+and upgrades `/usr/lib/systemd/user/waybar.service` to `Restart=always` with the start
 rate limit disabled — otherwise a burst of crashes during one docking event trips the limit and
 the bar stays dead regardless.
 
@@ -750,9 +762,13 @@ tracked skeleton already omits it) — otherwise the unit and Niri each start a 
 Verify the drop-in took effect, and watch for crashes:
 
 ```sh
-systemctl --user show waybar.service -p Restart -p StartLimitIntervalUSec
+systemctl --user show waybar.service -p DropInPaths -p Restart -p StartLimitIntervalUSec
 journalctl --user -u waybar.service -f
 ```
+
+Expect `Restart=always`, `StartLimitIntervalUSec=0`, and `DropInPaths=` listing the
+`override.conf`. An **empty `DropInPaths`** with `Restart=on-failure` is the folding trap
+above — the drop-in dir got stowed as a symlink; re-stow with `--no-folding`.
 
 This also restores logging: the old `~/.config/waybar/waybar.sh` / `scripts/waybar-restart.sh`
 piped waybar's output to `/dev/null`, which is why crashes left no journal trace. Under the unit,
