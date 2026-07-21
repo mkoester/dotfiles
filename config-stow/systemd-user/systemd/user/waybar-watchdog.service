@@ -1,0 +1,15 @@
+[Unit]
+Description=Restart waybar on output add/remove (Waybar #3400 .configure desync workaround)
+Documentation=https://github.com/Alexays/Waybar/issues/3400
+# Meaningful only alongside waybar; share its session lifecycle.
+PartOf=graphical-session.target
+After=waybar.service
+
+[Service]
+Type=simple
+ExecStart=%h/.config/systemd/user/waybar-watchdog.sh
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target
