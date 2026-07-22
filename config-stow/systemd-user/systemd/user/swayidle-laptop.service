@@ -1,0 +1,21 @@
+[Unit]
+PartOf=graphical-session.target
+After=graphical-session.target
+Requisite=graphical-session.target
+
+[Service]
+# Laptop idle policy — locks EARLY (mobile; in case I walk away or forget). Tune the seconds.
+#   120s  backlight to 0 (internal panel via brightnessctl). Restored on resume.
+#   300s  swaylock (password to return).
+#   600s  monitors off (DPMS). Internal eDP has no DP-link/waybar issue.
+# Enable exactly ONE swayidle-* unit per machine (this one on laptops).
+# See Workstation-Documentation/desktop/waybar-supervision.md.
+ExecStart=/usr/bin/swayidle -w \
+  timeout 120 '%h/.config/systemd/user/screen-blank.sh dim internal' resume '%h/.config/systemd/user/screen-blank.sh restore internal' \
+  timeout 300 'swaylock -f -c 000000' \
+  timeout 600 'niri msg action power-off-monitors' \
+  before-sleep 'swaylock -f -c 000000'
+Restart=on-failure
+
+[Install]
+WantedBy=graphical-session.target

@@ -1,0 +1,23 @@
+[Unit]
+PartOf=graphical-session.target
+After=graphical-session.target
+Requisite=graphical-session.target
+
+[Service]
+# Home desktop idle policy (blank -> lock -> off):
+#   600s  backlight to 0 via DDC — monitor stays ON, so the DisplayPort link stays up and
+#         waybar survives (no re-enumeration). Restored on resume.
+#  1800s  swaylock (password to return).
+#  3600s  monitors off (DPMS). DP-1 re-enumerates here; waybar-watchdog.service restores the bar.
+# DDC prereqs: ddcutil installed, i2c-dev module loaded, user in the i2c group.
+# Enable exactly ONE swayidle-* unit per machine (this one on trusted home desktops).
+# See Workstation-Documentation/desktop/waybar-supervision.md.
+ExecStart=/usr/bin/swayidle -w \
+  timeout 600 '%h/.config/systemd/user/screen-blank.sh dim ddc' resume '%h/.config/systemd/user/screen-blank.sh restore ddc' \
+  timeout 1800 'swaylock -f -c 000000' \
+  timeout 3600 'niri msg action power-off-monitors' \
+  before-sleep 'swaylock -f -c 000000'
+Restart=on-failure
+
+[Install]
+WantedBy=graphical-session.target
