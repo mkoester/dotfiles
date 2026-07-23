@@ -9,10 +9,16 @@
 cleanup = true              # run paru -Sc etc. after updating
 disable = ["git_repos"]     # gita-fetch.timer already fetches tracked repos;
                             # don't let topgrade auto-pull across worktrees
+sudo_loop = true            # keep sudo credentials warm for the whole run (no mid-run
+                            # password prompt). Tradeoff: a walk-away Ctrl-C could reuse
+                            # the cached sudo session — fine on a personal workstation.
 # assume_yes = true         # uncomment for unattended runs
 
 [linux]
 arch_package_manager = "paru"   # explicit; otherwise autodetected
+
+[firmware]
+upgrade = true              # actually apply fwupd firmware updates (default: only check)
 
 # ── the pnpm gap ────────────────────────────────────────────────────────────
 # The built-in `pnpm` step runs `pnpm update -g` (GLOBAL PACKAGES only) and does
