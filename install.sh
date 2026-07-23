@@ -226,6 +226,9 @@ if ask_yn DF_DESKTOP "Wayland desktop (bar, monitor profiles, notifications)?"; 
 	stow_pkg "$HOME/.config" kanshi
 	run mkdir -p "$HOME/.config/systemd/user"
 	stow_pkg "$HOME/.config" systemd-user
+	# custom xkb keymap (Caps-Lock -> German umlauts): generic + public, activated
+	# per-machine in niri's local.kdl (or setxkbmap). Just needs to be on disk.
+	stow_pkg "$HOME" xkb
 	# per-machine kanshi profiles from workstation-private, if present
 	if [ -d "$HOST_DIR/kanshi" ]; then
 		run_sh "ln -sf \"$HOST_DIR/kanshi/\"* \"$HOME/.config/kanshi/config.d/\""

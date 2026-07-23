@@ -1,0 +1,43 @@
+xkb_keymap {
+    xkb_keycodes  { include "evdev+aliases(qwerty)" };
+    xkb_types     { include "complete" };
+    xkb_compat    {
+        include "complete"
+        // Numlock beim Start aktivieren
+        indicator "Num Lock" {
+            whichModState= locked;
+            modifiers= NumLock;
+        };
+    };
+    xkb_geometry  { include "pc(pc105)" };
+
+    xkb_symbols   {
+        // GB-base variant: same umlaut remaps as keymap-us.xkb, but on a British base
+        // layout so the punctuation matches a GB physical keyboard's keycaps.
+        include "pc+gb+inet(evdev)"
+
+        // Caps Lock als ISO_Level3_Shift (statt Mode_switch)
+        replace key <CAPS> { [ ISO_Level3_Shift ] };
+
+        // Deutsche Umlaute auf der 3. Ebene mit FOUR_LEVEL type
+        replace key <AC01> {
+            type[Group1]="FOUR_LEVEL",
+            symbols[Group1]= [ a, A, adiaeresis, Adiaeresis ]
+        };
+        replace key <AD09> {
+            type[Group1]="FOUR_LEVEL",
+            symbols[Group1]= [ o, O, odiaeresis, Odiaeresis ]
+        };
+        replace key <AD07> {
+            type[Group1]="FOUR_LEVEL",
+            symbols[Group1]= [ u, U, udiaeresis, Udiaeresis ]
+        };
+        replace key <AC02> {
+            type[Group1]="FOUR_LEVEL",
+            symbols[Group1]= [ s, S, ssharp, ssharp ]
+        };
+
+        // Modifier-Mapping für Level3
+        modifier_map Mod5 { <CAPS> };
+    };
+};

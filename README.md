@@ -720,6 +720,36 @@ If the package ships no unit (`pacman -Ql kanshi | grep systemd`), fall back to
 **Do not also install `nwg-displays`.** It writes `~/.config/niri/monitor.kdl`, and the resulting
 Niri config reload discards every transient change kanshi applied.
 
+## keyboard layout — Caps-Lock → umlauts (xkb)
+
+The `config-stow/xkb/` package carries custom keymaps that repurpose **Caps-Lock as a Level-3
+modifier** for the German umlauts (Caps + `A`/`O`/`U`/`S` → ä/ö/ü/ß). Two base variants, both
+generic and free of hardware identifiers, so they're tracked for **all machines** and stowed on any
+`DF_DESKTOP` machine — the files just need to be on disk; a machine picks one (or none) in niri:
+
+```sh
+cd config-stow && stow -t $HOME xkb && cd ..
+# → ~/.config/xkb/{keymap-us.xkb, keymap-gb.xkb, symbols/custom}
+```
+
+- `keymap-us.xkb` — `us(altgr-intl)` base + the umlaut remaps.
+- `keymap-gb.xkb` — `gb` base + the same remaps.
+- `symbols/custom` — an alternative `Mode_switch` variant on the XKB search path
+  (`setxkbmap -I ~/.config/xkb custom`); kept for reference, not used by the niri path.
+
+**Which variant — or none — is a per-machine choice, made in that machine's private `local.kdl`**
+(alongside its real `output` blocks and Bluetooth binds), because it depends on the machine's
+*physical* keyboard:
+
+```kdl
+input { keyboard { xkb { file "~/.config/xkb/keymap-us.xkb" } } }   // US board → keymap-us
+```
+
+The remaps are position-based (`A`/`O`/`U`/`S`), so the umlauts work on any QWERTY board, but the
+**base** decides the punctuation: use `keymap-us.xkb` on a US keyboard, `keymap-gb.xkb` on a GB one
+(otherwise `@ " # ~ \ | £` won't match the keycaps). A machine with a **native German keyboard needs
+neither** — just omit the block. Both keymaps are validated with `xkbcomp` (compile clean).
+
 ## niri — Wayland compositor
 
 The `config-stow/niri/` package tracks a **public skeleton** Niri config plus the helper script.
