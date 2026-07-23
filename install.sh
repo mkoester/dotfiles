@@ -12,7 +12,8 @@
 #   ./install.sh --yes        # non-interactive: take defaults + any DF_*/host.env preseeds
 #
 # Preseeding (skip prompts): export DF_DESKTOP / DF_NIRI / DF_QUADLET / DF_ATUIN / DF_NODE /
-#   DF_CADDY / DF_GO / DF_WSL / DF_NALA / DF_GITA / DF_FRESH / DF_LESSPIPE = 1|0. Override with
+#   DF_CADDY / DF_GO / DF_WSL / DF_NALA / DF_GITA / DF_FRESH / DF_LESSPIPE / DF_TOPGRADE = 1|0.
+#   Override with
 #   DOTFILES_PM=pacman|apt|dnf|brew. A per-machine host.env in the workstation-private repo
 #   (see below) is sourced automatically and can set all of these.
 set -euo pipefail
@@ -286,6 +287,15 @@ if ask_yn DF_NODE "Node machine (fnm + pnpm)?"; then
 	esac
 	link_omz oh-my-zsh-custom fnm.zsh
 	link_omz oh-my-zsh-custom pnpm.zsh
+fi
+
+if ask_yn DF_TOPGRADE "topgrade (one-shot 'update everything' umbrella)?"; then
+	case "$PM" in
+		pacman) pm_install topgrade ;;
+		brew)   pm_install topgrade ;;
+		*)      info "install topgrade per upstream (cargo/prebuilt binary)." ;;
+	esac
+	stow_pkg "$HOME/.config" topgrade
 fi
 
 if ask_yn DF_CADDY "Caddy host (caddy* aliases)?";     then link_omz oh-my-zsh-custom caddy.zsh; fi

@@ -1,0 +1,23 @@
+# ~/.config/topgrade.toml — one-shot "update everything" umbrella.
+# Superset of the `update-os` paru alias: system packages + language toolchains
+# + globals paru never sees (pnpm globals, rustup, cargo…).
+#   topgrade              # all steps
+#   topgrade --dry-run    # print, don't run
+#   topgrade only pnpm    # a single step
+
+[misc]
+cleanup = true              # run paru -Sc etc. after updating
+disable = ["git_repos"]     # gita-fetch.timer already fetches tracked repos;
+                            # don't let topgrade auto-pull across worktrees
+# assume_yes = true         # uncomment for unattended runs
+
+[linux]
+arch_package_manager = "paru"   # explicit; otherwise autodetected
+
+# ── the pnpm gap ────────────────────────────────────────────────────────────
+# The built-in `pnpm` step runs `pnpm update -g` (GLOBAL PACKAGES only) and does
+# NOT bump the pnpm binary. On this box pnpm is the pacman package, so the
+# `system` step (paru) upgrades it — nothing else needed.
+# If you ever move pnpm to corepack management, uncomment to self-bump each run:
+# [commands]
+# "pnpm (corepack self-bump)" = "corepack install --global pnpm@latest"

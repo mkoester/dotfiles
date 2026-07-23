@@ -408,6 +408,28 @@ brew install fnm pnpm        # macOS
 On Debian/Fedora there is no distro package — install [fnm](https://github.com/Schniz/fnm#installation)
 and [pnpm](https://pnpm.io/installation) from upstream.
 
+## topgrade — update everything
+
+[topgrade](https://github.com/topgrade-rs/topgrade) is a one-shot "update everything" umbrella —
+a **superset** of the `update-os` / `s` paru aliases. Where `update-os` is a paru wrapper (system
+packages only, the fast daily pass), topgrade also sweeps the globals paru never sees: pnpm global
+packages, rustup, cargo, flatpak, and so on. Its `system` step just calls paru, so running one or
+the other never double-works; keep both.
+
+The `config-stow/topgrade/` package carries `topgrade.toml`, symlinked to `~/.config`:
+
+```sh
+paru -S topgrade    # in extra
+cd ${DOTFILES_REPO:-$HOME/src/dotfiles}/config-stow && stow -t $HOME/.config topgrade && cd ..
+```
+
+Then `topgrade` (all steps), `topgrade --dry-run` (preview), or `topgrade only pnpm` (one step).
+
+Note on pnpm: topgrade's built-in `pnpm` step runs `pnpm update -g` — **global packages only**. It
+does *not* bump the pnpm **binary** (the `corepack use pnpm@X` nag). On an Arch box pnpm is the
+pacman package, so the `system` step (paru) upgrades it and the nag clears itself. Only if pnpm is
+corepack-managed do you need the commented `[commands]` self-bump line in `topgrade.toml`.
+
 ## Caddy hosts
 
 `caddy.zsh` wraps `caddy fmt`/`validate` and `systemctl reload caddy`, so it needs Caddy present:
