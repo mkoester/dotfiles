@@ -22,11 +22,22 @@ Requisite=graphical-session.target
 # it can only be recovered if swayidle's `resume` still fires while an ext-session-lock is
 # active. Relying on that locked MK out twice on 2026-07-30. The lock tier therefore restores
 # the backlight FIRST, so locking always leaves a readable prompt.
+# THE LOCKER MUST NOT BE A CHILD OF THIS UNIT. Launched directly, hyprlock lands in this
+# service's cgroup, so `systemctl --user stop swayidle-…` KILLS IT WHILE IT HOLDS THE SESSION
+# LOCK. ext-session-lock-v1 then requires the compositor to stay locked with no client left to
+# authenticate against — a blank screen with a live cursor and no way in. That happened on
+# mkMac2014 2026-07-30, caused by the very command meant to be the escape hatch.
+# systemd-run puts it in its own transient unit instead, which also removes the need to
+# background it for before-sleep: systemd-run RETURNS once the unit is started, so swayidle's
+# sleep inhibitor is released without waiting for the unlock. (The user manager already
+# exports WAYLAND_DISPLAY/NIRI_SOCKET/XDG_RUNTIME_DIR, so no --setenv is needed.)
+# Recovery if it ever happens again: run that same systemd-run line by hand — niri logs
+# "locking session (replacing existing dead lock)" and accepts the new client.
 ExecStart=/usr/bin/swayidle -w \
   timeout 600 '%h/.config/systemd/user/screen-blank.sh dim ddc' resume '%h/.config/systemd/user/screen-blank.sh restore ddc' \
-  timeout 1800 '%h/.config/systemd/user/screen-blank.sh restore ddc; pidof hyprlock >/dev/null || hyprlock' \
+  timeout 1800 '%h/.config/systemd/user/screen-blank.sh restore ddc; pidof hyprlock >/dev/null || systemd-run --user --collect --unit=hyprlock-idle /usr/bin/hyprlock' \
   timeout 3600 'niri msg action power-off-monitors' resume 'niri msg action power-on-monitors' \
-  before-sleep 'pidof hyprlock >/dev/null || hyprlock --immediate-render & sleep 1'
+  before-sleep 'pidof hyprlock >/dev/null || systemd-run --user --collect --unit=hyprlock-idle /usr/bin/hyprlock --immediate-render; sleep 1'
 Restart=on-failure
 
 [Install]
