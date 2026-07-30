@@ -822,6 +822,20 @@ swipe". Password auth still works normally via the `/etc/pam.d/hyprlock` the pac
 **It is not Hyprland-only.** It locks through `ext-session-lock-v1`, which niri implements, and
 carries no hyprland-specific protocol; the `hypr*` dependencies are plain libraries.
 
+Verified end-to-end on `mkMac2014` (2026-07-30): hyprlock logs `Running on niri`, binds
+`ext_session_lock_manager_v1`, and reaches `fprint: claimed device` / `started verifying` **before
+any keypress** — a failed swipe auto-retries (`retry_delay`) with no input. Two log lines that
+look alarming and are not:
+
+- **`ERR ]: auth: pam_authenticate failed for hyprlock` after a *successful* fingerprint unlock.**
+  hyprlock runs the password PAM conversation and the fprintd verification in parallel; when the
+  finger wins, the pending PAM attempt is torn down and reports failure. It appears *after*
+  `Unlocking session`. Harmless.
+- **`Gathered all screencopy frames` even with a solid `color` set.** `background { path }`
+  **defaults to `screenshot`**, so a colour alone is ignored — it must be set explicitly empty.
+  The tracked config does that; flip it to `path = screenshot` + `blur_passes` for the upstream
+  look.
+
 Three things to know before relying on it:
 
 - **A missing `~/.config/hypr/hyprlock.conf` makes hyprlock EXIT instead of lock.** For the
