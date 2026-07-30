@@ -181,9 +181,13 @@ binds {
 
 // ────────────── Startup Applications ──────────────
 // https://github.com/YaLTeR/niri/wiki/Configuration:-Miscellaneous#spawn-sh-at-startup
-    spawn-sh-at-startup "/usr/lib/polkit-kde-authentication-agent-1 &" // Polkit
-    spawn-sh-at-startup "swww-daemon" // Wallpaper daemon
-    spawn-sh-at-startup "swww img /usr/share/wallpapers/cachyos-wallpapers/Skyscraper.png" // Set wallpaper
+    // Each of these is GUARDED: not every machine installs the same helper set (the CachyOS
+    // Niri edition ships the Noctalia/quickshell stack instead of swww + polkit-kde), and an
+    // unguarded spawn of a missing binary just logs an error on every login. A machine that
+    // wants something else spawns it from local.kdl — spawn-*-at-startup entries accumulate.
+    spawn-sh-at-startup "[ -x /usr/lib/polkit-kde-authentication-agent-1 ] && /usr/lib/polkit-kde-authentication-agent-1 &" // Polkit
+    spawn-sh-at-startup "command -v swww-daemon >/dev/null && swww-daemon" // Wallpaper daemon
+    spawn-sh-at-startup "command -v swww >/dev/null && swww img /usr/share/wallpapers/cachyos-wallpapers/Skyscraper.png" // Set wallpaper
     // NOTE: waybar is intentionally NOT spawned here — it runs under the supervised systemd
     // user unit (config-stow/systemd-user + waybar.service.d override), so a crash restarts.
     // Spawning it here as well would give you two bars. See dotfiles README § waybar.

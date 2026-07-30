@@ -12,7 +12,7 @@
 #   ./install.sh --yes        # non-interactive: take defaults + any DF_*/host.env preseeds
 #
 # Preseeding (skip prompts): export DF_DESKTOP / DF_NIRI / DF_QUADLET / DF_ATUIN / DF_NODE /
-#   DF_CADDY / DF_GO / DF_WSL / DF_NALA / DF_GITA / DF_FRESH / DF_LESSPIPE / DF_TOPGRADE = 1|0.
+#   DF_CADDY / DF_GO / DF_WSL / DF_GITA / DF_FRESH / DF_LESSPIPE / DF_TOPGRADE = 1|0.
 #   Override with
 #   DOTFILES_PM=pacman|apt|dnf|brew. A per-machine host.env in the workstation-private repo
 #   (see below) is sourced automatically and can set all of these.
@@ -96,7 +96,9 @@ step "Package manager: $PM"
 pm_install() {
 	case "$PM" in
 		pacman) run paru -S --needed "$@" ;;
-		apt)    run sudo apt install -y "$@" ;;
+		# nala is the fleet default on apt hosts (it is installed in step 1 below); bare apt is
+		# only the fallback for a host where nala isn't available yet or isn't packaged.
+		apt)    if have nala; then run sudo nala install -y "$@"; else run sudo apt install -y "$@"; fi ;;
 		dnf)    run sudo dnf install -y "$@" ;;
 		brew)   run brew install "$@" ;;
 	esac
@@ -141,8 +143,15 @@ install_nerd_font() {
 # ══════════════════════════════════════════════════════════════════════════
 step "1/8  Install stow"
 case "$PM" in
-	pacman) run sudo pacman -S --needed stow ;;   # paru not built yet; only direct pacman use besides paru itself
-	apt)    run sudo apt install -y stow ;;
+	# paru is the fleet rule for ALL installs; direct pacman is only for the case where paru
+	# genuinely does not exist yet. Step 2 hard-exits without paru anyway, so on any machine
+	# that gets past this script paru is already present and the fallback never fires.
+	pacman) if have paru; then run paru -S --needed stow; else run sudo pacman -S --needed stow; fi ;;
+	# Mirror image on apt: bootstrap nala with bare apt (the one apt call), then use nala for
+	# everything after — pm_install picks it up automatically once it is on PATH. `|| true` so a
+	# distro that doesn't package nala still installs stow and falls back to apt.
+	apt)    run sudo apt install -y nala || true
+	        if have nala; then run sudo nala install -y stow; else run sudo apt install -y stow; fi ;;
 	dnf)    run sudo dnf install -y stow ;;
 	brew)   run brew install stow ;;
 esac
@@ -305,8 +314,9 @@ if ask_yn DF_CADDY "Caddy host (caddy* aliases)?";     then link_omz oh-my-zsh-c
 if ask_yn DF_GO    "Go machine (omz golang plugin)?";  then link_omz oh-my-zsh-plugins-optional golang.zsh; fi
 if ask_yn DF_WSL   "WSL (route ssh through Windows)?"; then link_omz oh-my-zsh-config ssh-wsl.zsh; fi
 
-if [ "$PM" = "apt" ] && ask_yn DF_NALA "Use nala instead of apt?"; then
-	pm_install nala
+# nala is the default on apt hosts (installed in step 1), so this is no longer a question —
+# it just links the matching aliases + completion. Skipped if nala isn't packaged for the distro.
+if [ "$PM" = "apt" ] && have nala; then
 	run ln -sf "$DOTFILES_REPO/.zshrc-update-os-nala.zsh" "$HOME/.zshrc-update-os.zsh"
 	link_omz oh-my-zsh-custom nala.zsh
 fi

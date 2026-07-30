@@ -66,14 +66,24 @@ cd ${DOTFILES_REPO:-$HOME/src/dotfiles}
 ## Install `stow`
 
 ### Arch
-`paru` isn't built yet at this point, so `pacman` is used directly here. It's only used directly
-twice: here, and to install paru itself — every other Arch step uses `paru`.
+Use `paru`, like every other Arch step:
 ```sh
-sudo pacman -S --needed stow
+paru -S --needed stow
+```
+**Direct `pacman` is only for the one machine state where `paru` does not exist yet** — a fresh
+box where it hasn't been installed. `install.sh` handles this automatically (it falls back only
+if `have paru` fails), and in practice the fallback never fires: the very next step exits unless
+paru is present, and CachyOS ships it. If you are on such a box, bootstrap it first:
+```sh
+sudo pacman -S --needed paru   # the ONLY thing pacman ever installs
+paru -S --needed stow
 ```
 ### Debian
+Bootstrap `nala` first (see [below](#nala-debianubuntu--the-default-not-optional)) — every
+later Debian step goes through it, exactly as Arch's go through `paru`:
 ```sh
-sudo apt install -y stow
+sudo apt install -y nala   # the ONLY bare-apt call
+sudo nala install -y stow
 ```
 ### Fedora
 ```sh
@@ -129,11 +139,11 @@ paru -S --needed zsh zoxide tmux git git-delta curl wget eza sqlite fzf
 `gitk` ships inside the `git` package here, so it needs no separate entry.
 ### Debian
 ```sh
-sudo apt install -y zsh zoxide tmux git git-delta gitk curl wget eza fzf
+sudo nala install -y zsh zoxide tmux git git-delta gitk curl wget eza fzf
 ```
 `git-delta` is in apt since Debian 13 "trixie" (0.18.x). `eza` needs Debian 13+ / Ubuntu 24.04+;
 `zoxide` needs Debian 12+ / Ubuntu 22.04+ — on older releases install these from the upstream
-releases (delta ships a `.deb`) instead of `apt`.
+releases (delta ships a `.deb`) instead of the distro package.
 ### Fedora
 ```sh
 sudo dnf install -y zsh zoxide tmux git git-delta gitk curl wget eza sqlite fzf
@@ -163,14 +173,18 @@ cd $HOME/src/paru && makepkg -si
 **Never call paru with `sudo`** — it escalates on its own and refuses AUR installs when run as
 root (`can't install AUR package as root`).
 
-### nala (Debian only, optional)
+### nala (Debian/Ubuntu — the default, not optional)
+
+`nala` is the fleet's apt front-end on **all** apt-based hosts. `install.sh` bootstraps it in
+step 1 with the single bare-`apt` call, then routes every later install through it:
 
 ```sh
-sudo apt install -y nala && \
+sudo apt install -y nala   # the ONLY bare-apt call
 sudo nala install git-delta
 ```
 
-On Ubuntu 22.04 LTS you may have to [install nala manually](https://gitlab.com/volian/nala/-/wikis/Installation).
+Bare `apt` remains only as a fallback for a distro that doesn't package nala. On Ubuntu 22.04 LTS
+you may have to [install nala manually](https://gitlab.com/volian/nala/-/wikis/Installation).
 
 ### Set zsh as the default shell
 
@@ -241,9 +255,9 @@ Symlink the variant for your package manager:
 ```sh
 # Arch
 ln -sf `pwd`/.zshrc-update-os-arch.zsh $HOME/.zshrc-update-os.zsh
-# Debian
+# Debian, fallback only (no nala packaged)
 ln -sf `pwd`/.zshrc-update-os-apt.zsh $HOME/.zshrc-update-os.zsh
-# Debian + nala (also links the nala completion helper)
+# Debian + nala — the default (also links the nala completion helper)
 ln -sf `pwd`/.zshrc-update-os-nala.zsh $HOME/.zshrc-update-os.zsh && \
   mkdir -p $HOME/.oh-my-zsh-custom && ln -sf `pwd`/oh-my-zsh-custom/nala.zsh $HOME/.oh-my-zsh-custom/
 # Fedora
@@ -298,7 +312,7 @@ needs `notify-send`, which most desktop installs already have:
 
 ```sh
 paru -S --needed libnotify      # Arch
-sudo apt install -y libnotify-bin  # Debian (nala works too)
+sudo nala install -y libnotify-bin # Debian
 sudo dnf install -y libnotify      # Fedora
 ```
 
@@ -436,7 +450,7 @@ corepack-managed do you need the commented `[commands]` self-bump line in `topgr
 
 ```sh
 paru -S --needed caddy       # Arch
-sudo apt install -y caddy    # Debian (see caddyserver.com for the apt repo)
+sudo nala install -y caddy   # Debian (see caddyserver.com for the apt repo)
 sudo dnf install -y caddy    # Fedora
 ```
 
@@ -462,7 +476,7 @@ Optional tools lesspipe shells out to:
 
 ```sh
 paru -S --needed 7zip unrar cabextract bat          # Arch (p7zip is named 7zip here)
-sudo apt install -y p7zip-full unrar-free cabextract bat  # Debian
+sudo nala install -y p7zip-full unrar-free cabextract bat # Debian
 sudo dnf install p7zip p7zip-plugins unrar cabextract bat # Fedora (unrar needs RPM Fusion non-free)
 brew install p7zip unrar cabextract bat             # macOS
 ```
@@ -516,7 +530,7 @@ Install via pipx (Arch names it `python-pipx`, everyone else `pipx`):
 ```sh
 paru -S --needed python-pipx     # Arch
 sudo dnf install -y pipx         # Fedora
-sudo apt install -y pipx         # Debian
+sudo nala install -y pipx        # Debian
 brew install pipx                # macOS
 ```
 
@@ -621,7 +635,7 @@ Install atuin:
 ```sh
 paru -S --needed atuin       # Arch
 brew install atuin           # macOS
-sudo apt install -y atuin    # Debian 13+ (trixie) — packaged, on the system PATH
+sudo nala install -y atuin   # Debian 13+ (trixie) — packaged, on the system PATH
 curl --proto '=https' --tlsv1.2 -LsSf https://setup.atuin.sh | sh -s -- --no-modify-path  # Fedora / older / anywhere
 ```
 
