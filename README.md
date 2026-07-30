@@ -832,10 +832,10 @@ look alarming and are not:
   finger wins, the pending PAM attempt is torn down and reports failure. It appears *after*
   `Unlocking session`. Harmless.
 - **`Gathered all screencopy frames` appears even with a solid `color` set.** hyprlock binds
-  `zwlr_screencopy` and gathers frames at startup regardless, so this line does *not* prove the
-  background is a screenshot. It was briefly read that way, and the "fix" — adding `path =`
-  (empty) to force a colour — **made hyprlock reject the config and stop locking entirely**.
-  Reverted; don't re-add it. Judge the background by looking at the lock screen.
+  `zwlr_screencopy` and gathers frames at startup regardless, so the line does *not* mean the
+  background is a screenshot — with `color` and no `path`, the lock screen is ✅ black. It was
+  briefly misread as proof of the opposite, and the "fix" — adding `path =` (empty) — **made
+  hyprlock reject the config and stop locking entirely**. Don't re-add it.
 
 Three things to know before relying on it:
 
