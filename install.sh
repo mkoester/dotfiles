@@ -159,9 +159,17 @@ esac
 # ══════════════════════════════════════════════════════════════════════════
 step "2/8  Base tools"
 if [ "$PM" = "pacman" ] && ! have paru; then
-	warn "paru not found — install it first (see README § arch/paru), then re-run."
-	warn "  sudo pacman -S --needed paru   # CachyOS ships it; elsewhere build from the AUR"
-	exit 1
+	# Bootstrap paru when a configured repo carries it (CachyOS does; plain Arch does not),
+	# rather than hardcoding a distro ID — derivatives that package it are covered too.
+	# Second and last direct pacman use, same rationale as stow in step 1: paru cannot
+	# install itself, and `sudo paru` is refused by paru anyway.
+	if pacman -Si paru >/dev/null 2>&1; then
+		run sudo pacman -S --needed paru
+	else
+		warn "paru not found and no configured repo provides it (plain Arch?)."
+		warn "  build it from the AUR first (see README § arch/paru), then re-run."
+		exit 1
+	fi
 fi
 case "$PM" in
 	pacman) pm_install zsh zoxide tmux git git-delta curl wget eza sqlite fzf ;;
