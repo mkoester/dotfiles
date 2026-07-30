@@ -141,11 +141,27 @@ install_nerd_font() {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
+# paru bootstrap runs BEFORE step 1 so that stow is installed *with paru*, not with pacman.
+# The fleet rule is that pacman installs nothing but paru itself (OKF practices/development-
+# environment.md); bootstrapping after step 1 would quietly make stow a second pacman install.
+# Gate on repo availability (`pacman -Si paru`) rather than a distro ID — CachyOS carries paru,
+# plain Arch does not, and detect_pm deliberately flattens derivatives into `pacman`.
+if [ "$PM" = "pacman" ] && ! have paru; then
+	if pacman -Si paru >/dev/null 2>&1; then
+		run sudo pacman -S --needed paru
+	else
+		warn "paru not found and no configured repo provides it (plain Arch?)."
+		warn "  build it from the AUR first (see README § arch/paru), then re-run."
+		exit 1
+	fi
+fi
+
+# ══════════════════════════════════════════════════════════════════════════
 step "1/8  Install stow"
 case "$PM" in
-	# paru is the fleet rule for ALL installs; direct pacman is only for the case where paru
-	# genuinely does not exist yet. Step 2 hard-exits without paru anyway, so on any machine
-	# that gets past this script paru is already present and the fallback never fires.
+	# paru is the fleet rule for ALL installs. The bootstrap above has already installed or
+	# demanded paru, so `have paru` is true here on every machine that gets this far — the
+	# pacman fallback is a belt-and-braces branch that should never fire.
 	pacman) if have paru; then run paru -S --needed stow; else run sudo pacman -S --needed stow; fi ;;
 	# Mirror image on apt: bootstrap nala with bare apt (the one apt call), then use nala for
 	# everything after — pm_install picks it up automatically once it is on PATH. `|| true` so a
@@ -158,19 +174,6 @@ esac
 
 # ══════════════════════════════════════════════════════════════════════════
 step "2/8  Base tools"
-if [ "$PM" = "pacman" ] && ! have paru; then
-	# Bootstrap paru when a configured repo carries it (CachyOS does; plain Arch does not),
-	# rather than hardcoding a distro ID — derivatives that package it are covered too.
-	# Second and last direct pacman use, same rationale as stow in step 1: paru cannot
-	# install itself, and `sudo paru` is refused by paru anyway.
-	if pacman -Si paru >/dev/null 2>&1; then
-		run sudo pacman -S --needed paru
-	else
-		warn "paru not found and no configured repo provides it (plain Arch?)."
-		warn "  build it from the AUR first (see README § arch/paru), then re-run."
-		exit 1
-	fi
-fi
 case "$PM" in
 	pacman) pm_install zsh zoxide tmux git git-delta curl wget eza sqlite fzf ;;
 	apt)    pm_install zsh zoxide tmux git git-delta gitk curl wget eza fzf ;;
