@@ -7,7 +7,7 @@ Requisite=graphical-session.target
 # Home desktop idle policy (blank -> lock -> off):
 #   600s  backlight to 0 via DDC — monitor stays ON, so the DisplayPort link stays up and
 #         waybar survives (no re-enumeration). Restored on resume.
-#  1800s  hyprlock (fingerprint, or password, to return).
+#  1800s  RELIGHT the panel, then hyprlock (fingerprint, or password, to return).
 #  3600s  monitors off (DPMS). DP-1 re-enumerates here; waybar-watchdog.service restores the bar.
 # DDC prereqs: ddcutil installed, i2c-dev module loaded, user in the i2c group.
 # Enable exactly ONE swayidle-* unit per machine (this one on trusted home desktops).
@@ -17,10 +17,15 @@ Requisite=graphical-session.target
 # would block suspend until you unlocked. It is therefore backgrounded, with a 1s guard so
 # the lock is actually up before the inhibitor is released. The `pidof` test keeps a second
 # instance from stacking when a timeout lock already fired.
+# A LOCKED SCREEN MUST BE VISIBLE. The dim tier above sets the backlight to 0, so without
+# this the lock prompt appears on an unlit panel — indistinguishable from a dead machine, and
+# it can only be recovered if swayidle's `resume` still fires while an ext-session-lock is
+# active. Relying on that locked MK out twice on 2026-07-30. The lock tier therefore restores
+# the backlight FIRST, so locking always leaves a readable prompt.
 ExecStart=/usr/bin/swayidle -w \
   timeout 600 '%h/.config/systemd/user/screen-blank.sh dim ddc' resume '%h/.config/systemd/user/screen-blank.sh restore ddc' \
-  timeout 1800 'pidof hyprlock >/dev/null || hyprlock' \
-  timeout 3600 'niri msg action power-off-monitors' \
+  timeout 1800 '%h/.config/systemd/user/screen-blank.sh restore ddc; pidof hyprlock >/dev/null || hyprlock' \
+  timeout 3600 'niri msg action power-off-monitors' resume 'niri msg action power-on-monitors' \
   before-sleep 'pidof hyprlock >/dev/null || hyprlock --immediate-render & sleep 1'
 Restart=on-failure
 

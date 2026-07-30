@@ -6,7 +6,7 @@ Requisite=graphical-session.target
 [Service]
 # Laptop idle policy — locks EARLY (mobile; in case I walk away or forget). Tune the seconds.
 #   120s  backlight to 0 (internal panel via brightnessctl). Restored on resume.
-#   300s  hyprlock (fingerprint, or password, to return).
+#   300s  RELIGHT the panel, then hyprlock (fingerprint, or password, to return).
 #   600s  monitors off (DPMS). Internal eDP has no DP-link/waybar issue.
 # Enable exactly ONE swayidle-* unit per machine (this one on laptops).
 # See Workstation-Documentation/desktop/waybar-supervision.md.
@@ -15,10 +15,15 @@ Requisite=graphical-session.target
 # would block suspend until you unlocked. It is therefore backgrounded, with a 1s guard so
 # the lock is actually up before the inhibitor is released. The `pidof` test keeps a second
 # instance from stacking when a timeout lock already fired.
+# A LOCKED SCREEN MUST BE VISIBLE. The dim tier above sets the backlight to 0, so without
+# this the lock prompt appears on an unlit panel — indistinguishable from a dead machine, and
+# it can only be recovered if swayidle's `resume` still fires while an ext-session-lock is
+# active. Relying on that locked MK out twice on 2026-07-30. The lock tier therefore restores
+# the backlight FIRST, so locking always leaves a readable prompt.
 ExecStart=/usr/bin/swayidle -w \
   timeout 120 '%h/.config/systemd/user/screen-blank.sh dim internal' resume '%h/.config/systemd/user/screen-blank.sh restore internal' \
-  timeout 300 'pidof hyprlock >/dev/null || hyprlock' \
-  timeout 600 'niri msg action power-off-monitors' \
+  timeout 300 '%h/.config/systemd/user/screen-blank.sh restore internal; pidof hyprlock >/dev/null || hyprlock' \
+  timeout 600 'niri msg action power-off-monitors' resume 'niri msg action power-on-monitors' \
   before-sleep 'pidof hyprlock >/dev/null || hyprlock --immediate-render & sleep 1'
 Restart=on-failure
 

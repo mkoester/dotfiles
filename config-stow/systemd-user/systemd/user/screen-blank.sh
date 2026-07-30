@@ -16,8 +16,15 @@ state="${XDG_RUNTIME_DIR:-/tmp}/screen-blank.${backend}"
 case "$backend" in
   internal)
     case "$action" in
-      dim)     brightnessctl -m get >"$state"; brightnessctl set 0 ;;
-      restore) brightnessctl set "$(cat "$state" 2>/dev/null || echo 50%)" ;;
+      # NEVER save a 0 — if dim runs twice without an intervening restore (swayidle restarted
+      # while already dimmed, or two idle tiers firing), saving the current value would persist
+      # 0 and `restore` would then "restore" the screen to black, permanently.
+      dim)     cur=$(brightnessctl -m get 2>/dev/null || echo 0)
+               [ "${cur:-0}" -gt 0 ] && printf '%s\n' "$cur" >"$state"
+               brightnessctl set 0 ;;
+      restore) v=$(cat "$state" 2>/dev/null || echo 50%)
+               [ "$v" = "0" ] && v=50%
+               brightnessctl set "$v" ;;
     esac
     ;;
   ddc)
