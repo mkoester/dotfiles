@@ -831,10 +831,11 @@ look alarming and are not:
   hyprlock runs the password PAM conversation and the fprintd verification in parallel; when the
   finger wins, the pending PAM attempt is torn down and reports failure. It appears *after*
   `Unlocking session`. Harmless.
-- **`Gathered all screencopy frames` even with a solid `color` set.** `background { path }`
-  **defaults to `screenshot`**, so a colour alone is ignored — it must be set explicitly empty.
-  The tracked config does that; flip it to `path = screenshot` + `blur_passes` for the upstream
-  look.
+- **`Gathered all screencopy frames` appears even with a solid `color` set.** hyprlock binds
+  `zwlr_screencopy` and gathers frames at startup regardless, so this line does *not* prove the
+  background is a screenshot. It was briefly read that way, and the "fix" — adding `path =`
+  (empty) to force a colour — **made hyprlock reject the config and stop locking entirely**.
+  Reverted; don't re-add it. Judge the background by looking at the lock screen.
 
 Three things to know before relying on it:
 
