@@ -804,6 +804,46 @@ sudo usermod -aG input "$USER"    # then re-login
 systemctl --user enable --now ydotoold.service
 ```
 
+## hyprlock — screen lock (with fingerprint), driven by swayidle
+
+```sh
+paru -S --needed hyprlock swayidle    # Arch
+cd config-stow && stow -t $HOME hyprlock && cd ..
+```
+
+**Why hyprlock and not swaylock** (switched 2026-07-30): hyprlock authenticates the fingerprint
+reader **itself**, over fprintd's D-Bus API (`net.reactivated.Fprint`), rather than through PAM.
+It claims the reader as soon as the lock appears, so unlocking is *just touch the sensor*.
+swaylock can't do that — its PAM conversation only begins on the first keystroke
+([swaylock#61](https://github.com/swaywm/swaylock/issues/61); an `--early-pam` flag was proposed
+and never implemented), so the flow there was the awkward "press Enter on an empty field, **then**
+swipe". Password auth still works normally via the `/etc/pam.d/hyprlock` the package ships.
+
+**It is not Hyprland-only.** It locks through `ext-session-lock-v1`, which niri implements, and
+carries no hyprland-specific protocol; the `hypr*` dependencies are plain libraries.
+
+Three things to know before relying on it:
+
+- **A missing `~/.config/hypr/hyprlock.conf` makes hyprlock EXIT instead of lock.** For the
+  component guarding an unlocked session that is a security failure, so the config is stowed as
+  its own package and `install.sh` only stows it where the binary exists. Re-test by hand
+  (`hyprlock`, with an SSH session or TTY as the escape hatch) after editing it.
+- **Don't switch to hypridle.** niri doesn't implement `hyprland-lock-notify-v1`
+  ([niri#3459](https://github.com/niri-wm/niri/discussions/3459)) — the fleet stays on swayidle.
+- **Debian keeps swaylock.** hyprlock isn't packaged for Debian/arm64, which is why the Pi 500
+  is the one machine still on swaylock (and still needs the empty-Enter workaround).
+
+Idle policy lives in the `systemd-user` package — **enable exactly one** per machine:
+
+```sh
+systemctl --user enable --now swayidle-laptop.service    # laptops: dim 120s, lock 300s, DPMS 600s
+systemctl --user enable --now swayidle-desktop.service   # desktops: dim 600s, lock 1800s, DPMS 3600s
+```
+
+Note the `before-sleep` line backgrounds hyprlock with a 1 s guard. hyprlock has no `-f` flag, and
+swayidle waits for the before-sleep command to *return* while holding the sleep inhibitor — a bare
+`hyprlock` would block suspend until you unlocked.
+
 ## waybar — supervised restart
 
 Waybar crashes around output add/remove (hotplug, docking, `kanshictl switch`, monitor blanking) —

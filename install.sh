@@ -220,9 +220,12 @@ step "6/8  Host-class options"
 # Wayland desktop, compositor-agnostic (works under Niri, labwc, …): notifications, kanshi,
 # waybar unit, ydotool. Niri itself is a SEPARATE question below — not every desktop runs it.
 if ask_yn DF_DESKTOP "Wayland desktop (bar, monitor profiles, notifications)?"; then
-	step "  desktop: notifications, kanshi, waybar unit, ydotool"
+	step "  desktop: notifications, kanshi, waybar unit, idle+lock, ydotool"
 	case "$PM" in
-		pacman) pm_install libnotify kanshi waybar ;;
+		# hyprlock is the fleet locker (it drives fprintd itself, so the fingerprint works
+		# without a keypress). Arch-family only: it is NOT packaged on Debian/arm64, which is
+		# why the Pi 500 stays on swaylock — don't add it to the apt branch.
+		pacman) pm_install libnotify kanshi waybar swayidle hyprlock ;;
 		apt)    pm_install libnotify-bin ;;
 		dnf)    pm_install libnotify ;;
 		brew)   : ;;
@@ -238,12 +241,19 @@ if ask_yn DF_DESKTOP "Wayland desktop (bar, monitor profiles, notifications)?"; 
 	# custom xkb keymap (Caps-Lock -> German umlauts): generic + public, activated
 	# per-machine in niri's local.kdl (or setxkbmap). Just needs to be on disk.
 	stow_pkg "$HOME" xkb
+	# hyprlock config. Stowed only where hyprlock exists — a missing config makes hyprlock
+	# EXIT rather than lock, so the file and the binary must arrive together.
+	if have hyprlock; then
+		run mkdir -p "$HOME/.config/hypr"
+		stow_pkg "$HOME" hyprlock
+	fi
 	# per-machine kanshi profiles from workstation-private, if present
 	if [ -d "$HOST_DIR/kanshi" ]; then
 		run_sh "ln -sf \"$HOST_DIR/kanshi/\"* \"$HOME/.config/kanshi/config.d/\""
 	fi
 	info "enable the user units yourself once logged into the graphical session:"
 	info "  systemctl --user enable --now kanshi.service waybar.service ydotoold.service"
+	info "  plus EXACTLY ONE idle unit: swayidle-laptop.service or swayidle-desktop.service"
 	info "ydotool needs a /dev/uinput udev rule (root) — see README § niri/ydotool."
 fi
 

@@ -46,7 +46,9 @@ binds {
     MOD+RETURN                          hotkey-overlay-title="Open Terminal: alacritty" { spawn-sh "alacritty"; }
     MOD+SPACE                           hotkey-overlay-title="Open App Launcher: wofi" { spawn-sh "wofi"; }
     MOD+B                               hotkey-overlay-title="Open Browser: firefox" { spawn-sh "firefox"; }
-    MOD+ALT+L                           hotkey-overlay-title="Lock Screen: swaylock" { spawn-sh "swaylock"; }
+    // hyprlock, not swaylock: it authenticates the fingerprint reader itself over fprintd's
+    // D-Bus API, so it listens from the moment the lock appears. See config-stow/hyprlock/.
+    MOD+ALT+L                           hotkey-overlay-title="Lock Screen: hyprlock" { spawn-sh "pidof hyprlock >/dev/null || hyprlock"; }
     MOD+E                                hotkey-overlay-title="File Manager: Nautilus" { spawn-sh "nautilus"; }
 
     // ─── Audio Controls (PipeWire / WirePlumber) ───

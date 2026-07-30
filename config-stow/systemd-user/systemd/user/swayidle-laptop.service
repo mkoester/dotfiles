@@ -6,15 +6,20 @@ Requisite=graphical-session.target
 [Service]
 # Laptop idle policy — locks EARLY (mobile; in case I walk away or forget). Tune the seconds.
 #   120s  backlight to 0 (internal panel via brightnessctl). Restored on resume.
-#   300s  swaylock (password to return).
+#   300s  hyprlock (fingerprint, or password, to return).
 #   600s  monitors off (DPMS). Internal eDP has no DP-link/waybar issue.
 # Enable exactly ONE swayidle-* unit per machine (this one on laptops).
 # See Workstation-Documentation/desktop/waybar-supervision.md.
+# NOTE: hyprlock has no `-f` (fork) flag, unlike swaylock. swayidle waits for the
+# before-sleep command to RETURN while holding the sleep inhibitor, so a bare `hyprlock`
+# would block suspend until you unlocked. It is therefore backgrounded, with a 1s guard so
+# the lock is actually up before the inhibitor is released. The `pidof` test keeps a second
+# instance from stacking when a timeout lock already fired.
 ExecStart=/usr/bin/swayidle -w \
   timeout 120 '%h/.config/systemd/user/screen-blank.sh dim internal' resume '%h/.config/systemd/user/screen-blank.sh restore internal' \
-  timeout 300 'swaylock -f -c 000000' \
+  timeout 300 'pidof hyprlock >/dev/null || hyprlock' \
   timeout 600 'niri msg action power-off-monitors' \
-  before-sleep 'swaylock -f -c 000000'
+  before-sleep 'pidof hyprlock >/dev/null || hyprlock --immediate-render & sleep 1'
 Restart=on-failure
 
 [Install]
