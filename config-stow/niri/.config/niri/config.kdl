@@ -187,7 +187,23 @@ binds {
     // Niri edition ships the Noctalia/quickshell stack instead of swww + polkit-kde), and an
     // unguarded spawn of a missing binary just logs an error on every login. A machine that
     // wants something else spawns it from local.kdl — spawn-*-at-startup entries accumulate.
-    spawn-sh-at-startup "[ -x /usr/lib/polkit-kde-authentication-agent-1 ] && /usr/lib/polkit-kde-authentication-agent-1 &" // Polkit
+    //
+    // NO POLKIT AGENT IS SPAWNED HERE — it is a per-machine opt-in in local.kdl (2026-07-31).
+    // Why the guard-on-presence pattern used below does NOT work for polkit: an all-in-one
+    // shell (Noctalia, DMS) brings its own polkit agent, and only ONE agent may register per
+    // subject — the loser logs "An authentication agent already exists for the given subject"
+    // and stands down. Because spawn-*-at-startup entries only ever ACCUMULATE across the
+    // include, local.kdl cannot un-spawn what this file spawns, so a shell machine had no way
+    // to opt out. Uninstalling polkit-kde-agent isn't the escape either: on CachyOS it is a
+    // dependency of cachyos-niri-settings. Hence the inversion — machines running the plain
+    // waybar stack add this line to their local.kdl:
+    //
+    //   spawn-sh-at-startup "[ -x /usr/lib/polkit-kde-authentication-agent-1 ] && /usr/lib/polkit-kde-authentication-agent-1 &"
+    //
+    // Deliberately NOT auto-detected (e.g. "skip if dms is installed"): installed is not the
+    // same as in use, so reverting a machine to the waybar stack while the shell package stays
+    // installed would silently leave it with NO agent — a failure you only discover the next
+    // time something needs authentication.
     spawn-sh-at-startup "command -v swww-daemon >/dev/null && swww-daemon" // Wallpaper daemon
     spawn-sh-at-startup "command -v swww >/dev/null && swww img /usr/share/wallpapers/cachyos-wallpapers/Skyscraper.png" // Set wallpaper
     // NOTE: waybar is intentionally NOT spawned here — it runs under the supervised systemd
