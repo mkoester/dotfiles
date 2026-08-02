@@ -511,7 +511,8 @@ fi
 
 if ask_yn DF_TOPGRADE "topgrade (one-shot 'update everything' umbrella)?"; then
 	case "$PM" in
-		pacman) pm_install topgrade ;;
+		# -bin: same upstream version, no Rust toolchain to build it (AUR-only either way).
+		pacman) pm_install topgrade-bin ;;
 		brew)   pm_install topgrade ;;
 		*)      info "install topgrade per upstream (cargo/prebuilt binary)." ;;
 	esac
