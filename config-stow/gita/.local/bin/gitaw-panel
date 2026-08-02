@@ -26,7 +26,10 @@ group="${1:-}"
 # so tput/stty on stdout report the 80-column terminfo default. /dev/tty is the
 # real terminal and is re-read every frame, so the rules follow a live resize.
 width=0
-if size="$(stty size </dev/tty 2>/dev/null)"; then width="${size##* }"; fi
+# The redirect is inside a group so that bash's own "/dev/tty: No such device"
+# — emitted when there is no controlling terminal at all, e.g. piped — is
+# swallowed too; `stty ... 2>/dev/null` alone only silences stty.
+if size="$({ stty size </dev/tty; } 2>/dev/null)"; then width="${size##* }"; fi
 case "$width" in '' | *[!0-9]*) width=0 ;; esac
 [ "$width" -ge 40 ] || width=80
 
@@ -47,28 +50,117 @@ rule() {
 
 # ── claude usage ──────────────────────────────────────────────────────────────
 # Source is Claude Code's OWN cache in ~/.claude.json (cachedUsageUtilization) —
-# the same numbers /usage shows. Nothing is fetched here: no network, no
-# credentials, no cost. The catch is freshness — Claude Code refreshes that key
-# only occasionally (measured 7h stale with a live session running), so the age
-# is printed in the rule and a window whose reset time has passed is called out
-# instead of being shown as a real percentage.
+# the same numbers /usage shows — and refreshes them itself when they go stale.
+#
+# Two sources, newest wins:
+#   ~/.claude.json          cachedUsageUtilization, written by Claude Code
+#   $XDG_CACHE_HOME/gitaw/  usage.json, written by this script
+# Claude Code updates its copy ONLY when you run /usage — ordinary API traffic
+# does not (measured: 7h stale through a session making dozens of calls). So when
+# the newest copy is older than the TTL, this fetches GET /api/oauth/usage with
+# the OAuth token from ~/.claude/.credentials.json — the same endpoint /usage
+# calls, read out of the Claude Code binary. Response shape is identical, so the
+# renderer below cannot tell the two sources apart.
+#
+# It never writes anything Claude Code owns, and it cannot renew the token: that
+# is Claude Code's job, so after a long Claude-free stretch the token expires and
+# the fetch stops working. Every failure path — expired token, no network, no
+# cache dir, changed payload — falls back to whatever cached value exists, and
+# the rule keeps printing the true age. Worst case is the read-only behaviour
+# this had before.
 usage_block() {
 	command -v python3 >/dev/null 2>&1 || return 0
-	[ -r "$HOME/.claude.json" ] || return 0
 	python3 - "$width" <<-'PY'
-		import datetime as dt, json, os, sys
+		import datetime as dt, json, os, sys, time, urllib.request
 
 		width = int(sys.argv[1])
 		DIM, RESET = "\033[2m", "\033[0m"
 		GREEN, YELLOW, RED = "\033[32m", "\033[33m", "\033[31m"
 		BARW = 20
 
-		try:
-		    with open(os.path.expanduser("~/.claude.json")) as fh:
-		        cached = json.load(fh).get("cachedUsageUtilization") or {}
-		    util = cached["utilization"]
-		except Exception:
+		TTL = 300          # seconds; mirrors Claude Code's own 5-min write throttle
+		TIMEOUT = 5        # a panel frame must not hang on a slow network
+		URL = "https://api.anthropic.com/api/oauth/usage"
+		CACHE = os.path.join(
+		    os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"),
+		    "gitaw", "usage.json")
+
+
+		def read_json(path):
+		    try:
+		        with open(path) as fh:
+		            return json.load(fh)
+		    except Exception:
+		        return None
+
+
+		def claude_cache():
+		    d = (read_json(os.path.expanduser("~/.claude.json")) or {}).get(
+		        "cachedUsageUtilization") or {}
+		    if d.get("fetchedAtMs") and d.get("utilization"):
+		        return d
+		    return None
+
+
+		def fetch():
+		    """GET the live figures, or None. Also records the attempt: without a
+		    stamp for FAILED tries the panel would retry every single frame, since a
+		    failure leaves the cached value just as stale as it found it."""
+		    own = read_json(CACHE) or {}
+		    try:
+		        os.makedirs(os.path.dirname(CACHE), exist_ok=True)
+		    except OSError:
+		        return None      # nowhere to record attempts → never fetch at all
+		    creds = (read_json(os.path.expanduser("~/.claude/.credentials.json")) or {}
+		             ).get("claudeAiOauth") or {}
+		    token = creds.get("accessToken")
+		    # Skip a token we can already see is expired rather than spending a
+		    # round-trip to be told 401. Only Claude Code can renew it.
+		    if not token or creds.get("expiresAt", 0) / 1000 <= time.time():
+		        return None
+
+		    rec = dict(own)
+		    rec["lastTryMs"] = time.time() * 1000
+		    try:
+		        req = urllib.request.Request(URL, headers={
+		            "Authorization": f"Bearer {token}",
+		            "anthropic-beta": "oauth-2025-04-20",
+		        })
+		        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+		            util = json.load(resp)
+		        if not isinstance(util, dict) or "five_hour" not in util:
+		            raise ValueError("unexpected payload")
+		        rec["utilization"] = util
+		        rec["fetchedAtMs"] = time.time() * 1000
+		    except Exception:
+		        rec = {**own, "lastTryMs": rec["lastTryMs"]}
+		    try:
+		        tmp = CACHE + f".{os.getpid()}"
+		        with open(tmp, "w") as fh:
+		            json.dump(rec, fh)
+		        os.replace(tmp, CACHE)
+		    except OSError:
+		        pass
+		    return rec if rec.get("utilization") else None
+
+
+		def pick():
+		    best = max(
+		        [c for c in (claude_cache(), read_json(CACHE)) if c and c.get("fetchedAtMs")],
+		        key=lambda c: c["fetchedAtMs"], default=None)
+		    age = time.time() - best["fetchedAtMs"] / 1000 if best else float("inf")
+		    # Attempts are rate-limited by lastTryMs, not by the data's age: a run of
+		    # failures must not turn a 1-second refresh loop into a request flood.
+		    last_try = (read_json(CACHE) or {}).get("lastTryMs", 0) / 1000
+		    if age > TTL and time.time() - last_try > TTL:
+		        return fetch() or best
+		    return best
+
+
+		cached = pick()
+		if not cached:
 		    sys.exit(0)
+		util = cached["utilization"]
 
 		now = dt.datetime.now(dt.timezone.utc)
 

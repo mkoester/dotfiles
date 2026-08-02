@@ -618,15 +618,35 @@ reuse it instead of keeping its own copy (my fzf repo-picker puts it in the foot
 definition, two renderings, no drift. It lives in this repo precisely because this is the one
 cloned on every machine.
 
-**The Claude figures are read, never fetched.** Claude Code caches what its own `/usage` shows in
-`~/.claude.json` (`cachedUsageUtilization`), so the panel just parses that file: no network, no
-credentials, no cost, and nothing to rate-limit. The trade-off is freshness — Claude Code
-refreshes that key only occasionally (measured 6 h old with a session running), which is why the
-rule prints `as of HH:MM`. Once a window's reset time has passed, its percentage describes a
-window that no longer exists, so the row is dimmed and labelled `figure is stale` rather than
-showing a reassuring-looking number. Every part degrades on its own: without `python3`, without
-that cache key, or without `gita-legend`, the block is simply omitted and the repo list still
-renders.
+**Where the Claude figures come from.** Two caches, newest wins:
+
+| source | written by |
+|---|---|
+| `~/.claude.json` → `cachedUsageUtilization` | Claude Code, **only when you run `/usage`** |
+| `$XDG_CACHE_HOME/gitaw/usage.json` | this panel |
+
+Claude Code's copy is not kept current by ordinary use: a session making dozens of API calls left
+it **7 h stale**, and only `/usage` moved it. So when the newest copy is older than **5 min** (the
+same throttle Claude Code applies to its own writes), the panel fetches
+`GET https://api.anthropic.com/api/oauth/usage` — the endpoint `/usage` itself calls — using the
+OAuth token from `~/.claude/.credentials.json`. The response is shaped identically to the cached
+object, so the renderer cannot tell the two apart.
+
+It **never writes anything Claude Code owns**, and it **cannot renew the token** — that is Claude
+Code's job, so after a long stretch without running Claude the token expires and fetching stops.
+That is a fallback, not a failure: an expired token, a missing network, an unwritable cache dir or
+a changed payload all fall back to whatever cached value exists, with the rule still printing the
+true age. Worst case is exactly the read-only behaviour this had before. A failed attempt is
+stamped (`lastTryMs`) so a run of failures cannot turn a one-second refresh loop into a request
+flood; an expired token is detected locally and costs no round-trip at all.
+
+`as of HH:MM (Nm ago)` in the rule is therefore the honest answer either way — if it starts
+climbing past a few minutes, fetching is failing and the numbers are Claude Code's last `/usage`.
+Once a window's reset time has passed its percentage describes a window that no longer exists, so
+the row is dimmed and labelled `figure is stale` rather than showing a reassuring-looking number.
+
+Every part degrades on its own: without `python3`, without any cached figures, or without
+`gita-legend`, that block is simply omitted and the repo list still renders.
 
 ### Rebuilding the groups
 
