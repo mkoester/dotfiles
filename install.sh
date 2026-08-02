@@ -273,6 +273,10 @@ if [ -f "$HOME/.p10k.zsh" ] && [ ! -L "$HOME/.p10k.zsh" ]; then run mv "$HOME/.p
 run ln -sf "$DOTFILES_REPO/oh-my-zsh-config/you-should-use.zsh" "$HOME/.oh-my-zsh-config/"
 run ln -sf "$DOTFILES_REPO/.zshrc" "$HOME/"
 run ln -sf "$DOTFILES_REPO/.p10k.zsh" "$HOME/"
+# host-env.zsh loads workstation-private/<hostname>/{host.env,secrets.env} into every interactive
+# shell — the runtime half of the file sourced above, which until now only reached the installer.
+# Linked unconditionally and on every host: both files are optional and it no-ops without them.
+link_omz oh-my-zsh-custom host-env.zsh
 
 # ══════════════════════════════════════════════════════════════════════════
 step "5/8  update-os alias for this distro"
