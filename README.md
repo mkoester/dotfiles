@@ -36,6 +36,15 @@ are updated in place — comments and any other keys in `host.env` survive. With
 `workstation-private` clone next to this repo there is nowhere to save; the run says so and
 otherwise works normally.
 
+**Answering "no" also undoes that option.** If an earlier run linked an option's zsh snippet
+(`quadlet.zsh`, `atuin.zsh`, `fnm.zsh`/`pnpm.zsh`, `caddy.zsh`, `golang.zsh`, `ssh-wsl.zsh`,
+`gita.zsh`, `fresh.zsh`, `lesspipe.zsh`/`bat.zsh`, `auto-notify.zsh`), a later "no" removes the
+symlink again — so a host that stops being a Quadlet/Node/atuin machine really stops loading
+those aliases, instead of the question merely being skipped. Only a symlink pointing back into
+**this** clone is removed; a real file, or a link owned by another clone, is reported and left
+alone. Packages installed earlier are never uninstalled, and stowed config packages (niri,
+topgrade, kanshi, …) are not unstowed — use `stow -D` for those by hand.
+
 You can still preseed by hand: `DF_DESKTOP`/`DF_QUADLET`/`DF_NODE`/… = `1`/`0` in `host.env`
 (`./install.sh --help` lists them all). An **exported** `DF_*` beats the stored answer for that
 one run and is deliberately *not* saved — `DF_NIRI=0 ./install.sh` is a one-off override, not a

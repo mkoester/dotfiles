@@ -16,6 +16,8 @@
 #   workstation-private/<hostname>/host.env as DF_<NAME>=1|0, so the next run stops asking and
 #   just executes the matching steps. --reconfigure re-asks everything with the stored answer as
 #   the default. Values are updated in place; comments and other keys in host.env are preserved.
+#   Answering NO also UNLINKS that option's zsh snippet if an earlier run had linked it, so a host
+#   that stops being a quadlet/Node/atuin/... machine really stops loading those aliases.
 #   (Without a workstation-private clone there is nowhere to save — the run says so and still works.)
 #
 # Preseeding (skip prompts): export DF_DESKTOP / DF_NIRI / DF_QUADLET / DF_ATUIN / DF_NODE /
@@ -268,6 +270,20 @@ link_omz() {
 	run mkdir -p "$HOME/.$1"
 	run ln -sf "$DOTFILES_REPO/$1/$2" "$HOME/.$1/"
 }
+# unlink_omz <repo-subdir> <file.zsh> — the inverse of link_omz. Answering "no" to a host-class
+# question has to UNDO its shell integration, not merely skip it: a machine that used to be a
+# quadlet/Node/atuin host otherwise keeps sourcing those aliases forever, and re-running with
+# --reconfigure would look like it had no effect. Only a symlink pointing back into THIS repo is
+# removed — a real file, or a link some other clone owns, is reported and left alone.
+unlink_omz() {
+	local link="$HOME/.$1/$2" target
+	[ -L "$link" ] || { [ -e "$link" ] && warn "$link is a real file, not a link from this repo — leaving it."; return 0; }
+	target="$(readlink -f "$link" 2>/dev/null || true)"
+	case "$target" in
+		"$DOTFILES_REPO"/*) run rm -vf "$link" ;;
+		*) warn "$link points at ${target:-a missing target} (not this repo) — leaving it." ;;
+	esac
+}
 # install_nerd_font — MesloLGS NF, the font p10k's glyphs (and `eza --icons`) need. Packaged on
 # Arch/macOS; elsewhere download p10k's four styles into the SYSTEM font dir so every user on the
 # machine gets them. (The terminal emulator still has to be pointed at "MesloLGS NF" by hand — that
@@ -415,6 +431,9 @@ if ask_yn DF_DESKTOP "Wayland desktop (bar, monitor profiles, notifications)?"; 
 	info "  systemctl --user enable --now kanshi.service waybar.service ydotoold.service"
 	info "  plus EXACTLY ONE idle unit: swayidle-laptop.service or swayidle-desktop.service"
 	info "ydotool needs a /dev/uinput udev rule (root) — see README § niri/ydotool."
+else
+	unlink_omz oh-my-zsh-plugins-optional auto-notify.zsh
+	unlink_omz oh-my-zsh-custom auto-notify.zsh
 fi
 
 # Niri compositor specifically (skip on non-Niri desktops like the Pi 500 / labwc).
@@ -436,6 +455,8 @@ fi
 if ask_yn DF_QUADLET "Quadlet host (Podman services managed as dedicated users)?"; then
 	have podman || warn "podman not found — quadlet.zsh helpers need it on this host."
 	link_omz oh-my-zsh-custom quadlet.zsh
+else
+	unlink_omz oh-my-zsh-custom quadlet.zsh
 fi
 
 if ask_yn DF_ATUIN "atuin shell-history sync (self-hosted)?"; then
@@ -459,6 +480,8 @@ if ask_yn DF_ATUIN "atuin shell-history sync (self-hosted)?"; then
 	info "register/login once on this machine, then import + sync:"
 	info "  atuin register -u <user> -e <email>   # or: atuin login -u <user>"
 	info "  atuin import auto && atuin sync"
+else
+	unlink_omz oh-my-zsh-custom atuin.zsh
 fi
 
 if ask_yn DF_NODE "Node machine (fnm + pnpm)?"; then
@@ -469,6 +492,9 @@ if ask_yn DF_NODE "Node machine (fnm + pnpm)?"; then
 	esac
 	link_omz oh-my-zsh-custom fnm.zsh
 	link_omz oh-my-zsh-custom pnpm.zsh
+else
+	unlink_omz oh-my-zsh-custom fnm.zsh
+	unlink_omz oh-my-zsh-custom pnpm.zsh
 fi
 
 if ask_yn DF_TOPGRADE "topgrade (one-shot 'update everything' umbrella)?"; then
@@ -480,9 +506,12 @@ if ask_yn DF_TOPGRADE "topgrade (one-shot 'update everything' umbrella)?"; then
 	stow_pkg "$HOME/.config" topgrade
 fi
 
-if ask_yn DF_CADDY "Caddy host (caddy* aliases)?";     then link_omz oh-my-zsh-custom caddy.zsh; fi
-if ask_yn DF_GO    "Go machine (omz golang plugin)?";  then link_omz oh-my-zsh-plugins-optional golang.zsh; fi
-if ask_yn DF_WSL   "WSL (route ssh through Windows)?"; then link_omz oh-my-zsh-config ssh-wsl.zsh; fi
+if ask_yn DF_CADDY "Caddy host (caddy* aliases)?";     then link_omz oh-my-zsh-custom caddy.zsh
+	else unlink_omz oh-my-zsh-custom caddy.zsh; fi
+if ask_yn DF_GO    "Go machine (omz golang plugin)?";  then link_omz oh-my-zsh-plugins-optional golang.zsh
+	else unlink_omz oh-my-zsh-plugins-optional golang.zsh; fi
+if ask_yn DF_WSL   "WSL (route ssh through Windows)?"; then link_omz oh-my-zsh-config ssh-wsl.zsh
+	else unlink_omz oh-my-zsh-config ssh-wsl.zsh; fi
 
 # nala is the default on apt hosts (installed in step 1), so this is no longer a question —
 # it just links the matching aliases + completion. Skipped if nala isn't packaged for the distro.
@@ -502,6 +531,8 @@ if ask_yn DF_GITA "gita multi-repo overview + auto-fetch?"; then
 	stow_pkg "$HOME/.config" systemd-user
 	info "register repos and enable the fetch timer in a fresh shell:"
 	info "  gitar && systemctl --user enable --now gita-fetch.timer"
+else
+	unlink_omz oh-my-zsh-custom gita.zsh
 fi
 
 if ask_yn DF_FRESH "fresh terminal editor?"; then
@@ -511,6 +542,8 @@ if ask_yn DF_FRESH "fresh terminal editor?"; then
 		*)      info "install fresh-editor from its releases page or 'cargo install --locked fresh-editor'." ;;
 	esac
 	link_omz oh-my-zsh-custom fresh.zsh
+else
+	unlink_omz oh-my-zsh-custom fresh.zsh
 fi
 
 if ask_yn DF_LESSPIPE "lesspipe (rich less previews)?"; then
@@ -522,6 +555,9 @@ if ask_yn DF_LESSPIPE "lesspipe (rich less previews)?"; then
 	esac
 	link_omz oh-my-zsh-custom lesspipe.zsh
 	info "lesspipe itself is a source build — see README § lesspipe (kept manual)."
+else
+	unlink_omz oh-my-zsh-custom lesspipe.zsh
+	unlink_omz oh-my-zsh-custom bat.zsh   # only ever linked by this branch (apt)
 fi
 
 # every question has now been asked — persist what was answered interactively
