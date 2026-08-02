@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# gita-legend: print the legend for gita's status bracket, one symbol group per line.
+#
+# Single source of truth for that legend, shared by everything that renders a
+# `gita ll` listing:
+#   - gitaw-panel            (this repo, ~/.local/bin — the `gitaw` watch panel)
+#   - okf/scripts/herdr-tab-gita   (the fzf repo picker's footer)
+#
+# It lives HERE rather than in the okf vault on purpose: dotfiles is cloned on
+# every machine, the vault is not, so a vault-side legend would silently vanish
+# from `gitaw` on any host without okf. Nothing in it is private — it is a
+# restatement of gita's own symbols.
+#
+# Symbols are listed in the order gita renders them into the bracket (dirty,
+# staged, stashed, untracked, then sync state).
+# NB mirrors gita's default_symbols; a ~/.config/gita/symbols.csv would override
+# those and make this legend stale (none exists, and the defaults are stable).
+set -euo pipefail
+
+printf '%s\n' \
+	'* unstaged   + staged   $ stashed   ? untracked' \
+	'↑ to push    ↓ to pull    ⇕ diverged   ∅ no remote'

@@ -10,19 +10,21 @@
 # column so a commit subject with brackets (e.g. "[Save]") isn't read as a flag.
 gitad() { gita ll "$@" | grep -v '\[\] '; }
 
-# gitaw [group] [interval] — live-refreshing gitad, grouped by workspace (-g).
+# gitaw [group] [interval] — live-refreshing gitad, grouped by workspace (-g),
+# under a panel showing Claude Code usage and the status-symbol legend.
 # Args are order-independent. A purely-integer arg is the refresh interval
 # (default 1s); anything else is the group.
 # Examples: `gitaw` · `gitaw 2` · `gitaw workspace_homelab` · `gitaw workspace_homelab 2`.
-# The pipeline is inlined (not calling gitad): `watch` runs its command via `sh -c`,
-# which can't see zsh functions/aliases — same reason the grep is duplicated here.
+# The frame is rendered by ~/.local/bin/gitaw-panel (stow package `gita`), not
+# inlined here: `watch` runs its command via `sh -c`, which can't see zsh
+# functions/aliases — which is why this used to carry a copy of gitad's grep.
 # -g caveats: a fully-clean workspace still prints its bare "<group>:" header (the
 # grep only drops repo lines), and a repo in NO group disappears entirely — so if a
 # repo vanishes from here but shows in `gitad`, its group is missing, not the repo.
 gitaw() {
   local interval=1 group= a
   for a in "$@"; do [[ $a == <-> ]] && interval=$a || group=$a; done
-  watch --color --interval "$interval" "gita ll -g $group | grep -v '\\[\\] '"
+  watch --color --interval "$interval" "gitaw-panel ${(q)group}"
 }
 
 # gitar — register every workspace's NEW repos with gita, one path per call.

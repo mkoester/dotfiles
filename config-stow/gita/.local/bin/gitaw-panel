@@ -1,0 +1,184 @@
+#!/usr/bin/env bash
+# gitaw-panel [group] — one frame of the `gitaw` live overview:
+#
+#   ── claude ──────────────────────── as of 14:23 (7h ago) ──
+#     5h    ████████░░░░░░░░░░░░  42%   resets 17:39 (in 2h13m)
+#     week  ██████████████░░░░░░  71%   resets Mon 14:59
+#     extra ██░░░░░░░░░░░░░░░░░░  13%   3.93 / 30.00 EUR
+#   ── repos ─────────────────────────────────────────────────
+#     * unstaged   + staged   $ stashed   ? untracked
+#     ↑ to push    ↓ to pull    ⇕ diverged   ∅ no remote
+#
+#   <gita ll -g, minus the clean repos>
+#
+# Split out of the `gitaw` zsh function because `watch` runs its command through
+# `sh -c`, which cannot see zsh functions — the same reason gitad's grep used to
+# be duplicated inside gitaw. Now there is one implementation and gitaw is a
+# thin `watch` wrapper around this script.
+#
+# Every part degrades on its own: no python3 / no cached usage / no gita-legend
+# just drops that block, the repo list always renders.
+set -uo pipefail # deliberately not -e: a missing sub-part must not kill the frame
+
+group="${1:-}"
+
+# Terminal width, via /dev/tty rather than tput: under `watch` stdout is a PIPE,
+# so tput/stty on stdout report the 80-column terminfo default. /dev/tty is the
+# real terminal and is re-read every frame, so the rules follow a live resize.
+width=0
+if size="$(stty size </dev/tty 2>/dev/null)"; then width="${size##* }"; fi
+case "$width" in '' | *[!0-9]*) width=0 ;; esac
+[ "$width" -ge 40 ] || width=80
+
+DIM=$'\033[2m'
+RESET=$'\033[0m'
+
+# rule <label> [right-hand note] — "── label ────────── note ──", dimmed.
+rule() {
+	local label="$1" note="${2:-}" left right fill n
+	left="── ${label} "
+	right="${note:+ ${note} }──"
+	n=$((width - ${#left} - ${#right}))
+	[ "$n" -ge 0 ] || n=0
+	fill=""
+	while [ "${#fill}" -lt "$n" ]; do fill="${fill}──────────"; done
+	printf '%s%s%s%s%s\n' "$DIM" "$left" "${fill:0:$n}" "$right" "$RESET"
+}
+
+# ── claude usage ──────────────────────────────────────────────────────────────
+# Source is Claude Code's OWN cache in ~/.claude.json (cachedUsageUtilization) —
+# the same numbers /usage shows. Nothing is fetched here: no network, no
+# credentials, no cost. The catch is freshness — Claude Code refreshes that key
+# only occasionally (measured 7h stale with a live session running), so the age
+# is printed in the rule and a window whose reset time has passed is called out
+# instead of being shown as a real percentage.
+usage_block() {
+	command -v python3 >/dev/null 2>&1 || return 0
+	[ -r "$HOME/.claude.json" ] || return 0
+	python3 - "$width" <<-'PY'
+		import datetime as dt, json, os, sys
+
+		width = int(sys.argv[1])
+		DIM, RESET = "\033[2m", "\033[0m"
+		GREEN, YELLOW, RED = "\033[32m", "\033[33m", "\033[31m"
+		BARW = 20
+
+		try:
+		    with open(os.path.expanduser("~/.claude.json")) as fh:
+		        cached = json.load(fh).get("cachedUsageUtilization") or {}
+		    util = cached["utilization"]
+		except Exception:
+		    sys.exit(0)
+
+		now = dt.datetime.now(dt.timezone.utc)
+
+
+		def ago(ms):
+		    s = max(0, int((now.timestamp() * 1000 - ms) / 1000))
+		    if s < 90:
+		        return f"{s}s ago"
+		    if s < 5400:
+		        return f"{s // 60}m ago"
+		    if s < 172800:
+		        return f"{s // 3600}h ago"
+		    return f"{s // 86400}d ago"
+
+
+		def rule(label, note):
+		    left, right = f"── {label} ", f" {note} ──" if note else "──"
+		    fill = "─" * max(0, width - len(left) - len(right))
+		    print(f"{DIM}{left}{fill}{right}{RESET}")
+
+
+		def bar(pct, color):
+		    filled = min(BARW, max(0, round(pct / 100 * BARW)))
+		    return f"{color}{'█' * filled}{DIM}{'░' * (BARW - filled)}{RESET}"
+
+
+		def resets(iso):
+		    """'resets 17:39 (in 2h13m)', or a stale marker once the window has rolled over."""
+		    try:
+		        at = dt.datetime.fromisoformat(iso)
+		    except ValueError:
+		        return "", False
+		    local = at.astimezone()
+		    when = local.strftime("%H:%M") if local.date() == dt.datetime.now().date() \
+		        else local.strftime("%a %H:%M")
+		    left = (at - now).total_seconds()
+		    if left <= 0:
+		        # The window reset after this snapshot was taken, so the percentage
+		        # below describes a window that no longer exists. Say so rather than
+		        # rendering a stale 100% as if it were current.
+		        return f"window reset {when} — figure is stale", True
+		    h, m = int(left // 3600), int(left % 3600 // 60)
+		    if h >= 24:
+		        span = f"{h // 24}d{h % 24}h"   # a weekly window in hours reads as noise
+		    elif h:
+		        span = f"{h}h{m:02d}m"
+		    else:
+		        span = f"{m}m"
+		    return f"resets {when} (in {span})", False
+
+
+		rows = []
+		for key, label in (
+		    ("five_hour", "5h"),
+		    ("seven_day", "week"),
+		    ("seven_day_opus", "opus"),
+		    ("seven_day_sonnet", "sonnet"),
+		):
+		    w = util.get(key)
+		    if not w:
+		        continue
+		    pct = w.get("utilization")
+		    if pct is None:
+		        continue
+		    note, stale = resets(w.get("resets_at") or "")
+		    rows.append((label, float(pct), note, stale))
+
+		extra = util.get("extra_usage") or {}
+		if extra.get("is_enabled") and extra.get("utilization") is not None:
+		    scale = 10 ** int(extra.get("decimal_places") or 2)
+		    note = (f"{extra.get('used_credits', 0) / scale:.2f} / "
+		            f"{extra.get('monthly_limit', 0) / scale:.2f} {extra.get('currency', '')}".strip())
+		    rows.append(("extra", float(extra["utilization"]), note, False))
+
+		if not rows:
+		    sys.exit(0)
+
+		fetched = cached.get("fetchedAtMs")
+		stamp = ""
+		if fetched:
+		    stamp = (f"as of {dt.datetime.fromtimestamp(fetched / 1000):%H:%M} "
+		             f"({ago(fetched)})")
+		rule("claude", stamp)
+
+		pad = max(len(r[0]) for r in rows)
+		for label, pct, note, stale in rows:
+		    if stale:
+		        # Dim the whole row: the bar would otherwise read as current usage.
+		        print(f"  {DIM}{label:<{pad}}  {'░' * BARW} {'—':>4}  {note}{RESET}")
+		        continue
+		    color = RED if pct >= 85 else YELLOW if pct >= 60 else GREEN
+		    print(f"  {label:<{pad}}  {bar(pct, color)} {color}{pct:3.0f}%{RESET}"
+		          f"  {DIM}{note}{RESET}")
+	PY
+}
+
+usage_block
+
+# ── repos ─────────────────────────────────────────────────────────────────────
+rule repos
+if command -v gita-legend >/dev/null 2>&1; then
+	gita-legend | sed "s/^/  ${DIM}/;s/$/${RESET}/"
+fi
+echo
+
+# The gitad filter, inlined: clean repos render as "[]", and the trailing space
+# anchors on gita's padded status column so a commit subject containing brackets
+# (e.g. "[Save]") is not read as a flag.
+# `-g` always, group name only when given — `gita ll -g` with no name groups all
+# workspaces, which is what an argument-less gitaw showed before.
+ll_args=(-g)
+[ -n "$group" ] && ll_args+=("$group")
+gita ll "${ll_args[@]}" | grep -v '\[\] '

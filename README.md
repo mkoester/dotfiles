@@ -552,7 +552,8 @@ fresh is actually installed, or `nano` becomes a broken alias.
 [gita](https://github.com/nosarthur/gita) shows the status of all git repos across every
 `~/Projects/workspace_*` on one screen. The `oh-my-zsh-custom/gita.zsh` helpers (auto-sourced)
 add `gitad`/`gitaw`/`gitar` (the `gitaw` live view uses `watch`, part of procps and usually
-already present); the `systemd-user` stow package runs a periodic `gita fetch` timer.
+already present); the `config-stow/gita/` package puts `gitaw-panel` + `gita-legend` in
+`~/.local/bin`; the `systemd-user` stow package runs a periodic `gita fetch` timer.
 
 Install via pipx (Arch names it `python-pipx`, everyone else `pipx`):
 
@@ -567,6 +568,11 @@ brew install pipx                # macOS
 cd ${DOTFILES_REPO:-$HOME/src/dotfiles} && \
 pipx install gita && \
 mkdir -p $HOME/.oh-my-zsh-custom && ln -sf `pwd`/oh-my-zsh-custom/gita.zsh $HOME/.oh-my-zsh-custom/
+```
+
+```sh
+mkdir -p $HOME/.local/bin
+cd ${DOTFILES_REPO:-$HOME/src/dotfiles}/config-stow && stow --ignore='\.claude' -t $HOME gita && cd ..
 ```
 
 The symlink is what makes the helpers "auto-sourced" — `.zshrc` sources every `*.zsh` it finds
@@ -585,6 +591,39 @@ glob, so it would otherwise be missed on every fresh machine.
 
 Day-to-day: `gitad` (repos with changes), `gitaw` (live-refreshing, grouped by workspace via
 `gita ll -g`), `gita ll` (all).
+
+### The `gitaw` panel
+
+`gitaw` renders each frame with `~/.local/bin/gitaw-panel` — a real script, not a zsh function,
+because `watch` runs its command through `sh -c` and would never see a function:
+
+```
+── claude ────────────────────────── as of 14:23 (6h ago) ──
+  5h     ████████░░░░░░░░░░░░  42%  resets 17:39 (in 2h13m)
+  week   ██████████████░░░░░░  71%  resets Wed 00:22 (in 2d3h)
+  extra  ███░░░░░░░░░░░░░░░░░  13%  3.93 / 30.00 EUR
+── repos ───────────────────────────────────────────────────
+  * unstaged   + staged   $ stashed   ? untracked
+  ↑ to push    ↓ to pull    ⇕ diverged   ∅ no remote
+
+workspace_homelab:
+   dotfiles   main   [?]   install.sh: … (11 minutes ago)
+```
+
+The symbol legend comes from `gita-legend`, so anything else that renders a gita listing can
+reuse it instead of keeping its own copy (my fzf repo-picker puts it in the footer) — one
+definition, two renderings, no drift. It lives in this repo precisely because this is the one
+cloned on every machine.
+
+**The Claude figures are read, never fetched.** Claude Code caches what its own `/usage` shows in
+`~/.claude.json` (`cachedUsageUtilization`), so the panel just parses that file: no network, no
+credentials, no cost, and nothing to rate-limit. The trade-off is freshness — Claude Code
+refreshes that key only occasionally (measured 6 h old with a session running), which is why the
+rule prints `as of HH:MM`. Once a window's reset time has passed, its percentage describes a
+window that no longer exists, so the row is dimmed and labelled `figure is stale` rather than
+showing a reassuring-looking number. Every part degrades on its own: without `python3`, without
+that cache key, or without `gita-legend`, the block is simply omitted and the repo list still
+renders.
 
 ### Rebuilding the groups
 

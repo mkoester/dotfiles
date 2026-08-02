@@ -207,6 +207,18 @@ done
 unset _v
 
 # ── stow helpers ──
+# STOW_IGNORE — never stow Claude Code's scratch dirs. A `.claude/.cc-writes/` appears inside
+# any directory Claude has written to, so editing a tracked file under config-stow leaves one
+# next to it. Git never notices (both dirs are empty, and git does not track empty dirs), so a
+# fresh clone is clean and this looks like a non-problem — but stow works on the filesystem and
+# happily symlinks it into the target, e.g. ~/.config/xkb/.claude -> the repo. Passed to every
+# stow call below rather than dropping a .stow-local-ignore into each package, since the next
+# package to be Claude-edited would silently miss it.
+# NB --ignore REPLACES stow's default ignore list; nothing in this repo relies on the defaults.
+# Do NOT add ^…$ anchors: stow anchors the pattern itself, and '^\.claude$' silently matches
+# nothing (measured — it still linked ~/.local/bin/.claude, while '\.claude' does not).
+STOW_IGNORE='\.claude'
+
 # stow_conflicts <target> <package> — relative paths stow would refuse to overwrite, one per
 # line. Two message shapes are parsed because they differ by stow version:
 #   2.4.x  * cannot stow ../pkgs/x/.foo over existing target .foo since neither a link nor …
@@ -215,7 +227,7 @@ unset _v
 # other clone owns (e.g. a target already stowed from ~/src/dotfiles).
 # `|| true`: stow exits non-zero on conflict and `set -o pipefail` would abort the caller.
 stow_conflicts() {
-	{ stow --no --verbose -t "$1" -d "$DOTFILES_REPO/config-stow" "$2" 2>&1 >/dev/null || true; } |
+	{ stow --ignore="$STOW_IGNORE" --no --verbose -t "$1" -d "$DOTFILES_REPO/config-stow" "$2" 2>&1 >/dev/null || true; } |
 		sed -n \
 			-e 's/^ *\* cannot stow .* over existing target \(.*\) since .*$/\1/p' \
 			-e 's/^ *\* existing target is not owned by stow: //p' \
@@ -261,7 +273,7 @@ stow_pkg() {
 	fi
 
 	# Belt-and-braces: a conflict shape the parser missed must not kill the whole run either.
-	if ! stow -t "$target" -d "$DOTFILES_REPO/config-stow" "$pkg"; then
+	if ! stow --ignore="$STOW_IGNORE" -t "$target" -d "$DOTFILES_REPO/config-stow" "$pkg"; then
 		warn "  stow '$pkg' failed — skipping it; fix the above and re-run ./install.sh"
 	fi
 }
@@ -527,6 +539,11 @@ if ask_yn DF_GITA "gita multi-repo overview + auto-fetch?"; then
 	esac
 	run pipx install gita
 	link_omz oh-my-zsh-custom gita.zsh
+	# gitaw-panel + gita-legend into ~/.local/bin. gitaw runs the panel through
+	# `watch`, i.e. through `sh -c`, so it has to be a real script on PATH rather
+	# than a zsh function; gita-legend is shared with okf's herdr-tab-gita.
+	run mkdir -p "$HOME/.local/bin"
+	stow_pkg "$HOME" gita
 	run mkdir -p "$HOME/.config/systemd/user"
 	stow_pkg "$HOME/.config" systemd-user
 	info "register repos and enable the fetch timer in a fresh shell:"
