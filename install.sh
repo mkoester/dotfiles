@@ -13,6 +13,8 @@
 #
 # Preseeding (skip prompts): export DF_DESKTOP / DF_NIRI / DF_QUADLET / DF_ATUIN / DF_NODE /
 #   DF_CADDY / DF_GO / DF_WSL / DF_GITA / DF_FRESH / DF_LESSPIPE / DF_TOPGRADE = 1|0.
+#   DF_STOW_BACKUP=1 answers "move conflicting files aside as *.pre-stow-backup?" up front
+#   (unset/0 = skip a conflicting stow package instead of touching anything).
 #   Override with
 #   DOTFILES_PM=pacman|apt|dnf|brew. A per-machine host.env in the workstation-private repo
 #   (see below) is sourced automatically and can set all of these.
@@ -116,8 +118,65 @@ if [ -f "$HOST_DIR/host.env" ]; then
 	. "$HOST_DIR/host.env"
 fi
 
-# ── stow helper ──
-stow_pkg() { run stow -t "$1" -d "$DOTFILES_REPO/config-stow" "$2"; }
+# ── stow helpers ──
+# stow_conflicts <target> <package> — relative paths stow would refuse to overwrite, one per
+# line. Two message shapes are parsed because they differ by stow version:
+#   2.4.x  * cannot stow ../pkgs/x/.foo over existing target .foo since neither a link nor …
+#   2.3.x  * existing target is neither a link nor a directory: .foo
+# plus (both)  * existing target is not owned by stow: .foo  — a real file, or a symlink some
+# other clone owns (e.g. a target already stowed from ~/src/dotfiles).
+# `|| true`: stow exits non-zero on conflict and `set -o pipefail` would abort the caller.
+stow_conflicts() {
+	{ stow --no --verbose -t "$1" -d "$DOTFILES_REPO/config-stow" "$2" 2>&1 >/dev/null || true; } |
+		sed -n \
+			-e 's/^ *\* cannot stow .* over existing target \(.*\) since .*$/\1/p' \
+			-e 's/^ *\* existing target is not owned by stow: //p' \
+			-e 's/^ *\* existing target is neither a link nor a directory: //p'
+}
+
+# stow_pkg <target> <package>
+# stow refuses a whole package when any of its targets already exists as a real file (or as a
+# foreign symlink) — and under `set -e` that aborts the installer mid-run, skipping the steps
+# that would have worked. A fresh machine hits this routinely: distro skeletons ship their own
+# rc files, and CachyOS's Niri edition installs an unowned ~/.config/niri/config.kdl via
+# /etc/skel. So: simulate first, show exactly what is in the way (with symlink targets, so an
+# already-stowed file from another clone is recognizable), and offer to move it aside as
+# <file>.pre-stow-backup. Declining skips just this package and the run continues.
+# Never `stow --adopt` — it pulls the local file's content INTO the repo, overwriting what is
+# tracked (README § "Stow the config files").
+stow_pkg() {
+	local target="$1" pkg="$2" conflicts f
+	run mkdir -p "$target"
+	if [ "$DRYRUN" -eq 1 ]; then
+		printf '    [dry-run] stow -t %s -d %s %s\n' "$target" "$DOTFILES_REPO/config-stow" "$pkg"
+		conflicts="$(stow_conflicts "$target" "$pkg")"
+		[ -n "$conflicts" ] && warn "would conflict in $target: $(printf '%s ' $conflicts)"
+		return 0
+	fi
+
+	conflicts="$(stow_conflicts "$target" "$pkg")"
+	if [ -n "$conflicts" ]; then
+		warn "stow package '$pkg' conflicts with existing files under $target:"
+		while IFS= read -r f; do
+			[ -n "$f" ] || continue
+			ls -ld -- "$target/$f" 2>/dev/null | sed 's/^/      /' >&2 || printf '      %s\n' "$f" >&2
+		done <<<"$conflicts"
+		if ask_yn DF_STOW_BACKUP "move them aside as *.pre-stow-backup and stow '$pkg'?"; then
+			while IFS= read -r f; do
+				[ -n "$f" ] || continue
+				run mv -v -- "$target/$f" "$target/$f.pre-stow-backup"
+			done <<<"$conflicts"
+		else
+			warn "  skipping package '$pkg' — resolve by hand, then re-run ./install.sh"
+			return 0
+		fi
+	fi
+
+	# Belt-and-braces: a conflict shape the parser missed must not kill the whole run either.
+	if ! stow -t "$target" -d "$DOTFILES_REPO/config-stow" "$pkg"; then
+		warn "  stow '$pkg' failed — skipping it; fix the above and re-run ./install.sh"
+	fi
+}
 # link_omz <repo-subdir> <file.zsh> — symlink a catalog file into ~/.<repo-subdir>/
 link_omz() {
 	run mkdir -p "$HOME/.$1"

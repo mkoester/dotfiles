@@ -119,6 +119,14 @@ Reconcile the two versions by hand first, then delete the local file and re-run.
 does the opposite of what the name suggests — it pulls the local file's *content* into the repo,
 overwriting what is tracked.
 
+`install.sh` handles this for you: it simulates each package first (`stow --no`), and on a
+conflict lists the offending targets — with `ls -ld`, so a symlink already owned by another
+clone is recognizable — and asks whether to move them aside as `<file>.pre-stow-backup`.
+Declining skips **only that package**; the rest of the run continues, which is the whole point
+(stow's own abort is per-package, but `set -e` used to make it kill the installer). Preseed the
+answer with `DF_STOW_BACKUP=1` for an unattended `--yes` run; unset or `0` means "touch nothing,
+skip the package".
+
 The `git` package carries both `.gitconfig` and `.gitignore_global` (wired up via
 `core.excludesFile`), so a machine that stowed it before the global ignore existed needs
 `stow -t $HOME git` re-run once to pick up the new symlink.
