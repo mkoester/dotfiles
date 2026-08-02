@@ -579,15 +579,18 @@ The symlink is what makes the helpers "auto-sourced" — `.zshrc` sources every 
 under `~/.oh-my-zsh-custom/`, but nothing puts the file there for you. Open a new shell (or
 `exec zsh`) to pick them up.
 
-Register every workspace's repos — **one path per `gita add -a`** (the multi-path form crashes,
-upstream `auto_group` bug). The `gitar` alias does exactly that:
+Register everything with `gitar` — `~/src`, the okf vault, every workspace, and whatever else
+sits in `~/Projects`:
 
 ```sh
-gitar   # loops: for ws in ~/Projects/workspace_*/ ~/Projects/okf/; do gita add -a "$ws"; done
+gitar
 ```
 
-The okf vault is appended explicitly — it lives at `~/Projects/okf`, outside the `workspace_*`
-glob, so it would otherwise be missed on every fresh machine.
+It issues **one path per `gita add`** (the multi-path form of `-a` crashes, upstream
+`auto_group` bug). The okf vault is handled explicitly because it lives at `~/Projects/okf`,
+outside the `workspace_*` glob, so it would otherwise be missed on every fresh machine. See
+[Rebuilding the groups](#rebuilding-the-groups) for the resulting order and for what gitar
+removes before it adds.
 
 Day-to-day: `gitad` (repos with changes), `gitaw` (live-refreshing, grouped by workspace via
 `gita ll -g`), `gita ll` (all).
@@ -600,7 +603,7 @@ because `watch` runs its command through `sh -c` and would never see a function:
 ```
 ── claude ────────────────────────── as of 14:23 (6h ago) ──
   5h     ████████░░░░░░░░░░░░  42%  resets 17:39 (in 2h13m)
-  week   ██████████████░░░░░░  71%  resets Wed 00:22 (in 2d3h)
+  week   ██████████████░░░░░░  71%  resets Wed 00:22 (in 2d 3h)
   extra  ███░░░░░░░░░░░░░░░░░  13%  3.93 / 30.00 EUR
 ── repos ───────────────────────────────────────────────────
   * unstaged   + staged   $ stashed   ? untracked
@@ -627,16 +630,56 @@ renders.
 
 ### Rebuilding the groups
 
-`gita add -a` is **add-only**: it skips repos already in `~/.config/gita/repos.csv`
-("No new repos found!"), and a repo's group is assigned only as a side effect of *adding* it.
-So `gitar` can't re-group registered repos or forget deleted ones — removing the groups and
-re-running it just produces no-ops. A rebuild has to wipe both files first:
+`gita add` is **add-only**: it skips repos already in `~/.config/gita/repos.csv` ("No new repos
+found!"), and a repo's group is assigned only as a side effect of *adding* it. So an add-only
+`gitar` could neither re-group a registered repo nor forget one whose directory is gone — on an
+established machine it was a pure no-op.
+
+`gitar` therefore **unregisters first, then re-adds**. It is safe to re-run at any time and is
+the single command for "make gita match the disk":
 
 ```sh
-gita clear
 gitar
 gita group ll   # verify: one row per group
 ```
+
+Only repos whose path is under `~/src` or `~/Projects` are dropped. **Anything registered
+outside those two roots keeps its registration, its group and its position** — which is the
+whole reason this is not `gita clear`, and it is why `gita clear` should not be reached for.
+(Per-repo flags/colors are lost for the repos gitar touches, exactly as with `gita clear`; none
+are set here.)
+
+Groups come out in the order they are added, and that order *is* the order `gita ll -g` and
+`gitaw` print:
+
+| # | group | source |
+|---|---|---|
+| 1 | `okf` | the vault, which sits outside the `workspace_*` glob |
+| 2 | `workspace_*` | one group per workspace, nested members included |
+| 3 | `src` | `~/src` — the live stow clones (`src/dotfiles`, `src/workstation-private`) |
+| 4 | `Projects` | everything else directly in `~/Projects`, added one repo per call |
+
+Add order carries two meanings at once, which is why `~/src` sits below the workspaces:
+
+- **The first repo to claim a basename keeps it.** `~/src` and `workspace_homelab` both hold
+  `dotfiles` and `workstation-private`; the workspaces are added first so the *dev* clones keep
+  the short names you actually type, and the live clones become `src/dotfiles` and
+  `src/workstation-private` (gita disambiguates a duplicate basename by prefixing the parent).
+- **Group order is file order, and gita has no reorder command** — so the only lever is the
+  order of the `gita add` calls. okf goes first because nothing collides with its name, which
+  buys its position for free and keeps gitar a plain sequence of adds with no fix-up pass.
+
+Also worth knowing: **a repo whose directory has been deleted is dropped silently.** gita
+validates paths on read, so such a ghost sits in `repos.csv` but is absent from the registry
+gita acts on — `gita rm` even refuses it by name. gitar skips those explicitly, and the rewrite
+that follows drops their lines anyway.
+
+Re-running is safe but not byte-stable: `gita add -a` walks the filesystem in `glob` order, so
+member order *within* a group and line order in `repos.csv` shuffle between runs. Group order,
+group membership and every repo name are stable.
+
+Non-repo directories in `~/Projects` are named and skipped rather than handed to gita, which
+would only say "Nothing to add".
 
 `gita clear` also drops per-repo flags and colors — we set none, so this is lossless.
 

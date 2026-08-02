@@ -112,7 +112,7 @@ usage_block() {
 		        return f"window reset {when} — figure is stale", True
 		    h, m = int(left // 3600), int(left % 3600 // 60)
 		    if h >= 24:
-		        span = f"{h // 24}d{h % 24}h"   # a weekly window in hours reads as noise
+		        span = f"{h // 24}d {h % 24}h"  # a weekly window in hours reads as noise
 		    elif h:
 		        span = f"{h}h{m:02d}m"
 		    else:
@@ -162,6 +162,10 @@ usage_block() {
 		    color = RED if pct >= 85 else YELLOW if pct >= 60 else GREEN
 		    print(f"  {label:<{pad}}  {bar(pct, color)} {color}{pct:3.0f}%{RESET}"
 		          f"  {DIM}{note}{RESET}")
+
+		# Blank line before the repos rule. Emitted here, not by the caller, so it
+		# appears only when there was actually a usage block to separate.
+		print()
 	PY
 }
 
