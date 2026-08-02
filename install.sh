@@ -7,14 +7,24 @@
 # needs. Idempotent and re-runnable — safe to run again after editing answers.
 #
 # Usage:
-#   ./install.sh              # interactive
-#   ./install.sh --dry-run    # print every command instead of running it (safe preview)
-#   ./install.sh --yes        # non-interactive: take defaults + any DF_*/host.env preseeds
+#   ./install.sh                # re-use stored answers, ask only what is still unanswered
+#   ./install.sh --reconfigure  # ask every question again, ENTER = the stored answer
+#   ./install.sh --dry-run      # print every command instead of running it (safe preview)
+#   ./install.sh --yes          # non-interactive: take stored answers/preseeds, No for the rest
+#
+# Answers are REMEMBERED: each host-class question you answer interactively is written back to
+#   workstation-private/<hostname>/host.env as DF_<NAME>=1|0, so the next run stops asking and
+#   just executes the matching steps. --reconfigure re-asks everything with the stored answer as
+#   the default. Values are updated in place; comments and other keys in host.env are preserved.
+#   (Without a workstation-private clone there is nowhere to save — the run says so and still works.)
 #
 # Preseeding (skip prompts): export DF_DESKTOP / DF_NIRI / DF_QUADLET / DF_ATUIN / DF_NODE /
 #   DF_CADDY / DF_GO / DF_WSL / DF_GITA / DF_FRESH / DF_LESSPIPE / DF_TOPGRADE = 1|0.
+#   An exported DF_* beats the stored host.env answer for that one run and is NOT saved, so
+#   `DF_NIRI=0 ./install.sh` is a one-off override rather than a decision.
 #   DF_STOW_BACKUP=1 answers "move conflicting files aside as *.pre-stow-backup?" up front
-#   (unset/0 = skip a conflicting stow package instead of touching anything).
+#   (unset/0 = skip a conflicting stow package instead of touching anything); it is deliberately
+#   never stored — it is a per-conflict call, not a property of the machine.
 #   Override with
 #   DOTFILES_PM=pacman|apt|dnf|brew. A per-machine host.env in the workstation-private repo
 #   (see below) is sourced automatically and can set all of these.
@@ -28,10 +38,12 @@ cd "$DOTFILES_REPO"
 
 DRYRUN=0
 ASSUME=0
+RECONFIGURE=0
 while [ $# -gt 0 ]; do
 	case "$1" in
 		--dry-run) DRYRUN=1 ;;
 		-y|--yes)  ASSUME=1 ;;
+		--reconfigure) RECONFIGURE=1 ;;
 		-h|--help)
 			awk 'NR>1 && /^#/ {sub(/^# ?/,""); print; next} NR>1 {exit}' "$SCRIPT_PATH"
 			exit 0 ;;
@@ -55,20 +67,85 @@ run_sh() {
 }
 have() { command -v "$1" >/dev/null 2>&1; }
 
-# ask_yn VAR "Prompt" — resolve from env VAR if it holds a yes/no; else prompt (default No);
-# --yes takes the default without prompting. Returns 0 for yes, 1 for no.
-ask_yn() {
-	local var="$1" prompt="$2" val="${!1:-}"
-	case "$(printf '%s' "$val" | tr '[:upper:]' '[:lower:]')" in
-		1|y|yes|true)  info "$prompt -> yes (preseed $var)"; return 0 ;;
-		0|n|no|false)  info "$prompt -> no  (preseed $var)"; return 1 ;;
-	esac
-	[ "$ASSUME" -eq 1 ] && return 1
-	local ans; read -r -p "    $prompt [y/N] " ans
-	case "$(printf '%s' "$ans" | tr '[:upper:]' '[:lower:]')" in
-		y|yes) return 0 ;; *) return 1 ;;
-	esac
+lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+
+# Answers given interactively during this run, as "VAR=1"/"VAR=0" — flushed to host.env by
+# save_answers() once every question has been asked.
+ANSWERS=()
+record_answer() {
+	# DF_STOW_BACKUP is a per-conflict call ("move THESE files aside?"), not a property of the
+	# machine: storing a "no" would silently skip a future package that a future distro skeleton
+	# happens to collide with. Deliberately never persisted.
+	[ "$1" = DF_STOW_BACKUP ] && return 0
+	ANSWERS+=("$1=$2")
 }
+
+# ask_yn VAR "Prompt" — returns 0 for yes, 1 for no, and remembers what was answered.
+# Resolution order, highest first:
+#   1. an exported DF_* for this run (one-off override; ENV_PRESEED, restored after host.env)
+#   2. the stored answer in host.env — used without asking, UNLESS --reconfigure
+#   3. an interactive prompt, defaulting to the stored answer (so ENTER keeps it), else No
+# --yes never prompts: it takes the stored answer, or No where there is none.
+ask_yn() {
+	local var="$1" prompt="$2" val="${!1:-}" stored='' def hint ans
+	case "$(lower "$val")" in
+		1|y|yes|true)  stored=1 ;;
+		0|n|no|false)  stored=0 ;;
+	esac
+
+	# A known answer is executed, not re-asked — that is the point of storing it.
+	if [ -n "$stored" ] && [ "$RECONFIGURE" -eq 0 ]; then
+		if [ "$stored" = 1 ]; then info "$prompt -> yes (stored $var)"; return 0; fi
+		info "$prompt -> no  (stored $var)"; return 1
+	fi
+
+	def="${stored:-0}"
+	if [ "$ASSUME" -ne 1 ]; then
+		hint='[y/N]'; [ "$def" = 1 ] && hint='[Y/n]'
+		read -r -p "    $prompt $hint " ans
+		case "$(lower "$ans")" in
+			y|yes) def=1 ;;
+			n|no)  def=0 ;;
+			'')    ;;              # ENTER keeps the stored answer
+			*)     def=0 ;;
+		esac
+		record_answer "$var" "$def"
+	fi
+	[ "$def" = 1 ]
+}
+
+# save_answers — write this run's answers back into host.env, in place. Existing DF_* lines are
+# updated (trailing comments kept), new ones appended under a marker. Bash sources this file at
+# install time and zsh at shell start, so keep the lines POSIX-plain and unexported.
+save_answers() {
+	[ "${#ANSWERS[@]}" -eq 0 ] && return 0
+	local f="$HOST_DIR/host.env" entry var val tmp
+	if [ "$DRYRUN" -eq 1 ]; then
+		printf '    [dry-run] save to %s: %s\n' "$f" "${ANSWERS[*]}"
+		return 0
+	fi
+	if [ ! -d "$HOST_DIR" ]; then
+		warn "no $HOST_DIR — answers not saved."
+		warn "  clone workstation-private next to this repo (and mkdir $HOSTNAME_SHORT/) to remember them."
+		return 0
+	fi
+	[ -f "$f" ] || printf '# %s — per-machine settings, sourced by install.sh and by every zsh.\n' "$HOSTNAME_SHORT" >"$f"
+	for entry in "${ANSWERS[@]}"; do
+		var="${entry%%=*}"; val="${entry#*=}"
+		if grep -qE "^[[:space:]]*(export[[:space:]]+)?$var=" "$f"; then
+			tmp="$(mktemp)"
+			awk -v v="$var" -v n="$val" \
+				'$0 ~ "^[ \t]*(export[ \t]+)?" v "=" { sub(/=[^ \t#]*/, "=" n) } { print }' \
+				"$f" >"$tmp"
+			cat "$tmp" >"$f"; rm -f "$tmp"     # rewrite in place: keeps mode/owner and any symlink
+		else
+			grep -qF "$ANSWER_MARKER" "$f" || printf '\n%s\n' "$ANSWER_MARKER" >>"$f"
+			printf '%s=%s\n' "$var" "$val" >>"$f"
+		fi
+	done
+	info "answers saved to $f — re-ask them with ./install.sh --reconfigure"
+}
+ANSWER_MARKER='# ── install.sh answers (re-ask with ./install.sh --reconfigure) ──'
 
 # ── package-manager detection ──
 detect_pm() {
@@ -112,11 +189,20 @@ pm_install() {
 HOSTNAME_SHORT="$(hostname -s 2>/dev/null || hostname)"
 PRIVATE_REPO="$(dirname "$DOTFILES_REPO")/workstation-private"
 HOST_DIR="$PRIVATE_REPO/$HOSTNAME_SHORT"
+# host.env is also the answer STORE (see save_answers), so sourcing it must not clobber a DF_*
+# the caller exported for this one run — snapshot those first and put them back afterwards.
+declare -A ENV_PRESEED=()
+for _v in $(compgen -v DF_ 2>/dev/null || true); do ENV_PRESEED["$_v"]="${!_v}"; done
 if [ -f "$HOST_DIR/host.env" ]; then
-	step "Found host preseeds: $HOST_DIR/host.env"
+	step "Found host settings: $HOST_DIR/host.env"
 	# shellcheck disable=SC1090
 	. "$HOST_DIR/host.env"
 fi
+for _v in "${!ENV_PRESEED[@]}"; do
+	[ "${!_v:-}" = "${ENV_PRESEED[$_v]}" ] || info "$_v=${ENV_PRESEED[$_v]} from the environment overrides host.env for this run (not saved)"
+	printf -v "$_v" '%s' "${ENV_PRESEED[$_v]}"
+done
+unset _v
 
 # ── stow helpers ──
 # stow_conflicts <target> <package> — relative paths stow would refuse to overwrite, one per
@@ -437,6 +523,9 @@ if ask_yn DF_LESSPIPE "lesspipe (rich less previews)?"; then
 	link_omz oh-my-zsh-custom lesspipe.zsh
 	info "lesspipe itself is a source build — see README § lesspipe (kept manual)."
 fi
+
+# every question has now been asked — persist what was answered interactively
+save_answers
 
 # ══════════════════════════════════════════════════════════════════════════
 step "7/8  Default shell"

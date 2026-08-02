@@ -23,13 +23,25 @@ this machine needs. Niri is its own question, so a desktop that doesn't run it (
 labwc) is fine. It's **idempotent** — safe to re-run. Preview everything first with:
 
 ```sh
-./install.sh --dry-run     # print every command instead of running it
-./install.sh --yes         # non-interactive: take defaults + any preseeds
+./install.sh --dry-run      # print every command instead of running it
+./install.sh --reconfigure  # ask every question again, ENTER = the stored answer
+./install.sh --yes          # non-interactive: stored answers, No for anything unanswered
 ```
 
-Preseed the questions with `DF_DESKTOP`/`DF_QUADLET`/`DF_NODE`/… = `1`/`0`, or drop a `host.env`
-in the private repo (`./install.sh --help` lists them all). Everything below is the **manual
-reference** the installer automates — read it when a step needs doing by hand.
+**Your answers are remembered.** Each question you answer is written back to
+`workstation-private/<hostname>/host.env` as `DF_<NAME>=1|0`, so the next run stops asking and
+just re-executes the matching steps. Change your mind with `--reconfigure`, which re-asks
+everything with the stored answer as the default (`[Y/n]` vs `[y/N]`) so ENTER keeps it. Values
+are updated in place — comments and any other keys in `host.env` survive. Without a
+`workstation-private` clone next to this repo there is nowhere to save; the run says so and
+otherwise works normally.
+
+You can still preseed by hand: `DF_DESKTOP`/`DF_QUADLET`/`DF_NODE`/… = `1`/`0` in `host.env`
+(`./install.sh --help` lists them all). An **exported** `DF_*` beats the stored answer for that
+one run and is deliberately *not* saved — `DF_NIRI=0 ./install.sh` is a one-off override, not a
+decision. `DF_STOW_BACKUP` is never stored either: it is a per-conflict call, not a property of
+the machine. Everything below is the **manual reference** the installer automates — read it when
+a step needs doing by hand.
 
 ---
 
