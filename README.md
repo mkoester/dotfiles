@@ -127,6 +127,13 @@ stow -t $HOME/.var/app/com.visualstudio.code/config vscode && \
 cd ..
 ```
 
+**Add `--ignore='\.claude'` to any manual `stow` command in this README if you run Claude Code
+in this repo.** Claude Code leaves an empty `.claude/.cc-writes/` in every directory it writes
+to, and git never reports it (empty directories are not tracked) — but stow works on the
+filesystem and happily symlinks it into the target, e.g. `~/.config/xkb/.claude` → the repo.
+`install.sh` passes the flag on every package for exactly this reason. Note the pattern carries
+**no `^…$` anchors**: stow anchors it itself, and `'^\.claude$'` silently matches nothing.
+
 If a target already exists as a **real file** (a hand-written `~/.gitconfig`, say), stow refuses
 and aborts *every* operation in that run — including the packages that would have succeeded:
 
