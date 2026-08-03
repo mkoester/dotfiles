@@ -6,7 +6,8 @@ the top-level `oh-my-zsh-*` directories. Works across Arch, Debian, Fedora and m
 
 **This repo is public.** Machine- and device-specific data (monitor serials, Bluetooth MACs,
 hostnames) must never be committed here — it lives in the private overlay repo and is pulled in
-via gitignored `include`s (see [kanshi](#kanshi--monitor-profiles) and [niri](#niri--wayland-compositor)).
+via gitignored `include`s (see [kanshi](#kanshi--monitor-profiles), [niri](#niri--wayland-compositor)
+and [hypr](#hypr--hyprland-compositor-evaluation-since-2026-08-03)).
 
 ## Quick start — `./install.sh`
 
@@ -951,6 +952,51 @@ echo 'KERNEL=="uinput", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput
 sudo usermod -aG input "$USER"    # then re-login
 systemctl --user enable --now ydotoold.service
 ```
+
+## hypr — Hyprland compositor (evaluation, since 2026-08-03)
+
+The `config-stow/hypr/` package tracks a **public skeleton** Hyprland config, in the same
+skeleton + private-overlay shape as niri above. It exists because niri cannot produce the i3
+workspace layout (numbered workspaces first, named ones after) — see
+Workstation-Documentation `desktop/niri-workspaces.md` and `desktop/wm-comparison.md`.
+It is a **separate install question from `DF_NIRI`**, so a machine can carry both configs and
+choose the session at the greeter; nothing about the niri setup is disturbed.
+
+```sh
+paru -S --needed hyprland xdg-desktop-portal-hyprland   # Arch
+```
+
+```sh
+mkdir -p $HOME/.config/hypr && \
+cd config-stow && stow -t $HOME hypr && cd ..
+```
+
+This links `~/.config/hypr/hyprland.lua` — binds deliberately mirroring the niri skeleton
+(`Mod+Return` terminal, `Mod+Q` close, `Mod+<n>` workspaces, `Mod+Ctrl+<n>` move, the kanshi
+switch binds), plus the two things the move is *for*: a **`persistent` named workspace** that
+does not steal a low index, and **`layout = "scrolling"` on a single workspace** so scrolling
+can be tried without committing the whole desktop to it.
+
+**The config language is Lua, not hyprlang.** hyprlang is deprecated since Hyprland 0.55;
+0.56.1 still falls back to a legacy parser when no `.lua` exists, but that branch is already
+deleted upstream. Anything you copy from a tutorial written in `hyprland.conf` syntax needs
+translating.
+
+**Validate before logging in** — it runs offline, no session required:
+
+```sh
+Hyprland --verify-config -c ~/.config/hypr/hyprland.lua
+```
+
+It catches syntax errors, unknown config keys, type errors and calls to API functions that do
+not exist. It does **not** catch well-typed wrong values — an out-of-range number, a bogus enum,
+a layout name that doesn't exist and a rule referencing an undeclared workspace all pass as
+`config ok` (measured 2026-08-03). See `desktop/wm-comparison.md`.
+
+**Machine-specific overrides go in `~/.config/hypr/local.lua`**, `require`d last by the skeleton
+so it wins: the real monitor block, the xkb keymap path, and which shell to spawn. Supplied
+per-machine by the private overlay repo and symlinked in by `install.sh`. A machine without one
+still boots — the require is wrapped in `pcall`, and a missing overlay only logs a line.
 
 ## hyprlock — screen lock (with fingerprint), driven by swayidle
 

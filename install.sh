@@ -23,8 +23,8 @@
 #   that stops being a quadlet/Node/atuin/... machine really stops loading those aliases.
 #   (Without a workstation-private clone there is nowhere to save — the run says so and still works.)
 #
-# Preseeding (skip prompts): export DF_DESKTOP / DF_NIRI / DF_QUADLET / DF_ATUIN / DF_NODE /
-#   DF_CADDY / DF_GO / DF_WSL / DF_GITA / DF_FRESH / DF_LESSPIPE / DF_TOPGRADE = 1|0.
+# Preseeding (skip prompts): export DF_DESKTOP / DF_NIRI / DF_HYPR / DF_QUADLET / DF_ATUIN /
+#   DF_NODE / DF_CADDY / DF_GO / DF_WSL / DF_GITA / DF_FRESH / DF_LESSPIPE / DF_TOPGRADE = 1|0.
 #   An exported DF_* beats the stored host.env answer for that one run and is NOT saved, so
 #   `DF_NIRI=0 ./install.sh` is a one-off override rather than a decision.
 #   DF_STOW_BACKUP=1 answers "move conflicting files aside as *.pre-stow-backup?" up front
@@ -239,6 +239,27 @@ if ask_yn DF_NIRI "Niri compositor (tracked niri config + Firefox placement)?"; 
 		run ln -sf "$HOST_DIR/niri/local.kdl" "$HOME/.config/niri/local.kdl"
 	fi
 	info "niri machine-specific settings go in ~/.config/niri/local.kdl (include'd by config.kdl)."
+fi
+
+# Hyprland compositor. Independent of DF_NIRI on purpose: a machine may carry both configs and
+# pick the session at the greeter, which is exactly how Hyprland gets evaluated without giving
+# up a working niri session.
+if ask_yn DF_HYPR "Hyprland compositor (tracked hyprland.lua)?"; then
+	step "  hyprland: hyprland.lua skeleton"
+	case "$PM" in
+		pacman) pm_install hyprland xdg-desktop-portal-hyprland ;;
+		*)      info "install hyprland from its own docs on this distro." ;;
+	esac
+	# Shared with the hyprlock package (~/.config/hypr): mkdir first so stow does not fold the
+	# directory into a single package symlink and then have to unfold it for the second one.
+	run mkdir -p "$HOME/.config/hypr"
+	stow_pkg "$HOME" hypr
+	# machine-specific overrides (real monitor block, xkb path, which shell to spawn)
+	if [ -f "$HOST_DIR/hypr/local.lua" ]; then
+		run ln -sf "$HOST_DIR/hypr/local.lua" "$HOME/.config/hypr/local.lua"
+	fi
+	info "validate before logging in:  Hyprland --verify-config -c ~/.config/hypr/hyprland.lua"
+	info "hyprland machine-specific settings go in ~/.config/hypr/local.lua (require'd by hyprland.lua)."
 fi
 
 if ask_yn DF_QUADLET "Quadlet host (Podman services managed as dedicated users)?"; then
