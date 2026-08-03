@@ -32,9 +32,13 @@ labwc) is fine. It's **idempotent** — safe to re-run. Preview everything first
 `workstation-private/<hostname>/host.env` as `DF_<NAME>=1|0`, so the next run stops asking and
 just re-executes the matching steps. Change your mind with `--reconfigure`, which re-asks
 everything with the stored answer as the default (`[Y/n]` vs `[y/N]`) so ENTER keeps it. Values
-are updated in place — comments and any other keys in `host.env` survive. Without a
+are updated in place — comments and any other keys in `host.env` survive, and a commented-out
+hint line (`#DF_NODE=1`) is **uncommented and set** rather than duplicated further down. Without a
 `workstation-private` clone next to this repo there is nowhere to save; the run says so and
 otherwise works normally.
+
+Keep every `DF_*` key present and uncommented in a `host.env` (`_template/host.env` shows the
+full set) — a commented-out key is not an answer, so the installer prompts for it.
 
 **Answering "no" also undoes that option.** If an earlier run linked an option's zsh snippet
 (`quadlet.zsh`, `atuin.zsh`, `fnm.zsh`/`pnpm.zsh`, `caddy.zsh`, `golang.zsh`, `ssh-wsl.zsh`,
@@ -51,6 +55,12 @@ one run and is deliberately *not* saved — `DF_NIRI=0 ./install.sh` is a one-of
 decision. `DF_STOW_BACKUP` is never stored either: it is a per-conflict call, not a property of
 the machine. Everything below is the **manual reference** the installer automates — read it when
 a step needs doing by hand.
+
+**Layout:** `install.sh` is the 8-step procedure; every helper it uses lives in **`lib.sh`**,
+which is sourced and does nothing on its own. That split exists so **`./scripts/test`** can source
+`lib.sh` and drive one function at a time against a fixture — it runs in `mktemp` dirs, touches
+neither `$HOME` nor the package manager nor the network, and is safe on any machine. Run it after
+changing anything in `lib.sh` (`-v` lists each case).
 
 ---
 
