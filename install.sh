@@ -287,8 +287,8 @@ if ask_yn DF_DMS "DankMaterialShell (DMS) desktop shell?"; then
 	case "$PM" in
 		pacman)
 			dms_pkgs=()
-			[ "$DF_HYPR_ON" = 1 ] && dms_pkgs+=(dms-shell-hyprland)
-			[ "$DF_NIRI_ON" = 1 ] && dms_pkgs+=(dms-shell-niri)
+			if [ "$DF_HYPR_ON" = 1 ]; then dms_pkgs+=(dms-shell-hyprland); fi
+			if [ "$DF_NIRI_ON" = 1 ]; then dms_pkgs+=(dms-shell-niri); fi
 			if [ "${#dms_pkgs[@]}" -eq 0 ]; then
 				# Not an error worth aborting on, but silence here would leave a machine with
 				# a shell answered "yes" and nothing installed, which looks like a broken run.
@@ -311,7 +311,9 @@ if ask_yn DF_DMS "DankMaterialShell (DMS) desktop shell?"; then
 		info "NOT plain 'dms setup' — it wants to write hyprland.lua, which is a stow symlink."
 	fi
 	# `dms setup alttab` is niri-only (per `dms setup --help`), so it is mentioned only here.
-	[ "$DF_NIRI_ON" = 1 ] && info "niri also has:  dms setup alttab   (niri-only subcommand)"
+	if [ "$DF_NIRI_ON" = 1 ]; then
+		info "niri also has:  dms setup alttab   (niri-only subcommand)"
+	fi
 
 	# CachyOS's Niri and Hyprland editions install NOCTALIA, a second full Quickshell shell —
 	# with its own idle daemon, ext-session-lock client and polkit agent, each of which fights
@@ -324,7 +326,15 @@ if ask_yn DF_DMS "DankMaterialShell (DMS) desktop shell?"; then
 	# and its dependency list also carries packages this setup uses. Removal needs a human
 	# reading pacman's list.
 	if [ "$PM" = pacman ] && have pacman; then
-		noctalia_pkgs=$(pacman -Qq 2>/dev/null | grep -E '^(noctalia|cachyos-(hypr|niri|mango|jay)-noctalia)$' | tr '\n' ' ')
+		# The `|| true` is LOAD-BEARING, not defensive noise. grep exits 1 when nothing
+		# matches; `set -o pipefail` makes that the pipeline's status, the command
+		# substitution inherits it, and `set -e` then kills the whole script — SILENTLY,
+		# with no message and exit 1 — on precisely the machines that have no Noctalia,
+		# i.e. the ones with nothing wrong. Shipped broken and hit on mkMac2017 the same
+		# day (2026-08-05), right after Noctalia was removed there. The stub test that
+		# was supposed to cover it only counted "noctalia" in the output, and 0 matches
+		# reads the same whether the warning was skipped or the script died before it.
+		noctalia_pkgs=$(pacman -Qq 2>/dev/null | grep -E '^(noctalia|cachyos-(hypr|niri|mango|jay)-noctalia)$' | tr '\n' ' ' || true)
 		if [ -n "$noctalia_pkgs" ]; then
 			warn "Noctalia is installed alongside DMS: $noctalia_pkgs"
 			warn "  Two shells means two idle daemons, two lock clients and two polkit agents."
@@ -468,4 +478,9 @@ fi
 # ══════════════════════════════════════════════════════════════════════════
 step "8/8  Done"
 info "Open a new shell (or 'exec zsh') to load everything."
-[ "$DRYRUN" -eq 1 ] && info "(dry-run — nothing was actually changed)"
+# Must be an `if`, not `[ … ] && info …`: as the LAST command in the script its status becomes
+# the script's, so the `&&` form made a real (non-dry) run exit 1 after doing everything
+# correctly. Invisible in testing, because --dry-run is exactly the case that makes it true.
+if [ "$DRYRUN" -eq 1 ]; then
+	info "(dry-run — nothing was actually changed)"
+fi
