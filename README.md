@@ -81,12 +81,27 @@ sudo systemctl enable --now sshd
 ```
 
 **2. `ufw` IS enabled, default-deny incoming** — the real difference from plain Arch. Symptom:
-`ping` works, DNS resolves, and `ssh` **times out**. A timeout means *filtered*;
-`Connection refused` would mean sshd isn't listening — that distinction splits the two fastest.
+`ping` works, DNS resolves, and `ssh` **times out**.
 
 ```sh
 sudo ufw allow ssh/tcp
 ```
+
+Read the exact failure before blaming the firewall — the four outcomes mean four different things,
+and only one of them is ufw:
+
+| `ssh` says | Layer | Means |
+|---|---|---|
+| `Connection timed out` | filtered | Host up, **firewall dropping the SYN** ← this section |
+| `Connection refused` | reachable | Host up, **sshd not listening** → step 1 |
+| `No route to host` | L3 | Address resolved but nobody answered — host not on the network, or a stale DHCP lease |
+| `Name or service not known` | DNS/NSS | Never reached the network at all |
+
+For the last two, note that **`dig` bypasses NSS** — it talks DNS straight to the resolver, while
+`ssh` and `ping` go through `/etc/nsswitch.conf`. So "`dig` finds it but `ping` doesn't" is a real
+split, not a contradiction. A `.lan` answer with **TTL 0** is only as fresh as the DHCP lease
+behind it; when a machine changes OS its old lease can keep resolving to an address nobody holds.
+Check the router's lease table, which is authoritative, rather than trusting `.lan` DNS.
 
 Two traps when diagnosing this. `systemctl list-units --state=running` **hides firewall units** —
 they are `Type=oneshot` + `RemainAfterExit=yes`, so they sit in `active (exited)` and the filter
@@ -139,6 +154,31 @@ on any other file dropped via `/etc/skel`.
 Also worth knowing before the first reboot: after switching to the tracked niri config the distro
 shell no longer starts, so the bar and launcher disappear until you enable waybar or spawn the
 shell yourself from your private overlay. That is expected, not a broken install.
+
+### A new SSH key (any OS)
+
+Same on Linux and macOS. Accept the default path (`~/.ssh/id_ed25519`):
+
+```sh
+ssh-keygen -t ed25519 -C "mk@$(hostname -s)"
+```
+
+**No passphrase is the convention here**, and it is load-bearing rather than laziness: the
+`gita-fetch.timer` user unit fetches from the git host on a schedule with no interactive session
+behind it, so a passphrase would mean running an agent and wiring `SSH_AUTH_SOCK` into the unit
+(the line is present but commented out for exactly this reason — see
+[the auto-fetch timer](#periodic-auto-fetch-timer-systemd-user)). Set one only if you also intend
+to solve that.
+
+Then publish it where it is needed — the second command is what you paste into the git forge's
+SSH-keys page, which the clones in the next section both need:
+
+```sh
+ssh-copy-id <user>@<host>
+```
+```sh
+cat ~/.ssh/id_ed25519.pub
+```
 
 ## Clone this repository
 
