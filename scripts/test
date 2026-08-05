@@ -213,6 +213,70 @@ bash -n "$REPO/lib.sh" 2>/dev/null && r=1 || r=0;    ok "$r" 'lib.sh parses'
 bash -n "$REPO/install.sh" 2>/dev/null && r=1 || r=0; ok "$r" 'install.sh parses'
 # install.sh must not grow its own copy of a helper: one definition, in lib.sh.
 is "$(grep -cE '^[a-z_]+\(\) \{' "$REPO/install.sh")" '0' 'install.sh defines no functions of its own'
+# The last statement's status IS the script's exit status, so a trailing `[ … ] && …` makes a
+# successful run exit non-zero whenever the condition is false. That is how install.sh shipped
+# exiting 1 on every real (non-dry) run. The completion test above cannot catch it — it uses
+# --dry-run, which is precisely the case that makes the condition true — so it is asserted here
+# statically instead.
+last="$(grep -vE '^[[:space:]]*(#|$)' "$REPO/install.sh" | tail -1)"
+printf '%s' "$last" | grep -qE '^[[:space:]]*\[ .* \] &&' && r=0 || r=1
+ok "$r" "install.sh does not end in a bare '[ … ] && …'"
+
+# ── install.sh runs to completion ────────────────────────────────────────────
+# A REGRESSION TEST, not a nicety. install.sh twice died mid-run under `set -euo pipefail`
+# while printing nothing that looked like an error: a `grep` with no match inside a command
+# substitution (pipefail promotes grep's exit 1), and a trailing `[ … ] && …` whose false
+# condition became the script's exit status. Both left every later step un-run — including
+# save_answers, so answers were silently never stored.
+#
+# The point is WHAT is asserted. Checking that some warning is absent cannot tell "correctly
+# skipped" from "died before printing it"; only "did it reach the last step, and exit 0" can.
+# Both cases below are needed: the Noctalia probe greps for packages, so the no-match path —
+# a machine with nothing wrong — is the one that used to be fatal.
+section "install.sh runs to completion"
+if command -v stow >/dev/null 2>&1; then
+	d="$(work)"
+	mkdir -p "$d/bin" "$d/home"
+
+	# Stub package manager: keeps this off the real package db and the network, and makes the
+	# run deterministic on non-Arch hosts too (DOTFILES_PM pins the branch). `-Qq` is what the
+	# Noctalia probe reads, so its output is how each case is set up.
+	stub_pm() {
+		{
+			printf '#!/usr/bin/env bash\n'
+			printf 'if [ "$1" = "-Qq" ]; then printf "%%s\\n" bash zsh %s; exit 0; fi\n' "$1"
+			printf 'exit 0\n'
+		} >"$d/bin/pacman"
+		chmod u+x "$d/bin/pacman"
+	}
+	# Every DF_* is exported so the run cannot pick up this machine's stored host.env answers.
+	# An exported DF_* is also never persisted, so no repo is touched.
+	run_install() {
+		PATH="$d/bin:$PATH" HOME="$d/home" DOTFILES_PM=pacman \
+		DF_DESKTOP=0 DF_NIRI=0 DF_HYPR=1 DF_DMS=1 DF_QUADLET=0 DF_ATUIN=0 DF_NODE=0 \
+		DF_TOPGRADE=0 DF_CADDY=0 DF_GO=0 DF_WSL=0 DF_GITA=0 DF_FRESH=0 DF_LESSPIPE=0 \
+		DF_STOW_BACKUP=0 \
+			bash "$REPO/install.sh" --dry-run --yes 2>&1
+	}
+
+	stub_pm ''                     # no Noctalia installed — the case that used to be fatal
+	out="$(run_install)"; rc=$?
+	printf '%s' "$out" | grep -q '8/8  Done' && r=1 || r=0
+	ok "$r" 'reaches the final step with no Noctalia installed'
+	is "$rc" '0' 'exits 0 with no Noctalia installed'
+	is "$(printf '%s' "$out" | grep -c 'Noctalia is installed')" '0' 'no Noctalia warning when none is installed'
+
+	stub_pm 'noctalia cachyos-hypr-noctalia'
+	out="$(run_install)"; rc=$?
+	printf '%s' "$out" | grep -q '8/8  Done' && r=1 || r=0
+	ok "$r" 'reaches the final step with Noctalia installed'
+	is "$rc" '0' 'exits 0 with Noctalia installed'
+	is "$(printf '%s' "$out" | grep -c 'Noctalia is installed')" '1' 'warns when Noctalia is installed alongside DMS'
+
+	rm -rf "$d"
+else
+	skip 'install.sh runs to completion' 'stow not installed'
+fi
 
 printf '\n%d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"
 [ "$FAIL" -eq 0 ]
