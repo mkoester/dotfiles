@@ -69,6 +69,77 @@ changing anything in `lib.sh` (`-v` lists each case).
 > (`apt`), **Fedora** (`dnf`) and **macOS** (`brew`). Pick the one for your system. "Arch" covers
 > CachyOS/EndeavourOS/Manjaro; "Debian" covers Ubuntu/Mint; "Fedora" covers RHEL clones.
 
+## Fresh CachyOS install — three defaults to fix first
+
+CachyOS ships a few things differently from plain Arch, and all three bite *before* you get to
+`install.sh`. Do these first on a new machine.
+
+**1. `sshd` is installed but not enabled.** Arch ships `openssh` without starting the daemon:
+
+```sh
+sudo systemctl enable --now sshd
+```
+
+**2. `ufw` IS enabled, default-deny incoming** — the real difference from plain Arch. Symptom:
+`ping` works, DNS resolves, and `ssh` **times out**. A timeout means *filtered*;
+`Connection refused` would mean sshd isn't listening — that distinction splits the two fastest.
+
+```sh
+sudo ufw allow ssh/tcp
+```
+
+Two traps when diagnosing this. `systemctl list-units --state=running` **hides firewall units** —
+they are `Type=oneshot` + `RemainAfterExit=yes`, so they sit in `active (exited)` and the filter
+reports nothing; ask directly instead:
+
+```sh
+systemctl is-enabled ufw firewalld iptables nftables
+```
+
+And **IPv4 and IPv6 are separate rulesets**: a `.lan` name usually resolves to both an A and a AAAA
+record and the resolver hands out the AAAA first, so a v4-only rule leaves the symptom unchanged.
+A plain port rule like the one above covers both families; a *source-scoped* rule is per-family and
+needs one per family:
+
+```sh
+sudo ufw allow from <lan-v4-cidr> to any port 22 proto tcp
+sudo ufw allow from <lan-v6-prefix>::/64 to any port 22 proto tcp
+```
+
+If you open port 22 unscoped on a laptop that leaves the house, the hardening drop-in stops being
+optional. Get your pubkey into `~/.ssh/authorized_keys` and **verify a key login before restarting
+sshd**, or you lock yourself out of a machine you only reach over the network:
+
+```sh
+sudo tee /etc/ssh/sshd_config.d/10-hardening.conf <<'EOF'
+PermitRootLogin no
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+EOF
+```
+```sh
+sudo sshd -T | grep -iE 'passwordauthentication|permitrootlogin'
+```
+
+**3. The Niri edition drops a shell config into `/etc/skel`, and it blocks `stow`.** Installing
+Niri as the desktop pulls in a complete Quickshell-based shell (Noctalia), whose `config.kdl` is
+copied into your home at user creation. `install.sh` then aborts stowing the `niri` package with
+*"cannot stow … over existing target … since neither a link nor a directory"*. `pacman -Qo` reports
+**no package owns** the file — it came from `/etc/skel`, so moving it aside is safe and nothing
+will restore it:
+
+```sh
+mv ~/.config/niri/config.kdl ~/.config/niri/config.kdl.cachyos
+```
+
+**Never use `stow --adopt` here.** It would pull the distro's config *into this repo*, overwriting
+the tracked skeleton and silently making the repo carry CachyOS's config. Expect the same collision
+on any other file dropped via `/etc/skel`.
+
+Also worth knowing before the first reboot: after switching to the tracked niri config the distro
+shell no longer starts, so the bar and launcher disappear until you enable waybar or spawn the
+shell yourself from your private overlay. That is expected, not a broken install.
+
 ## Clone this repository
 
 **Clone location is permanent.** `stow` symlinks point back into the clone, so wherever this
