@@ -23,8 +23,9 @@
 #   that stops being a quadlet/Node/atuin/... machine really stops loading those aliases.
 #   (Without a workstation-private clone there is nowhere to save — the run says so and still works.)
 #
-# Preseeding (skip prompts): export DF_DESKTOP / DF_NIRI / DF_HYPR / DF_QUADLET / DF_ATUIN /
-#   DF_NODE / DF_CADDY / DF_GO / DF_WSL / DF_GITA / DF_FRESH / DF_LESSPIPE / DF_TOPGRADE = 1|0.
+# Preseeding (skip prompts): export DF_DESKTOP / DF_NIRI / DF_HYPR / DF_DMS / DF_QUADLET /
+#   DF_ATUIN / DF_NODE / DF_CADDY / DF_GO / DF_WSL / DF_GITA / DF_FRESH / DF_LESSPIPE /
+#   DF_TOPGRADE = 1|0.
 #   An exported DF_* beats the stored host.env answer for that one run and is NOT saved, so
 #   `DF_NIRI=0 ./install.sh` is a one-off override rather than a decision.
 #   DF_STOW_BACKUP=1 answers "move conflicting files aside as *.pre-stow-backup?" up front
@@ -225,8 +226,16 @@ else
 	unlink_omz oh-my-zsh-custom auto-notify.zsh
 fi
 
+# Which compositors this run enabled. ask_yn returns a STATUS and does not assign the variable,
+# so the DMS block below cannot read $DF_NIRI/$DF_HYPR to pick its variant — record it here.
+# Deliberately not `have niri`/`have Hyprland`: under --dry-run nothing is installed, and the
+# preview would then silently choose no variant at all.
+DF_NIRI_ON=0
+DF_HYPR_ON=0
+
 # Niri compositor specifically (skip on non-Niri desktops like the Pi 500 / labwc).
 if ask_yn DF_NIRI "Niri compositor (tracked niri config + Firefox placement)?"; then
+	DF_NIRI_ON=1
 	step "  niri: config.kdl skeleton + place-firefox script"
 	case "$PM" in
 		pacman) pm_install niri ;;
@@ -245,6 +254,7 @@ fi
 # pick the session at the greeter, which is exactly how Hyprland gets evaluated without giving
 # up a working niri session.
 if ask_yn DF_HYPR "Hyprland compositor (tracked hyprland.lua)?"; then
+	DF_HYPR_ON=1
 	step "  hyprland: hyprland.lua skeleton"
 	case "$PM" in
 		pacman) pm_install hyprland xdg-desktop-portal-hyprland ;;
@@ -260,6 +270,70 @@ if ask_yn DF_HYPR "Hyprland compositor (tracked hyprland.lua)?"; then
 	fi
 	info "validate before logging in:  Hyprland --verify-config -c ~/.config/hypr/hyprland.lua"
 	info "hyprland machine-specific settings go in ~/.config/hypr/local.lua (require'd by hyprland.lua)."
+fi
+
+# DankMaterialShell (DMS) — the Quickshell-based shell (bar, launcher, notifications, settings,
+# polkit agent). Its OWN question rather than part of DF_HYPR: DMS ships a niri variant too, so
+# "which shell" and "which compositor" are separate axes, and a machine may run either without
+# the other.
+#
+# Packaging, read off the repos (2026-08-05) rather than assumed: `dms-shell` lives in **extra**,
+# not the AUR, and depends on a virtual `dms-shell-compositor`. That is provided by the 0-byte
+# metapackages `dms-shell-hyprland` (-> dms-shell + hyprland) and `dms-shell-niri`
+# (-> dms-shell + niri). So installing `dms-shell` alone does not resolve — exactly one variant
+# must come with it, and both may be installed side by side on a machine carrying both sessions.
+if ask_yn DF_DMS "DankMaterialShell (DMS) desktop shell?"; then
+	step "  dms: shell + a variant per enabled compositor"
+	case "$PM" in
+		pacman)
+			dms_pkgs=()
+			[ "$DF_HYPR_ON" = 1 ] && dms_pkgs+=(dms-shell-hyprland)
+			[ "$DF_NIRI_ON" = 1 ] && dms_pkgs+=(dms-shell-niri)
+			if [ "${#dms_pkgs[@]}" -eq 0 ]; then
+				# Not an error worth aborting on, but silence here would leave a machine with
+				# a shell answered "yes" and nothing installed, which looks like a broken run.
+				warn "DF_DMS is on but neither Niri nor Hyprland was enabled — no dms-shell-<compositor>"
+				warn "  variant to install. Enable a compositor and re-run, or set DF_DMS=0."
+			else
+				pm_install "${dms_pkgs[@]}"
+			fi ;;
+		*)  info "install DankMaterialShell from its own docs on this distro." ;;
+	esac
+	# DMS's config fragments are machine-local and UNTRACKED by design (the GUI writes them), so
+	# nothing is stowed here — only the directory the Hyprland config require()s from.
+	if [ "$DF_HYPR_ON" = 1 ]; then
+		run mkdir -p "$HOME/.config/hypr/dms"
+		info "deploy the DMS fragments yourself, in a TTY (they prompt for compositor + terminal):"
+		info "  dms setup binds && dms setup colors && dms setup layout && dms setup cursor"
+		info "  dms setup windowrules && dms setup outputs"
+		# Plain `dms setup` writes hyprland.lua itself — which is the tracked stow symlink, so it
+		# would either fail or replace the repo's file. Only the per-fragment subcommands are safe.
+		info "NOT plain 'dms setup' — it wants to write hyprland.lua, which is a stow symlink."
+	fi
+	# `dms setup alttab` is niri-only (per `dms setup --help`), so it is mentioned only here.
+	[ "$DF_NIRI_ON" = 1 ] && info "niri also has:  dms setup alttab   (niri-only subcommand)"
+
+	# CachyOS's Niri and Hyprland editions install NOCTALIA, a second full Quickshell shell —
+	# with its own idle daemon, ext-session-lock client and polkit agent, each of which fights
+	# the DMS/swayidle ones (three lockouts on mkMac2014, 2026-07-30). Warn only when DMS was
+	# chosen: on a machine deliberately running Noctalia there is nothing wrong to report.
+	#
+	# DETECT AND WARN ONLY — never remove. `cachyos-{hypr,niri}-noctalia` is the edition's whole
+	# settings package (it Provides cachyos-desktop-settings and depends on hyprland/niri,
+	# xdg-desktop-portal-*, uwsm), so an automated -Rns could uninstall the running compositor,
+	# and its dependency list also carries packages this setup uses. Removal needs a human
+	# reading pacman's list.
+	if [ "$PM" = pacman ] && have pacman; then
+		noctalia_pkgs=$(pacman -Qq 2>/dev/null | grep -E '^(noctalia|cachyos-(hypr|niri|mango|jay)-noctalia)$' | tr '\n' ' ')
+		if [ -n "$noctalia_pkgs" ]; then
+			warn "Noctalia is installed alongside DMS: $noctalia_pkgs"
+			warn "  Two shells means two idle daemons, two lock clients and two polkit agents."
+			warn "  Remove it BY HAND — mark the shared packages explicit first, or -Rns takes them:"
+			warn "    sudo pacman -D --asexplicit brightnessctl grim slurp wl-clipboard qt6ct satty"
+			warn "    sudo pacman -Rns cachyos-hypr-noctalia   # then READ the list before confirming"
+			warn "  See Workstation-Documentation/hardware/intel-mac-cachyos.md (Noctalia section)."
+		fi
+	fi
 fi
 
 if ask_yn DF_QUADLET "Quadlet host (Podman services managed as dedicated users)?"; then

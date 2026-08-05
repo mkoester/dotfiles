@@ -1105,9 +1105,60 @@ a layout name that doesn't exist and a rule referencing an undeclared workspace 
 `config ok` (measured 2026-08-03). See `desktop/wm-comparison.md`.
 
 **Machine-specific overrides go in `~/.config/hypr/local.lua`**, `require`d last by the skeleton
-so it wins: the real monitor block, the xkb keymap path, and which shell to spawn. Supplied
+so it wins: the real monitor block, the xkb keymap path, per-machine binds. (The shell is *not*
+one of them — DMS is spawned by the common skeleton, see below.) Supplied
 per-machine by the private overlay repo and symlinked in by `install.sh`. A machine without one
 still boots — the require is wrapped in `pcall`, and a missing overlay only logs a line.
+
+## dms — DankMaterialShell
+
+The Quickshell-based desktop shell: bar, launcher, notifications, settings GUI, **and a polkit
+agent** (which is why nothing else spawns one — only one agent may register per subject).
+
+**Its own install question, `DF_DMS`, not part of `DF_HYPR`.** DMS ships a niri flavour as well
+as a Hyprland one, so "which shell" and "which compositor" are separate axes: a niri machine can
+adopt DMS without Hyprland, and a Hyprland machine can skip it.
+
+Packaging is the reason the question has to come *after* the compositor questions. `dms-shell`
+lives in **`extra`, not the AUR**, and depends on a virtual `dms-shell-compositor` provided by
+two 0-byte metapackages — so installing the base alone does not resolve, and exactly one variant
+must come with it. Both may be installed side by side on a machine carrying both sessions:
+
+```sh
+paru -S --needed dms-shell-hyprland     # pulls dms-shell + hyprland
+```
+```sh
+paru -S --needed dms-shell-niri         # pulls dms-shell + niri
+```
+
+**Nothing here is stowed.** The ownership rule for this setup is *tracked = hand-written,
+untracked = GUI-written*: `hyprland.lua` is common and public, `local.lua` is per-machine and
+private, and `~/.config/hypr/dms/*.lua` is machine-local and **untracked**, written by
+`dms setup` and by the DMS Settings GUI (Shortcuts / Displays / Theme / Window Rules). Nothing
+DMS writes is a symlink into a repo, so it can never dirty a tracked file or silently replace a
+stow link. `install.sh` only creates the directory.
+
+Deploy the fragments yourself, in a **TTY** — they prompt for compositor and terminal:
+
+```sh
+dms setup binds && dms setup colors && dms setup layout && dms setup cursor
+```
+```sh
+dms setup windowrules && dms setup outputs
+```
+
+**Never run plain `dms setup`** — it wants to write `hyprland.lua` itself, which here is the
+tracked stow symlink. Only the per-fragment subcommands are safe; they touch nothing but
+`~/.config/hypr/dms/`. `dms setup alttab` exists too but is **niri-only**.
+
+`dms setup outputs` is included even though monitors are per-machine: `local.lua` loads later
+and wins, so pinning a monitor there still beats the fragment, while the DMS Displays page can
+still configure outputs `local.lua` does not pin (an external screen, say).
+
+DMS is started from the compositor (`hl.on("hyprland.start", …)`), **not** via the shipped
+`dms.service` systemd unit: that unit is `WantedBy`/`Requisite` `graphical-session.target`, and
+plain Hyprland without uwsm never reaches that target — only `niri-session` does. Spawning it
+from the compositor works on both.
 
 ## hyprlock — screen lock (with fingerprint), driven by swayidle
 
