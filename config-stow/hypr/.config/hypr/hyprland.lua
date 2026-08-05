@@ -2,9 +2,9 @@
 -- Reference: https://wiki.hypr.land/  ·  API stubs: /usr/share/hypr/stubs/hl.meta.lua
 --
 -- THIS REPO IS PUBLIC. Machine- and device-specific bits (real monitor blocks, an absolute
--- xkb keymap path, Bluetooth MAC addresses, which shell this machine runs) must NOT live
--- here. They go in ~/.config/hypr/local.lua, required by the optional block at the bottom —
--- the same skeleton + private-overlay pattern as the niri and kanshi packages.
+-- xkb keymap path, Bluetooth MAC addresses) must NOT live here. They go in
+-- ~/.config/hypr/local.lua, required by the block at the bottom — the same skeleton +
+-- private-overlay pattern as the niri and kanshi packages.
 --
 -- WHY LUA AND NOT hyprland.conf: hyprlang is deprecated since Hyprland 0.55. 0.56.1 still
 -- falls back to a legacy parser when no .lua exists, but that branch is already deleted on
@@ -21,33 +21,39 @@ local mod  = "SUPER"
 local term = "alacritty"
 
 --------------------------------------------------------------------------------
--- Monitors
+-- Module search path — REQUIRED, do not remove
 --------------------------------------------------------------------------------
--- Generic fallback only. Real monitor blocks (connector, mode, scale) are machine-specific
--- and belong in local.lua. `hl.monitor` entries accumulate; the later one wins.
-hl.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto" })
+-- Hyprland resolves `require` relative to the config file's REAL directory. This file is
+-- reached through a stow symlink, so that real directory is the dotfiles clone, not
+-- ~/.config/hypr — and every require below would look in the wrong place. Measured
+-- 2026-08-05: without this, `require("local")` failed with "module 'local' not found"
+-- listing paths under config-stow/hypr/, i.e. the machine overlay had never loaded.
+local hypr_dir = os.getenv("HOME") .. "/.config/hypr/"
+package.path = hypr_dir .. "?.lua;" .. hypr_dir .. "?/init.lua;" .. package.path
+
+-- Optional require: a fragment that is not deployed yet must not abort the whole config.
+-- Returns true if the module loaded. Anything genuinely broken still shows up in the log.
+local function want(name)
+    local ok, err = pcall(require, name)
+    if not ok then print("hyprland.lua: skipped '" .. name .. "': " .. tostring(err)) end
+    return ok
+end
 
 --------------------------------------------------------------------------------
--- Input
+-- Base settings
 --------------------------------------------------------------------------------
+-- Applied BEFORE the DMS fragments, so anything DMS manages (layout, gaps, decoration,
+-- cursor, colors) wins over these. What is left here is what DMS does not own.
 hl.config({
     input = {
         kb_layout          = "us",   -- a custom keymap file is machine-specific -> local.lua
         numlock_by_default = true,
-        follow_mouse       = 1,      -- focus follows mouse, matching the niri config
+        follow_mouse       = 1,
         touchpad           = { natural_scroll = false, tap_to_click = true },
     },
     general = {
-        gaps_in     = 8,
-        gaps_out    = 16,            -- niri config uses gaps 16
-        border_size = 3,
-        layout      = "dwindle",     -- default; scrolling is opted into per workspace below
+        layout = "dwindle",          -- default; scrolling is opted into per workspace below
     },
-    decoration = {
-        rounding = 20,               -- matches the niri window-rule corner radius
-        shadow   = { enabled = true, range = 30, offset = { 0, 5 } },
-    },
-    animations = { enabled = true },
     misc = {
         disable_hyprland_logo    = true,
         disable_splash_rendering = true,
@@ -61,104 +67,121 @@ hl.config({
     },
 })
 
+-- Generic monitor fallback. Real blocks (connector, mode, scale) are machine-specific and
+-- belong in local.lua, which is required last and therefore wins.
+hl.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto" })
+
 --------------------------------------------------------------------------------
--- Workspaces — the whole reason for the move off niri
+-- DMS (DankMaterialShell) — the shell on every desktop machine
+--------------------------------------------------------------------------------
+-- OWNERSHIP RULE for this setup: TRACKED = hand-written, UNTRACKED = GUI-written.
+--   * this file             — common to all machines, tracked in dotfiles (public)
+--   * local.lua             — per machine, tracked in workstation-private
+--   * ~/.config/hypr/dms/*  — machine-local, UNTRACKED, written by `dms setup` and by the
+--                             DMS Settings GUI (Shortcuts / Displays / Theme / Window Rules)
+-- Nothing DMS writes is a symlink into a repo, so DMS can never dirty a tracked file and
+-- can never silently replace a stow link.
+--
+-- DEPLOY THE FRAGMENTS (needs a TTY, prompts for compositor + terminal):
+--   dms setup binds && dms setup colors && dms setup layout && dms setup cursor
+--   dms setup windowrules
+-- Do NOT run plain `dms setup` — it wants to write hyprland.lua itself, which is this
+-- tracked file. The per-fragment subcommands only touch ~/.config/hypr/dms/.
+--
+-- `dms setup outputs` is deliberately NOT in that list: monitors are per-machine and live
+-- in local.lua, which loads later and wins. Requiring it anyway so the DMS Displays page
+-- can still configure outputs local.lua does not pin (e.g. an external screen).
+want("dms.colors")
+want("dms.layout")
+want("dms.cursor")
+want("dms.outputs")
+want("dms.windowrules")
+
+-- DMS's default keybinds are the BASE of the bind set (decided 2026-08-05). They are what
+-- the SUPER+SHIFT+/ cheatsheet and the Settings > Shortcuts page display, and the media and
+-- brightness keys route through `dms ipc` so they raise DMS's on-screen display. Personal
+-- additions come after; `dms.binds-user` (GUI-written) comes last so it wins over both.
+--
+-- Highlights, so this file is readable without launching the cheatsheet:
+--   SUPER+T terminal · SUPER+space spotlight · SUPER+V clipboard · SUPER+X powermenu
+--   SUPER+comma settings · SUPER+Tab/O overview · SUPER+SHIFT+/ cheatsheet
+--   SUPER+Q close · SUPER+F maximize · SUPER+SHIFT+F fullscreen · SUPER+SHIFT+T float
+--   SUPER+<dir|hjkl> focus · SUPER+SHIFT+<dir|hjkl> move · SUPER+CTRL+<dir> focus monitor
+--   SUPER+<n> workspace · SUPER+SHIFT+<n> move to workspace · SUPER+ALT+L lock
+--   SUPER+SHIFT+E exit Hyprland · Print screenshot
+local have_dms_binds = want("dms.binds")
+
+--------------------------------------------------------------------------------
+-- Personal keybinds — additions only, chosen NOT to collide with DMS defaults
+--------------------------------------------------------------------------------
+-- Anything DMS already binds is deliberately absent. Re-adding a key here silently wins
+-- over DMS (last bind on a key replaces the earlier one) and desyncs the cheatsheet from
+-- reality, so add a bind only after checking it against the list above.
+
+-- Applications. SUPER+Return is muscle memory from niri; DMS's own SUPER+T stays too.
+hl.bind(mod .. " + Return", hl.dsp.exec_cmd(term),       { description = "Terminal" })
+hl.bind(mod .. " + B",      hl.dsp.exec_cmd("firefox"),  { description = "Browser" })
+hl.bind(mod .. " + E",      hl.dsp.exec_cmd("nautilus"), { description = "File manager" })
+
+-- Named workspace. DMS binds SUPER+1..9 / SUPER+SHIFT+1..9 for the numbered ones; 0 is free
+-- and the SHIFT-to-move pattern matches DMS's.
+hl.bind(mod .. " + 0",         hl.dsp.focus({ workspace = "name:mail" }),       { description = "Workspace: mail" })
+hl.bind(mod .. " + SHIFT + 0", hl.dsp.window.move({ workspace = "name:mail" }), { description = "Move to mail" })
+
+-- Monitor layout (kanshi profiles; define them in the kanshi package's config.d/).
+-- Note DMS binds SUPER+P to its own output profile cycling — related but a different
+-- mechanism; kanshi stays the source of truth for multi-monitor arrangements here.
+hl.bind(mod .. " + SHIFT + D", hl.dsp.exec_cmd("kanshictl switch docked"), { description = "Monitors: docked" })
+hl.bind(mod .. " + SHIFT + S", hl.dsp.exec_cmd("kanshictl switch solo"),   { description = "Monitors: solo" })
+
+-- Screenshots on CTRL+SHIFT+<n>: Apple keyboards have no Print key, which is what DMS binds.
+-- Routed through `dms screenshot` so both paths behave identically.
+hl.bind("CTRL + SHIFT + 1", hl.dsp.exec_cmd("dms screenshot"),        { description = "Screenshot: region" })
+hl.bind("CTRL + SHIFT + 2", hl.dsp.exec_cmd("dms screenshot full"),   { description = "Screenshot: screen" })
+hl.bind("CTRL + SHIFT + 3", hl.dsp.exec_cmd("dms screenshot window"), { description = "Screenshot: window" })
+
+-- Scrolling-layout motions, on SUPER+ALT+* because the natural keys are all taken by DMS
+-- (SUPER+comma = settings, SUPER+bracket* = preselect, SUPER+CTRL+F = maximize).
+-- Harmless on tiling workspaces — the layout ignores them.
+hl.bind(mod .. " + ALT + period",       hl.dsp.layout("move +col"),     { description = "Scroll: column right" })
+hl.bind(mod .. " + ALT + comma",        hl.dsp.layout("move -col"),     { description = "Scroll: column left" })
+hl.bind(mod .. " + ALT + bracketright", hl.dsp.layout("colresize +conf"), { description = "Scroll: widen" })
+hl.bind(mod .. " + ALT + bracketleft",  hl.dsp.layout("colresize -conf"), { description = "Scroll: narrow" })
+hl.bind(mod .. " + ALT + C",            hl.dsp.layout("fit_into_view"), { description = "Scroll: fit into view" })
+hl.bind(mod .. " + ALT + F",            hl.dsp.layout("fit expand"),    { description = "Scroll: expand" })
+
+-- Fallbacks for the handful of things DMS would otherwise provide, in case its bind
+-- fragment is not deployed on this machine. Only bound when dms.binds did NOT load.
+if not have_dms_binds then
+    hl.bind(mod .. " + Q",         hl.dsp.window.close())
+    hl.bind(mod .. " + SHIFT + T", hl.dsp.window.float({ action = "toggle" }))
+    hl.bind(mod .. " + F",         hl.dsp.window.fullscreen({ mode = 1 }))
+    hl.bind(mod .. " + SHIFT + F", hl.dsp.window.fullscreen())
+    for key, dir in pairs({ left = "l", right = "r", up = "u", down = "d",
+                            H = "l", L = "r", K = "u", J = "d" }) do
+        hl.bind(mod .. " + " .. key,           hl.dsp.focus({ direction = dir }))
+        hl.bind(mod .. " + SHIFT + " .. key,   hl.dsp.window.move({ direction = dir }))
+    end
+    for i = 1, 9 do
+        hl.bind(mod .. " + " .. i,           hl.dsp.focus({ workspace = i }))
+        hl.bind(mod .. " + SHIFT + " .. i,   hl.dsp.window.move({ workspace = i }))
+    end
+    hl.bind(mod .. " + SHIFT + E", hl.dsp.exit())
+end
+
+--------------------------------------------------------------------------------
+-- Workspaces
 --------------------------------------------------------------------------------
 -- niri cannot have named workspaces sort AFTER the numbered ones, so a named workspace
 -- always steals a low index (Workstation-Documentation desktop/niri-workspaces.md).
 -- Hyprland separates the two namespaces: numbered ids stay 1..9 for SUPER+<n>, and a named
--- workspace is addressed by name and kept alive by `persistent`.
---
--- Start with ONE named workspace as the pattern; add chat/editor once it proves out.
+-- workspace is addressed by name and kept alive by `persistent`. This is the whole reason
+-- for the move.
 hl.workspace_rule({ workspace = "name:mail", persistent = true })
 
--- TRY SCROLLING HERE. This is the property no other candidate has: one workspace scrolls,
+-- TRY SCROLLING HERE. The property no other candidate has: one workspace scrolls,
 -- everything else tiles, one line apart. Delete the line to go back to plain tiling.
 hl.workspace_rule({ workspace = "2", layout = "scrolling" })
-
---------------------------------------------------------------------------------
--- Keybinds — deliberately mirroring config-stow/niri/.config/niri/config.kdl
---------------------------------------------------------------------------------
-
--- Applications
-hl.bind(mod .. " + Return",   hl.dsp.exec_cmd(term),      { description = "Terminal" })
-hl.bind(mod .. " + B",        hl.dsp.exec_cmd("firefox"), { description = "Browser" })
-hl.bind(mod .. " + E",        hl.dsp.exec_cmd("nautilus"),{ description = "File manager" })
--- Guarded: not every machine installs wofi (the Macs run the Noctalia launcher instead and
--- repoint this bind in local.lua). An unguarded spawn of a missing binary just logs noise.
-hl.bind(mod .. " + Space",    hl.dsp.exec_cmd("command -v wofi >/dev/null && wofi"), { description = "Launcher" })
--- hyprlock, not swaylock: it authenticates the fingerprint reader itself over fprintd's
--- D-Bus API. Config comes from config-stow/hyprlock/.
-hl.bind(mod .. " + ALT + L",  hl.dsp.exec_cmd("pidof hyprlock >/dev/null || hyprlock"), { description = "Lock" })
-
--- Window management
-hl.bind(mod .. " + Q",         hl.dsp.window.close())
-hl.bind(mod .. " + T",         hl.dsp.window.float({ action = "toggle" }))
-hl.bind(mod .. " + SHIFT + F", hl.dsp.window.fullscreen())
-hl.bind(mod .. " + F",         hl.dsp.window.fullscreen({ mode = 1 }))  -- maximize, keeps decorations
-
--- Focus: arrows and hjkl, same as the niri config
-for key, dir in pairs({ left = "left", right = "right", up = "up", down = "down",
-                        H = "left", L = "right", K = "up", J = "down" }) do
-    hl.bind(mod .. " + " .. key, hl.dsp.focus({ direction = dir }))
-    hl.bind(mod .. " + CTRL + " .. key, hl.dsp.window.move({ direction = dir }))
-end
-
--- Workspaces: SUPER+<n> focus, SUPER+CTRL+<n> move window (CTRL, as in the niri config —
--- Hyprland's own default is SHIFT, but muscle memory wins).
-for i = 1, 9 do
-    hl.bind(mod .. " + " .. i,          hl.dsp.focus({ workspace = i }))
-    hl.bind(mod .. " + CTRL + " .. i,   hl.dsp.window.move({ workspace = i }))
-end
-hl.bind(mod .. " + 0",        hl.dsp.focus({ workspace = "name:mail" }))
-hl.bind(mod .. " + CTRL + 0", hl.dsp.window.move({ workspace = "name:mail" }))
-hl.bind(mod .. " + Tab",      hl.dsp.focus({ workspace = "previous" }))
-
--- Mouse wheel over workspaces, as in niri
-hl.bind(mod .. " + mouse_down", hl.dsp.focus({ workspace = "e+1" }))
-hl.bind(mod .. " + mouse_up",   hl.dsp.focus({ workspace = "e-1" }))
-hl.bind(mod .. " + mouse:272",  hl.dsp.window.drag(),   { mouse = true })
-hl.bind(mod .. " + mouse:273",  hl.dsp.window.resize(), { mouse = true })
-
--- Scrolling-layout motions. Harmless on tiling workspaces (the layout ignores them), so
--- they are bound unconditionally rather than per workspace.
-hl.bind(mod .. " + period",       hl.dsp.layout("move +col"))
-hl.bind(mod .. " + comma",        hl.dsp.layout("move -col"))
-hl.bind(mod .. " + bracketright", hl.dsp.layout("colresize +conf"))
-hl.bind(mod .. " + bracketleft",  hl.dsp.layout("colresize -conf"))
-hl.bind(mod .. " + C",            hl.dsp.layout("fit_into_view"))
-hl.bind(mod .. " + CTRL + F",     hl.dsp.layout("fit expand"))
-
--- Audio / brightness. locked=true keeps them working on the lock screen (niri:
--- allow-when-locked=true).
-local media = {
-    { "XF86AudioRaiseVolume", "wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 0.1+" },
-    { "XF86AudioLowerVolume", "wpctl set-volume @DEFAULT_AUDIO_SINK@ 0.1-" },
-    { "XF86AudioMute",        "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle" },
-    { "XF86AudioMicMute",     "wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle" },
-    { "XF86AudioNext",        "playerctl next" },
-    { "XF86AudioPrev",        "playerctl previous" },
-    { "XF86AudioPlay",        "playerctl play-pause" },
-    { "XF86AudioPause",       "playerctl play-pause" },
-    { "XF86MonBrightnessUp",  "brightnessctl -e4 -n2 set 5%+" },
-    { "XF86MonBrightnessDown","brightnessctl -e4 -n2 set 5%-" },
-}
-for _, m in ipairs(media) do
-    hl.bind(m[1], hl.dsp.exec_cmd(m[2]), { locked = true, repeating = true })
-end
-
--- Monitor layout (kanshi profiles; define them in the kanshi package's config.d/)
-hl.bind(mod .. " + SHIFT + D", hl.dsp.exec_cmd("kanshictl switch docked"))
-hl.bind(mod .. " + SHIFT + S", hl.dsp.exec_cmd("kanshictl switch solo"))
-
--- Screenshots. niri has these built in; Hyprland does not, so shell out — guarded, because
--- the tool set differs per machine (grim+slurp here, hyprshot/grimblast elsewhere).
-hl.bind("CTRL + SHIFT + 1", hl.dsp.exec_cmd("command -v slurp >/dev/null && grim -g \"$(slurp)\" - | wl-copy"))
-hl.bind("CTRL + SHIFT + 2", hl.dsp.exec_cmd("command -v grim >/dev/null && grim - | wl-copy"))
-
--- Exit / power
-hl.bind(mod .. " + SHIFT + P", hl.dsp.dpms("off"))
-hl.bind("CTRL + ALT + Delete", hl.dsp.exit())
 
 --------------------------------------------------------------------------------
 -- Window rules
@@ -194,19 +217,25 @@ hl.env("XDG_CURRENT_DESKTOP", "Hyprland")
 --------------------------------------------------------------------------------
 -- Autostart
 --------------------------------------------------------------------------------
--- NO BAR AND NO POLKIT AGENT ARE SPAWNED HERE — deliberately, for the same reason as the
--- niri skeleton: which shell a machine runs (waybar+wofi vs Noctalia vs DMS) is a per-machine
--- decision, and only one polkit agent may register per subject. Machines spawn their own from
--- local.lua, e.g.  hl.on("hyprland.start", function() hl.exec_cmd("qs -c noctalia-shell") end)
+-- DMS is started here rather than from local.lua: it is now the shell on every desktop
+-- machine, so it belongs in the common config. It also supplies the polkit agent, which is
+-- why nothing else spawns one (only one agent may register per subject).
+--
+-- NOT via the shipped dms.service systemd unit: that unit is WantedBy/Requisite
+-- graphical-session.target, and plain Hyprland (no uwsm installed) never reaches that
+-- target — only niri-session does. Spawning it from the compositor works on both.
+hl.on("hyprland.start", function()
+    hl.exec_cmd("dms run -d")
+end)
 
 --------------------------------------------------------------------------------
--- Machine-/device-specific overrides — required LAST so it wins
+-- GUI-written bind overrides, then machine overrides — LAST so they win
 --------------------------------------------------------------------------------
+-- dms/binds-user.lua is what the DMS Settings > Shortcuts page writes, including
+-- hl.unbind() lines for DMS defaults deleted there. It must load after the personal binds
+-- above so a change made in the GUI actually takes effect.
+want("dms.binds-user")
+
 -- ~/.config/hypr/local.lua, symlinked from workstation-private/<hostname>/hypr/local.lua by
--- install.sh. pcall so a machine without one still boots: a plain require() would abort the
--- whole config with "module 'local' not found".
--- (There is no hl.log in the API — plain print() goes to the Hyprland log.)
-local ok, err = pcall(require, "local")
-if not ok then
-    print("hyprland.lua: no local.lua overlay loaded: " .. tostring(err))
-end
+-- install.sh. Optional: a machine without one still boots.
+want("local")
