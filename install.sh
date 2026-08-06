@@ -169,6 +169,11 @@ run ln -sf "$DOTFILES_REPO/.p10k.zsh" "$HOME/"
 # shell — the runtime half of the file sourced above, which until now only reached the installer.
 # Linked unconditionally and on every host: both files are optional and it no-ops without them.
 link_omz oh-my-zsh-custom host-env.zsh
+# macos.zsh sets up Homebrew's environment and puts the GNU userland (coreutils, gnu-tar, gnu-sed,
+# grep, findutils, gawk) ahead of the BSD one, so scripts written on the Linux boxes behave.
+# Linked unconditionally for the same reason as host-env.zsh: it self-guards on $OSTYPE, so on a
+# Linux host it costs one [[ ]] test and needs no DF_* flag of its own.
+link_omz oh-my-zsh-custom macos.zsh
 
 # ══════════════════════════════════════════════════════════════════════════
 step "5/8  update-os alias for this distro"
