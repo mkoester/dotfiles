@@ -6,7 +6,9 @@
 # preseed its DF_* questions, but nothing sourced it at SHELL time — so `export` lines in it
 # (MUSIC_EXPORT_ROOT and friends) silently never took effect. This file closes that gap.
 #
-# Two files, both optional:
+# Three files, all optional, sourced in this order so the narrower scope wins:
+#   shared/shell.env         tracked  — private but non-secret, identical on every machine
+#                                       (GITLAB_HOST and friends)
 #   <hostname>/host.env      tracked  — DF_* preseeds + non-secret exports
 #   <hostname>/secrets.env   IGNORED  — credentials (ACOUSTID_API_KEY, tokens). Never committed.
 #
@@ -19,9 +21,10 @@
 #   …/dotfiles/oh-my-zsh-custom/host-env.zsh  ->  …/workstation-private/<hostname>/
 () {
   local self=${${(%):-%x}:A}
-  local private=${self:h:h:h}/workstation-private/${(%):-%m}
+  local root=${self:h:h:h}/workstation-private
+  local private=$root/${(%):-%m}
   local f
-  for f in "$private/host.env" "$private/secrets.env"; do
+  for f in "$root/shared/shell.env" "$private/host.env" "$private/secrets.env"; do
     [[ -r $f ]] && source "$f"
   done
   # Both files are optional: a machine with no workstation-private clone (or no dir of its own)

@@ -559,6 +559,7 @@ ln -sf `pwd`/oh-my-zsh-custom/pnpm.zsh $HOME/.oh-my-zsh-custom/
 | `oh-my-zsh-custom/brew-path.zsh` | `.oh-my-zsh-custom` | puts `~/homebrew/bin` on `PATH` | Homebrew installed under `$HOME` |
 | `oh-my-zsh-custom/caddy.zsh` | `.oh-my-zsh-custom` | `caddyedit`/`caddyfmt`/`caddyvalidate`/`caddyreload` | hosts running [Caddy](#caddy-hosts) |
 | `oh-my-zsh-custom/fnm.zsh` | `.oh-my-zsh-custom` | `fnm env --use-on-cd` | [Node machines](#node-machines-fnm--pnpm) |
+| `oh-my-zsh-custom/forge.zsh` | `.oh-my-zsh-custom` | cached `gh`/`glab` completions | [dev machines](#dev-machines-gh--glab) |
 | `oh-my-zsh-custom/fresh.zsh` | `.oh-my-zsh-custom` | points `EDITOR`/`VISUAL`/`nano` at `fresh` | see [fresh](#fresh--terminal-editor) |
 | `oh-my-zsh-custom/gita.zsh` | `.oh-my-zsh-custom` | `gitad`/`gitaw`/`gitar` | see [gita](#gita--multi-repo-git-overview--auto-fetch) |
 | `oh-my-zsh-custom/lesspipe.zsh` | `.oh-my-zsh-custom` | `LESSOPEN` | see [lesspipe](#lesspipe) |
@@ -579,6 +580,41 @@ brew install fnm pnpm        # macOS
 
 On Debian/Fedora there is no distro package — install [fnm](https://github.com/Schniz/fnm#installation)
 and [pnpm](https://pnpm.io/installation) from upstream.
+
+## dev machines (gh + glab)
+
+The two git-forge CLIs: [`gh`](https://cli.github.com) for GitHub and
+[`glab`](https://gitlab.com/gitlab-org/cli) for GitLab. `install.sh`'s **"Dev machine?"**
+question (`DF_DEV`) installs both and links `forge.zsh`.
+
+Its own question rather than part of `DF_NODE`: *writes JavaScript* and *files issues / creates
+repos* are different machine classes — the NAS is the standing counter-example (Node yes, forge
+CLIs no).
+
+```sh
+paru -S github-cli glab          # brew: gh glab
+gh auth login                    # GitHub
+glab auth login --hostname "$GITLAB_HOST"   # scope: api
+glab config set telemetry false -g          # defaults to ON and phones gitlab.com
+```
+
+Notes worth knowing before debugging an auth problem:
+
+- **`GITLAB_HOST` is set from the private repo**, not from here — this repo is public and the
+  self-hosted GitLab's hostname is not. It lives in `workstation-private/shared/shell.env`,
+  which `host-env.zsh` sources into every interactive shell (and `install.sh` sources for its
+  own run, so both see the same value).
+- **It is load-bearing.** glab's built-in default host is `gitlab.com` (`glab config get host`),
+  and glab reads the host from the git remote **only when run inside a repo**. Every out-of-repo
+  call — `glab repo create`, `glab api`, `glab issue list -R …` — goes to gitlab.com without it,
+  which fails looking like an auth problem rather than a wrong-host problem.
+- **`api` scope is enough.** `write_repository` is not needed because git runs over SSH; that
+  scope is only for HTTPS git.
+- **Tokens go to the OS keyring**, not a config file. Nothing on disk holds a credential, so a
+  non-interactive context (timer, hook, script) has none unless given one another way.
+- Completions are **cached** under `$ZSH_CACHE_DIR/completions` rather than `eval`'d per shell
+  (~40 ms each), and regenerate when the cached file is older than the binary — so a package
+  upgrade refreshes them without intervention.
 
 ## topgrade — update everything
 

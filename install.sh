@@ -24,7 +24,7 @@
 #   (Without a workstation-private clone there is nowhere to save — the run says so and still works.)
 #
 # Preseeding (skip prompts): export DF_DESKTOP / DF_NIRI / DF_HYPR / DF_DMS / DF_QUADLET /
-#   DF_ATUIN / DF_NODE / DF_CADDY / DF_GO / DF_WSL / DF_GITA / DF_FRESH / DF_LESSPIPE /
+#   DF_ATUIN / DF_NODE / DF_DEV / DF_CADDY / DF_GO / DF_WSL / DF_GITA / DF_FRESH / DF_LESSPIPE /
 #   DF_TOPGRADE = 1|0.
 #   An exported DF_* beats the stored host.env answer for that one run and is NOT saved, so
 #   `DF_NIRI=0 ./install.sh` is a one-off override rather than a decision.
@@ -70,9 +70,12 @@ if [ -z "$PM" ]; then
 fi
 step "Package manager: $PM"
 
-# ── optional per-machine preseeds from the workstation-private repo ──
-# Nested sibling of this repo: ../workstation-private/<hostname>/host.env sets DF_* flags,
-# SSH_AUTH_SOCK, etc. Sourcing is best-effort; absence is fine.
+# ── optional preseeds from the workstation-private repo ──
+# Nested sibling of this repo: shared/shell.env holds private-but-not-secret values common to
+# every machine (GITLAB_HOST), <hostname>/host.env sets DF_* flags, SSH_AUTH_SOCK, etc.
+# Same order as host-env.zsh reads them at shell start, so an install sees what a shell sees —
+# they must not diverge, or a question's branch behaves differently under install.sh than the
+# environment it is configuring. Sourcing is best-effort; absence is fine.
 HOSTNAME_SHORT="$(hostname -s 2>/dev/null || hostname)"
 PRIVATE_REPO="$(dirname "$DOTFILES_REPO")/workstation-private"
 HOST_DIR="$PRIVATE_REPO/$HOSTNAME_SHORT"
@@ -80,6 +83,10 @@ HOST_DIR="$PRIVATE_REPO/$HOSTNAME_SHORT"
 # the caller exported for this one run — snapshot those first and put them back afterwards.
 declare -A ENV_PRESEED=()
 for _v in $(compgen -v DF_ 2>/dev/null || true); do ENV_PRESEED["$_v"]="${!_v}"; done
+if [ -f "$PRIVATE_REPO/shared/shell.env" ]; then
+	# shellcheck disable=SC1090
+	. "$PRIVATE_REPO/shared/shell.env"
+fi
 if [ -f "$HOST_DIR/host.env" ]; then
 	step "Found host settings: $HOST_DIR/host.env"
 	# shellcheck disable=SC1090
@@ -394,6 +401,36 @@ if ask_yn DF_NODE "Node machine (fnm + pnpm)?"; then
 else
 	unlink_omz oh-my-zsh-custom fnm.zsh
 	unlink_omz oh-my-zsh-custom pnpm.zsh
+fi
+
+# Dev machine: the two git-forge CLIs. Its own question rather than part of DF_NODE — "writes
+# JavaScript" and "files issues / creates repos" are different machine classes, and the NAS is
+# the standing counter-example (Node yes, forge CLIs no).
+if ask_yn DF_DEV "Dev machine (gh + glab forge CLIs)?"; then
+	case "$PM" in
+		pacman) pm_install github-cli glab ;;
+		brew)   pm_install gh glab ;;
+		# Deliberately no dnf/apt package list: both ship gh and glab through vendor repos that
+		# have to be added first, and guessing a package name here would fail as "not found"
+		# rather than as "set up the repo".
+		*)      info "install gh + glab per their upstream instructions (both need a vendor repo on this distro)." ;;
+	esac
+	link_omz oh-my-zsh-custom forge.zsh
+	# GITLAB_HOST is private, so it lives in workstation-private (shared/shell.env) and is
+	# already in this shell if that repo is cloned — hence reading it rather than printing a
+	# hostname into this public repo. Without it, glab defaults to gitlab.com for every
+	# out-of-repo call, which fails in a way that looks like an auth problem.
+	if [ -n "${GITLAB_HOST:-}" ]; then
+		info "log in once per machine (tokens go to the OS keyring, not a config file):"
+		info "  gh auth login"
+		info "  glab auth login --hostname $GITLAB_HOST   # scope: api"
+		info "  glab config set telemetry false -g"
+	else
+		warn "GITLAB_HOST is unset — glab will default to gitlab.com outside a repo."
+		warn "  Set it in workstation-private/shared/shell.env, then open a new shell."
+	fi
+else
+	unlink_omz oh-my-zsh-custom forge.zsh
 fi
 
 if ask_yn DF_TOPGRADE "topgrade (one-shot 'update everything' umbrella)?"; then
