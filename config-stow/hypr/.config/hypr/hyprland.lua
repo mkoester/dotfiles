@@ -224,8 +224,19 @@ hl.env("XDG_CURRENT_DESKTOP", "Hyprland")
 -- NOT via the shipped dms.service systemd unit: that unit is WantedBy/Requisite
 -- graphical-session.target, and plain Hyprland (no uwsm installed) never reaches that
 -- target — only niri-session does. Spawning it from the compositor works on both.
+--
+-- kanshi likewise has to be spawned here. Under niri the session started it; plain Hyprland
+-- starts nothing, so on the first Hyprland login (mkMac2014, 2026-08-06) no kanshi process
+-- existed and the two kanshictl binds above were silently dead. kanshi stays the source of
+-- truth for monitor arrangements because it is compositor-agnostic (Hyprland ships
+-- wlr-output-management-unstable-v1) and the per-machine profiles already live in
+-- workstation-private/<host>/kanshi/. DMS has its own output profiles on SUPER+P; that is a
+-- second mechanism for the same job, deliberately not adopted.
+-- `have kanshi` is not checkable from Lua, so this is a plain exec: on a machine without
+-- kanshi it fails once at startup and costs nothing.
 hl.on("hyprland.start", function()
     hl.exec_cmd("dms run -d")
+    hl.exec_cmd("kanshi")
 end)
 
 --------------------------------------------------------------------------------
