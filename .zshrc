@@ -157,14 +157,28 @@ alias update-omz-you-should-use="echo -n 'Updating omz-you-should-use: ' && git 
 alias update-omz-auto-notify="if [ -d ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/auto-notify ] ; then echo -n 'Updating omz-auto-notify: ' && git -C ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/auto-notify pull; fi"
 alias sys_upgrade="date && uptime && update-os && update-dotfiles && update-omz-autosuggestions && update-omz-syntax-highlighting && update-omz-you-should-use && update-omz-auto-notify && update-omz-p10k && omz update"
 
-# set PATH so it includes user's private bin if it exists
-if [ -d "$HOME/bin" ] ; then
-    export PATH="$HOME/bin:$PATH"
-fi
+# Keep $path unique. zsh ties the `path` array to $PATH, and the -U attribute makes it discard a
+# duplicate on assignment, keeping the FIRST occurrence — so every prepend below becomes
+# idempotent, as does any added later, without each one needing its own membership test.
+#
+# Without this the prepends accumulate: each is guarded only by "does the directory exist", so a
+# nested interactive shell re-adds every entry. Measured 2026-08-07 on mkMac2014 before this
+# line: ~/.local/bin appeared THREE times in $PATH, and one more nesting level made it four.
+# Harmless for lookup (the first hit wins) but it made `echo $PATH` unreadable.
+#
+# oh-my-zsh-custom/macos.zsh has carried `typeset -U path` since long before this; it is now
+# redundant there but left alone, being macOS-only and untestable from here.
+typeset -U path
 
-[[ -d "$HOME/.local/bin" ]] && export PATH="$HOME/.local/bin:$PATH"
-[[ -d "$HOME/.cargo/bin" ]] && export PATH="$HOME/.cargo/bin:$PATH" # Rust binaries
-[[ -d "$HOME/go/bin" ]] && export PATH="$HOME/go/bin:$PATH" # Go binaries
+# The prepends below assign the `path` ARRAY, not the PATH string, and that is load-bearing:
+# -U dedupes on array assignment, but a scalar `export PATH="$dir:$PATH"` slips a duplicate
+# through even with the attribute set (measured 2026-08-07 — ~/.local/bin still landed twice,
+# and re-running `typeset -U path` afterwards collapsed it to one). zsh keeps `path` tied to
+# PATH and exported, so nothing needs re-exporting. Same form atuin.zsh already uses.
+[[ -d "$HOME/bin" ]]         && path=("$HOME/bin" $path)          # user's private bin
+[[ -d "$HOME/.local/bin" ]]  && path=("$HOME/.local/bin" $path)   # pipx, agy, codex, gitaw-panel
+[[ -d "$HOME/.cargo/bin" ]]  && path=("$HOME/.cargo/bin" $path)   # Rust binaries
+[[ -d "$HOME/go/bin" ]]      && path=("$HOME/go/bin" $path)       # Go binaries
 
 [[ -d /opt/bin ]] && export PATH="/opt/bin:$PATH"
 
@@ -177,3 +191,9 @@ fi
 if [ -d "$HOME/.oh-my-zsh-custom" ] ; then
     for FILE in `find -L "$HOME/.oh-my-zsh-custom" -type f -name "*.zsh"`; source $FILE
 fi
+
+# NOTE for AI-CLI installers (Antigravity, Codex, …): they append a PATH line HERE, and because
+# ~/.zshrc is a stow symlink that edit lands in this PUBLIC repo — the Antigravity one hardcoded
+# an absolute /home/<user> path. Remove any such line: ~/.local/bin is already on PATH from line
+# 165, and oh-my-zsh-custom/agent-cli.zsh (linked by the installer's DF_DEV question) owns
+# anything else those tools need. After running one, `git diff` in the dotfiles clone.

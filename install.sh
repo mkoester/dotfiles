@@ -416,6 +416,10 @@ if ask_yn DF_DEV "Dev machine (gh + glab forge CLIs)?"; then
 		*)      info "install gh + glab per their upstream instructions (both need a vendor repo on this distro)." ;;
 	esac
 	link_omz oh-my-zsh-custom forge.zsh
+	# agent-cli.zsh rides on the same flag: a machine that files issues is the machine that runs
+	# the AI CLIs. It is a separate file because it owns a separate concern — see its header for
+	# why it exists at all (their installers edit the stow-symlinked ~/.zshrc, i.e. this repo).
+	link_omz oh-my-zsh-custom agent-cli.zsh
 	# GITLAB_HOST is private, so it lives in workstation-private (shared/shell.env) and is
 	# already in this shell if that repo is cloned — hence reading it rather than printing a
 	# hostname into this public repo. Without it, glab defaults to gitlab.com for every
@@ -431,6 +435,7 @@ if ask_yn DF_DEV "Dev machine (gh + glab forge CLIs)?"; then
 	fi
 else
 	unlink_omz oh-my-zsh-custom forge.zsh
+	unlink_omz oh-my-zsh-custom agent-cli.zsh
 fi
 
 if ask_yn DF_TOPGRADE "topgrade (one-shot 'update everything' umbrella)?"; then
