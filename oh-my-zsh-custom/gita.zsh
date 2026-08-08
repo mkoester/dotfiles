@@ -45,19 +45,22 @@ gitaw() {
 # what `gita ll -g` and `gitaw` print top to bottom:
 #   1. okf        — the vault, outside the workspace_* glob
 #   2. workspace_*— one group per workspace, nested members included
-#   3. src        — ~/src, the live stow clones (dotfiles, workstation-private)
+#   3. src        — ~/src, the stow clones (dotfiles, workstation-private)
 #   4. Projects   — everything else directly in ~/Projects
 # Any group from outside these roots keeps its own position, ahead of these four.
 #
-# ~/src comes after the workspaces because gita derives a repo's NAME from the
-# add order: the first repo to claim a basename keeps it, every later one is
-# disambiguated as <parent>/<basename>. ~/src and workspace_homelab both hold
-# `dotfiles` and `workstation-private`, and the workspace dev clones are the ones
-# worth typing — so they are added first and ~/src's copies become
-# src/dotfiles and src/workstation-private. Adding okf first costs nothing (no
-# name collides with it) and buys the display order outright, which is why there
-# is no separate reordering step: gita has no reorder command, so the only way to
-# control group order is to add in it.
+# gita has no reorder command, so the only way to control group order is to add in
+# it — that is the whole reason this function is a plain sequence of adds with no
+# fix-up pass, and why okf goes first (no name collides with it, so its position
+# is free).
+#
+# Ordering used to carry a second meaning: gita derives a repo's NAME from the add
+# order, the first repo to claim a basename keeps it, and later ones are
+# disambiguated as <parent>/<basename>. ~/src and workspace_homelab both held
+# `dotfiles` and `workstation-private`, so the workspaces were added first to keep
+# the short names for the clones being edited. Since 2026-08-08 there is ONE clone
+# of each, in ~/src, so nothing collides and they take the short names. Order
+# below is unchanged; it now fixes display position only.
 gitar() {
 	local projects="$HOME/Projects" src="$HOME/src"
 	# gita's own config-dir resolution (common.get_config_dir), so an overridden

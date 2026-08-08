@@ -186,6 +186,10 @@ cat ~/.ssh/id_ed25519.pub
 lands is where `~/.gitconfig` and friends resolve to forever. `~/src/dotfiles` is the canonical
 spot — do this first, before installing or running stow.
 
+**One clone per machine, and this is it.** Don't keep a second copy elsewhere to work in: the
+round trip through *push → pull → stow* is exactly the drift it looks like it prevents. Editors
+and tooling should point at this path (an editor workspace can reference it without cloning it).
+
 ```sh
 mkdir -p $HOME/src && git clone https://github.com/mkoester/dotfiles.git $HOME/src/dotfiles
 ```
@@ -842,18 +846,20 @@ Groups come out in the order they are added, and that order *is* the order `gita
 |---|---|---|
 | 1 | `okf` | the vault, which sits outside the `workspace_*` glob |
 | 2 | `workspace_*` | one group per workspace, nested members included |
-| 3 | `src` | `~/src` — the live stow clones (`src/dotfiles`, `src/workstation-private`) |
+| 3 | `src` | `~/src` — the stow clones (`dotfiles`, `workstation-private`) |
 | 4 | `Projects` | everything else directly in `~/Projects`, added one repo per call |
 
-Add order carries two meanings at once, which is why `~/src` sits below the workspaces:
+Add order carries two meanings at once:
 
-- **The first repo to claim a basename keeps it.** `~/src` and `workspace_homelab` both hold
-  `dotfiles` and `workstation-private`; the workspaces are added first so the *dev* clones keep
-  the short names you actually type, and the live clones become `src/dotfiles` and
-  `src/workstation-private` (gita disambiguates a duplicate basename by prefixing the parent).
 - **Group order is file order, and gita has no reorder command** — so the only lever is the
   order of the `gita add` calls. okf goes first because nothing collides with its name, which
   buys its position for free and keeps gitar a plain sequence of adds with no fix-up pass.
+- **The first repo to claim a basename keeps it** (later ones are disambiguated by prefixing the
+  parent). This used to be the *reason* `~/src` sat below the workspaces: `~/src` and
+  `workspace_homelab` both held `dotfiles` and `workstation-private`, and adding the workspaces
+  first kept the short names for the clones being edited. **Since 2026-08-08 there is one clone of
+  each, in `~/src`**, so nothing collides and they take the short names. The order is unchanged —
+  it now fixes display position only.
 
 Also worth knowing: **a repo whose directory has been deleted is dropped silently.** gita
 validates paths on read, so such a ghost sits in `repos.csv` but is absent from the registry
