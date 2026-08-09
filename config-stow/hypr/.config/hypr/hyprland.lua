@@ -234,9 +234,30 @@ hl.env("XDG_CURRENT_DESKTOP", "Hyprland")
 -- second mechanism for the same job, deliberately not adopted.
 -- `have kanshi` is not checkable from Lua, so this is a plain exec: on a machine without
 -- kanshi it fails once at startup and costs nothing.
+-- kanshi is spawned with its output KEPT, and retried. History (mkDell, 2026-08-09): the
+-- bare `hl.exec_cmd("kanshi")` that used to be here started kanshi at login and it EXITED,
+-- leaving no daemon — `kanshictl` then fails with "Couldn't connect to kanshi at
+-- $XDG_RUNTIME_DIR/… Is the kanshi daemon running?", which reads like a broken profile and
+-- is not: the same config applies cleanly when kanshi is run by hand a minute later.
+--
+-- What it actually was, as far as the evidence goes: at that login
+-- ~/.config/kanshi/config.d/ held only .gitkeep, so the PUBLIC skeleton's generic `docked`
+-- profile applied — and on this machine that puts a 2560-wide output at 1920,0 against a
+-- 3440-wide primary, a 1520 px overlap. Once the machine's own profile was linked, kanshi
+-- succeeded on the FIRST attempt at the next login (one "--- hyprland.start" in the log,
+-- then a clean apply, no retry). So the thing that fixed it was the profile, and this loop
+-- is unproven insurance against a slow-start race that may not exist.
+--
+-- So all that is kept is the LOG, which is the half that earned its place: it is what turned
+-- "the daemon isn't running" into a readable cause. The leading echo means the log's mere
+-- existence proves this wrapper ran, so "no log" and "log with an error" are different
+-- findings rather than one ambiguous silence. A retry loop stood here briefly and was
+-- dropped: it never fired even on the failing machine, so it was insurance against a race
+-- nothing has yet shown to exist.
+--   Check after a login:  pgrep -af kanshi ; cat $XDG_RUNTIME_DIR/kanshi-start.log
 hl.on("hyprland.start", function()
     hl.exec_cmd("dms run -d")
-    hl.exec_cmd("kanshi")
+    hl.exec_cmd([[sh -c '{ echo "--- hyprland.start"; exec kanshi; } >>$XDG_RUNTIME_DIR/kanshi-start.log 2>&1']])
 end)
 
 --------------------------------------------------------------------------------
