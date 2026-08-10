@@ -293,13 +293,19 @@ hl.workspace_rule({ workspace = "name:term",    persistent = true })
 -- whose title settles later — which is exactly the restored-Firefox case
 -- (desktop/niri-window-placement.md). The Hyprland answer is an event handler; see below.
 hl.window_rule({ match = { class = "firefox", title = "^Picture-in-Picture$" }, float = true })
-hl.window_rule({ match = { class = "thunderbird", title = "Alias" }, float = true })
+-- Thunderbird's real class is UNCONFIRMED (see the block below), so every rule that targets it
+-- is emitted once per candidate spelling. The Alias float rule had the same latent bug as the
+-- workspace rule: it matched lowercase only.
+local thunderbird_classes = { "thunderbird", "Thunderbird", "org.mozilla.Thunderbird" }
+for _, tb in ipairs(thunderbird_classes) do
+    hl.window_rule({ match = { class = tb, title = "Alias" }, float = true })
+end
 
 -- App -> static workspace. Class strings are NOT recalled; each was read from the shipped
 -- .desktop file's StartupWMClass or off a live window (2026-08-10, mkMac2014):
---   thunderbird  StartupWMClass=thunderbird   (lowercase — this also settles the open
---                question in Workstation-Documentation/desktop/niri-workspaces.md, where
---                the capital-T niri rule was suspected never to have fired)
+--   thunderbird  UNCONFIRMED — `StartupWMClass=thunderbird` in the .desktop file, but the
+--                lowercase rule demonstrably did not fire (2026-08-10). See the Thunderbird
+--                block below; all three spellings are bound until a live window is read.
 --   firefox      StartupWMClass=firefox,  confirmed live via `hyprctl -j clients` — used only
 --                by the Picture-in-Picture float rule above; firefox is intentionally NOT
 --                pinned to a workspace (see below)
@@ -309,7 +315,21 @@ hl.window_rule({ match = { class = "thunderbird", title = "Alias" }, float = tru
 -- Hyprland links libre2, so these match as RE2 regexes — but each variant is written as its
 -- own literal rule rather than one alternation, so the config is correct whether matching is
 -- regex or literal, and a wrong variant fails visibly (app does not move) instead of quietly.
-hl.window_rule({ match = { class = "thunderbird" }, workspace = "name:mail" })
+-- Thunderbird: all three spellings bound, because the lowercase one DID NOT WORK (2026-08-10 —
+-- a manually started Thunderbird stayed on the current workspace with this rule loaded).
+--
+-- The mistake worth not repeating: `StartupWMClass=thunderbird` was read out of the shipped
+-- .desktop file and treated as settling the question. It does not. A .desktop file is a
+-- PREDICTOR of the window class, not a measurement of it — exactly the caveat already written
+-- down for Brave two sections below and then not applied here. The binary carries all three
+-- strings (`thunderbird`, `Thunderbird`, `org.mozilla.Thunderbird`), so it cannot discriminate
+-- either. Mozilla apps report a capitalised WM_CLASS under XWayland, which is the likely cause.
+--
+-- PRUNE THESE once `hyprctl -j clients | grep -i class` has been read off a live Thunderbird.
+for _, tb in ipairs(thunderbird_classes) do
+    hl.window_rule({ match = { class = tb }, workspace = "name:mail" })
+end
+
 hl.window_rule({ match = { class = "floorp" },      workspace = "name:google" })
 
 -- The herdr terminal, matched on the custom class set by `alacritty --class herdr` (both in the
