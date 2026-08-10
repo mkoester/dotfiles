@@ -328,8 +328,8 @@ hl.window_rule({ match = { class = "floorp" },                  workspace = "nam
 hl.window_rule({ match = { class = "brave-browser" },           workspace = "name:social" })
 hl.window_rule({ match = { class = "code" },                    workspace = "name:code" })
 
--- The herdr terminal, matched on the custom class set by `alacritty --class herdr` (both in the
--- login autostart and in the workspace's on_created_empty). Plain Alacritty windows are class
+-- The herdr terminal, matched on the custom class set by `alacritty --class herdr` in the login
+-- autostart at the bottom of this file. Plain Alacritty windows are class
 -- "Alacritty" and are deliberately NOT matched here — they must stay openable anywhere, the
 -- same reasoning as firefox below.
 hl.window_rule({ match = { class = "herdr" }, workspace = "name:herdr" })
@@ -392,15 +392,13 @@ hl.env("XDG_CURRENT_DESKTOP", "Hyprland")
 -- `have kanshi` is not checkable from Lua, so this is a plain exec: on a machine without
 -- kanshi it fails once at startup and costs nothing.
 --
--- LOGIN AUTOSTART (2026-08-10). `on_created_empty` on the workspace rules is NOT enough:
--- measured after a real reboot, the persistent workspaces came up created-but-empty and nothing
--- launched. So Hyprland does not treat "persistent workspace materialised at startup" as
--- "workspace created empty" — that hook fires on navigation, not at boot. Anything wanted at
--- login has to be exec'd here.
+-- LOGIN AUTOSTART (2026-08-10). This is the ONLY launcher: `on_created_empty` never fires on a
+-- `persistent` workspace at all — not at boot and not on navigation either (see the workspace
+-- section above, measured twice). Anything wanted at login has to be exec'd here.
 --
--- The two rules still cooperate rather than duplicate: each app lands on its workspace by its
--- WINDOW RULE, not by which workspace happens to be focused, so it does not matter that these
--- run before any workspace is visited.
+-- Placement is not this handler's job: each app lands on its workspace by its WINDOW RULE, not by
+-- which workspace happens to be focused, so it does not matter that these run before any
+-- workspace is visited.
 --
 -- Only these two autostart, by request — the browsers stay manual.
 --
