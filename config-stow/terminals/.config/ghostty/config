@@ -1,0 +1,54 @@
+# ghostty — config file is THIS one, `config`, with no extension.
+#
+# There is a sibling `config.ghostty` in this directory (0 bytes, created 2026-08-02) that is
+# NOT read: the only filename in the ghostty 1.3.1 binary is the bare string `config`, and
+# `ghostty +show-config` confirms which file actually took effect. Left in place rather than
+# deleted, but do not put settings in it — an ignored config file fails silently.
+#
+# MesloLGS Nerd Font in every terminal (MK, 2026-08-10), from `ttf-meslo-nerd` 3.5.0-1.
+# Use the FULL family name: `MesloLGS NF`, the abbreviation powerlevel10k's docs use, resolves
+# to Noto Sans here (`fc-match "MesloLGS NF"`). A bad font name never errors, it just renders
+# in the fallback — verify with `ghostty +show-config | grep font-family`.
+font-family = MesloLGS Nerd Font
+font-size = 12
+
+# CTRL+C COPIES WHEN THERE IS A SELECTION, OTHERWISE INTERRUPTS.
+#
+# This is a keybind PREFIX, not an action — which is why it is invisible to
+# `ghostty +list-actions` (85 actions, none of them a smart-copy) and why grepping the binary
+# for a kitty-style `copy_or_interrupt` finds nothing. Ghostty expresses the behaviour by
+# making an ordinary binding conditional instead of by adding a new action.
+#
+# Verified in the source at the tag actually installed here (v1.3.1), not recalled:
+#   src/input/Binding.zig:48  `performable: bool` — "True if this binding should only be
+#     triggered if the action can be performed. If the action can't be performed then the
+#     binding acts as if it doesn't exist."
+#   src/Surface.zig:5333      `.copy_to_clipboard` returns true only inside
+#     `if (self.io.terminal.screens.active.selection) |sel|`, and `return false` otherwise.
+#
+# So: selection present -> copies and consumes the key; no selection -> the binding "does not
+# exist" and ctrl+c reaches the program as usual (SIGINT in a shell, cancel in a TUI).
+# Equivalent to kitty's `copy_or_noop`, which is what ~/.config/kitty/kitty.conf uses.
+#
+# `:mixed` matches ghostty's own default for ctrl+shift+c (plain + styled formats).
+keybind = performable:ctrl+c=copy_to_clipboard
+
+# CTRL+V PASTES — UNCONDITIONALLY, and note the DELIBERATE ABSENCE of `performable:` here.
+#
+# Adding that prefix would parse fine and do nothing: src/Surface.zig:6169 is
+# `.paste => {}, // always allowed`, so the action can always be performed and the binding
+# always consumes the key. kitty has no `paste_or_noop` either — there is no smart paste in
+# any of the three terminals, so this is unconditional or nothing.
+#
+# Accepted cost (MK, 2026-08-10, "I almost never use vim anyway"):
+#   vim/neovim  blockwise-visual mode — no alias, genuinely lost
+#   zsh/bash    quoted-insert — cheap, CTRL+Q still does it (measured: zsh `bindkey` gives
+#               "^V" quoted-insert, and bash reports it on both \C-q and \C-v)
+# ghostty's default CTRL+SHIFT+V stays bound too, so this only adds a second way to paste.
+keybind = ctrl+v=paste_from_clipboard
+
+# NOT AVAILABLE HERE: plain middle-click paste inside a mouse-grabbing TUI (herdr et al.).
+# Ghostty has mouse *options* (mouse-hide-while-typing, mouse-shift-capture, mouse-reporting,
+# mouse-scroll-multiplier) but no mouse BINDING map, so middle-click cannot be remapped at all.
+# shift+middle-click still works, via mouse-shift-capture. kitty is the terminal that can do it
+# (`mouse_map middle release grabbed,ungrabbed paste_from_selection`).

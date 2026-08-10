@@ -1258,6 +1258,58 @@ Note the `before-sleep` line backgrounds hyprlock with a 1 s guard. hyprlock has
 swayidle waits for the before-sleep command to *return* while holding the sleep inhibitor — a bare
 `hyprlock` would block suspend until you unlocked.
 
+## terminals — ghostty (default), kitty, alacritty
+
+One stow package, three terminal emulators, stowed together under `DF_DESKTOP`:
+
+```sh
+cd config-stow && stow -t $HOME terminals && cd ..
+```
+
+| | Config | Role |
+|---|---|---|
+| **ghostty** | `~/.config/ghostty/config` | **default since 2026-08-10** — what `hyprland.lua`'s `term`, niri's `MOD+RETURN` and the three class-pinned launchers spawn |
+| **kitty** | `~/.config/kitty/kitty.conf` | fallback |
+| **alacritty** | `~/.config/alacritty/alacritty.toml` | previous default, kept working |
+
+**Why one package and not three**, against this repo's usual one-package-per-tool habit: these
+are alternatives of the same thing, kept deliberately consistent (MesloLGS Nerd Font, Nord
+palette, the same clipboard keys) so that a fallback is actually usable when reached. Their
+configs live in three separate directories, so stow folds them with no conflict. **A fallback you
+have to configure before you can use it is not a fallback.**
+
+Tracked only since 2026-08-10. Before that all three were hand-made on `mkDell` and synced
+nowhere, so every other machine got a terminal with none of the keybinds and none of the font —
+the same silent-divergence failure that got herdr's `config.toml` tracked.
+
+**Expect a stow conflict on `mkDell` and any machine with hand-made configs.** That is
+`DF_STOW_BACKUP`'s job (moves them aside as `*.pre-stow-backup`); diff the backup afterwards in
+case it carried a local tweak.
+
+### Font — use the full name
+
+`MesloLGS Nerd Font`, from `ttf-meslo-nerd`. **Not `MesloLGS NF`**, the abbreviation
+powerlevel10k's own docs use: it does not resolve here and silently falls back to Noto Sans. A
+wrong font name never errors, so check any change with `fc-match "<name>"` and confirm the family
+it echoes back is the one you asked for.
+
+### Clipboard keys
+
+Configured in ghostty and kitty (not alacritty, which cannot do the first one):
+
+- **Ctrl+C** copies when there is a selection, otherwise falls through to the application.
+  ghostty: `keybind = performable:ctrl+c=copy_to_clipboard` — a keybind *prefix*, not an action,
+  so it is invisible to `ghostty +list-actions`. kitty: `map ctrl+c copy_or_noop`.
+- **Ctrl+V** pastes, **unconditionally** — no conditional form exists in any terminal, because
+  paste can always be performed. Costs vim's blockwise-visual; `Ctrl+Q` still gives you
+  `quoted-insert` in zsh and bash.
+- **Middle-click** pastes inside mouse-grabbing TUIs (herdr) in **kitty only**, via
+  `mouse_map middle release grabbed,ungrabbed paste_from_selection`. In ghostty and alacritty use
+  **shift+middle-click**.
+
+Full comparison incl. the window-class trap that forced the `mk.*` class renames:
+`Workstation-Documentation/desktop/terminal-emulator-comparison.md`.
+
 ## waybar — supervised restart
 
 Waybar crashes around output add/remove (hotplug, docking, `kanshictl switch`, monitor blanking) —

@@ -203,7 +203,15 @@ if ask_yn DF_DESKTOP "Wayland desktop (bar, monitor profiles, notifications)?"; 
 		# hyprlock is the fleet locker (it drives fprintd itself, so the fingerprint works
 		# without a keypress). Arch-family only: it is NOT packaged on Debian/arm64, which is
 		# why the Pi 500 stays on swaylock — don't add it to the apt branch.
-		pacman) pm_install libnotify kanshi waybar swayidle hyprlock ;;
+		#
+		# ghostty is here because it is the DEFAULT TERMINAL as of 2026-08-10: both
+		# hyprland.lua's `term` and niri's MOD+RETURN spawn it by name, and three class-pinned
+		# launchers (herdr, the hyprbinds cheat sheet, gitaw) call it explicitly. Without the
+		# binary those keybinds do nothing at all, with no error anywhere — the same silent
+		# shape as the missing `fzf` noted in the DF_HYPR block. Not added to apt/dnf: ghostty
+		# is not in Debian/Fedora's standard repos, so a package name there would be a guess
+		# that fails as "not found" rather than as "set up the vendor repo".
+		pacman) pm_install libnotify kanshi waybar swayidle hyprlock ghostty ;;
 		apt)    pm_install libnotify-bin ;;
 		dnf)    pm_install libnotify ;;
 		brew)   : ;;
@@ -225,6 +233,22 @@ if ask_yn DF_DESKTOP "Wayland desktop (bar, monitor profiles, notifications)?"; 
 		run mkdir -p "$HOME/.config/hypr"
 		stow_pkg "$HOME" hyprlock
 	fi
+	# Terminal emulator configs: ghostty (the default since 2026-08-10), kitty (fallback) and
+	# alacritty (previous default, kept working). Tracked since 2026-08-10 — before that all
+	# three were hand-made on mkDell and synced nowhere, so any other machine got a terminal
+	# with none of the keybinds or the font. Same silent-divergence failure as herdr's config.
+	#
+	# ONE package for three terminals, deliberately, against this repo's usual one-package-per-
+	# tool habit: they are alternatives of the same thing and are kept consistent on purpose
+	# (MesloLGS Nerd Font, Nord, the same clipboard keys), so a fallback stays usable. Their
+	# configs live in three separate directories, so stow folds them with no conflict.
+	#
+	# NO `have` GUARD, unlike hyprlock directly above — and the difference is the point. A
+	# missing hyprlock config makes hyprlock EXIT rather than lock, so file and binary must
+	# arrive together; a config for a terminal that is not installed is simply an inert file.
+	# Guarding here would instead mean a machine that later installs kitty silently gets an
+	# unconfigured one.
+	stow_pkg "$HOME" terminals
 	# per-machine kanshi profiles from workstation-private, if present
 	if [ -d "$HOST_DIR/kanshi" ]; then
 		run_sh "ln -sf \"$HOST_DIR/kanshi/\"* \"$HOME/.config/kanshi/config.d/\""
