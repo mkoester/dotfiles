@@ -267,7 +267,10 @@ hl.workspace_rule({ workspace = "name:social",  persistent = true, on_created_em
 -- instead the workspace starts a terminal already attached to the herdr session. Note this
 -- re-fires whenever the workspace goes empty, not only at login — quit herdr and come back and
 -- you get a fresh one, which is the intended behaviour.
-hl.workspace_rule({ workspace = "name:herdr",   persistent = true, on_created_empty = "alacritty -e herdr" })
+-- `--class herdr` gives the terminal its own class so it can be pinned by a window rule
+-- (below) without dragging every other Alacritty window along. Keep this string identical to
+-- the autostart line in the hyprland.start handler.
+hl.workspace_rule({ workspace = "name:herdr",   persistent = true, on_created_empty = "alacritty --class herdr -e herdr" })
 
 -- term: deliberately bare — a scratch terminal workspace, nothing pinned, nothing autostarted.
 -- Add `on_created_empty = term` if you want SUPER+T to keep launching a terminal the way DMS's
@@ -308,6 +311,16 @@ hl.window_rule({ match = { class = "thunderbird", title = "Alias" }, float = tru
 -- regex or literal, and a wrong variant fails visibly (app does not move) instead of quietly.
 hl.window_rule({ match = { class = "thunderbird" }, workspace = "name:mail" })
 hl.window_rule({ match = { class = "floorp" },      workspace = "name:google" })
+
+-- The herdr terminal, matched on the custom class set by `alacritty --class herdr` (both in the
+-- login autostart and in the workspace's on_created_empty). Plain Alacritty windows are class
+-- "Alacritty" and are deliberately NOT matched here — they must stay openable anywhere, the
+-- same reasoning as firefox below.
+hl.window_rule({ match = { class = "herdr" }, workspace = "name:herdr" })
+
+-- If login focus-jumping becomes annoying (both autostarted apps open on workspaces you are not
+-- on, and `focus_on_activate = true` is set at the top), add `no_initial_focus = true` to these
+-- two rules — verified a valid field. Left off because it also affects manual launches.
 
 -- NO firefox -> name:browser rule, on purpose. A new firefox window must be able to open on
 -- whatever workspace you are on; pinning it would yank every window to `browser`. This also
@@ -376,9 +389,29 @@ hl.env("XDG_CURRENT_DESKTOP", "Hyprland")
 -- second mechanism for the same job, deliberately not adopted.
 -- `have kanshi` is not checkable from Lua, so this is a plain exec: on a machine without
 -- kanshi it fails once at startup and costs nothing.
+-- LOGIN AUTOSTART (2026-08-10). `on_created_empty` on the workspace rules is NOT enough:
+-- measured after a real reboot, the persistent workspaces came up created-but-empty and nothing
+-- launched. So Hyprland does not treat "persistent workspace materialised at startup" as
+-- "workspace created empty" — that hook fires on navigation, not at boot. Anything wanted at
+-- login has to be exec'd here.
+--
+-- The two rules still cooperate rather than duplicate: each app lands on its workspace by its
+-- WINDOW RULE, not by which workspace happens to be focused, so it does not matter that these
+-- run before any workspace is visited.
+--
+-- Only these two autostart, by request — the browsers stay manual.
 hl.on("hyprland.start", function()
     hl.exec_cmd("dms run -d")
     hl.exec_cmd("kanshi")
+
+    -- -> name:mail via the thunderbird window rule.
+    hl.exec_cmd("thunderbird")
+
+    -- -> name:herdr via the `herdr` class rule. `--class` is what makes this pinnable at all:
+    -- a bare `alacritty` is class "Alacritty" like every other terminal, so a rule on it would
+    -- drag EVERY terminal to the herdr workspace. Keep this command identical to the one in the
+    -- workspace's on_created_empty, or the two paths produce differently-classed windows.
+    hl.exec_cmd("alacritty --class herdr -e herdr")
 end)
 
 --------------------------------------------------------------------------------
