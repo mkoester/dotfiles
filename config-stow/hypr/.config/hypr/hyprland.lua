@@ -201,6 +201,25 @@ end
 hl.bind(mod .. " + ALT + D", hl.dsp.exec_cmd("kanshictl switch docked"), { description = "Monitors: docked" })
 hl.bind(mod .. " + ALT + S", hl.dsp.exec_cmd("kanshictl switch solo"),   { description = "Monitors: solo" })
 
+-- Keybind cheat sheet, on DMS's own cheat-sheet key. TAKEN DELIBERATELY (MK, 2026-08-10) via
+-- unbind, because ours strictly supersedes it: DMS renders its OWN static bind list and cannot
+-- see `hl.unbind()`, so its sheet still labels SUPER+M "processlist" and SUPER+T "terminal" —
+-- the two keys this config took. `hyprbinds` reads `hyprctl -j binds` instead, so an unbound key
+-- is simply absent and the sheet cannot go stale.
+--
+-- Without the unbind BOTH sheets open on one press (binds accumulate — see the note above).
+--
+-- ABSOLUTE PATH, NOT A BARE `hyprbinds`. ~/.local/bin is put on PATH by .zshrc, i.e. only for
+-- INTERACTIVE shells — a process the compositor spawns inherits the session environment, where
+-- nothing has added it. A bare name therefore fails to exec, alacritty exits instantly, and the
+-- keybind looks dead with no error anywhere. herdr and alacritty are unaffected because they
+-- live in /usr/bin. Built from $HOME so no home directory is hardcoded, same as the xkb path.
+local cheatsheet = os.getenv("HOME") .. "/.local/bin/hyprbinds"
+hl.unbind(mod .. " + SHIFT + Slash")
+hl.bind(mod .. " + SHIFT + Slash",
+        hl.dsp.exec_cmd("alacritty --class hyprbinds -e " .. cheatsheet .. " --fzf"),
+        { description = "Keybind cheat sheet" })
+
 -- Screenshots on CTRL+SHIFT+<n>: Apple keyboards have no Print key, which is what DMS binds.
 -- Routed through `dms screenshot` so both paths behave identically.
 hl.bind("CTRL + SHIFT + 1", hl.dsp.exec_cmd("dms screenshot"),        { description = "Screenshot: region" })
@@ -333,6 +352,11 @@ hl.window_rule({ match = { class = "code" },                    workspace = "nam
 -- "Alacritty" and are deliberately NOT matched here — they must stay openable anywhere, the
 -- same reasoning as firefox below.
 hl.window_rule({ match = { class = "herdr" }, workspace = "name:herdr" })
+
+-- The cheat sheet floats and stays on the CURRENT workspace — deliberately no `workspace`
+-- field, unlike every rule above: a reference you open mid-task must not yank you elsewhere.
+-- Same `--class` trick as herdr, since a terminal has no class of its own to match on.
+hl.window_rule({ match = { class = "hyprbinds" }, float = true, size = "55% 70%" })
 
 -- If login focus-jumping becomes annoying (both autostarted apps open on workspaces you are not
 -- on, and `focus_on_activate = true` is set at the top), add `no_initial_focus = true` to these

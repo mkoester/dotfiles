@@ -1,0 +1,15 @@
+[
+  { "modmask": 64, "key": "space",     "description": "",                "dispatcher": "__lua", "arg": "1" },
+  { "modmask": 64, "key": "M",         "description": "Workspace: mail", "dispatcher": "__lua", "arg": "2" },
+  { "modmask": 64, "key": "Q",         "description": "",                "dispatcher": "__lua", "arg": "3" },
+  { "modmask": 64, "key": "left",      "description": "",                "dispatcher": "__lua", "arg": "4" },
+  { "modmask": 64, "key": "H",         "description": "",                "dispatcher": "__lua", "arg": "5" },
+  { "modmask": 0,  "key": "XF86AudioMute", "description": "",            "dispatcher": "__lua", "arg": "6" },
+  { "modmask": 64, "key": "1",         "description": "",                "dispatcher": "__lua", "arg": "7" },
+  { "modmask": 64, "key": "2",         "description": "",                "dispatcher": "__lua", "arg": "8" },
+  { "modmask": 64, "key": "3",         "description": "",                "dispatcher": "__lua", "arg": "9" },
+  { "modmask": 64, "key": "mouse:272", "description": "Move window",     "dispatcher": "__lua", "arg": "10" },
+  { "modmask": 64, "key": "code:20",   "description": "Expand window left", "dispatcher": "__lua", "arg": "11" },
+  { "modmask": 72, "key": "G",         "description": "Workspace: git",  "dispatcher": "__lua", "arg": "12" },
+  { "modmask": 64, "key": "Return",    "description": "Terminal",        "dispatcher": "__lua", "arg": "13" }
+]

@@ -278,5 +278,69 @@ else
 	skip 'install.sh runs to completion' 'stow not installed'
 fi
 
+section 'hyprbinds — keybind cheat sheet'
+HB="$REPO/config-stow/hypr/.local/bin/hyprbinds"
+FX="$REPO/tests/fixtures"
+if ! command -v python3 >/dev/null 2>&1; then
+	skip 'hyprbinds' 'python3 not installed'
+else
+	# Both inputs are fixtures, so this never needs a compositor or a DMS install.
+	hb() { python3 "$HB" --binds-json "$FX/hyprbinds-binds.json" --dms-lua "$FX/hyprbinds-dms.lua" "$@"; }
+	# Bind rows are indented; group headers start with the box-drawing rule. Counting every
+	# non-empty line would silently count headers as binds.
+	rows() { hb "$@" | grep -c '^ '; }
+
+	is "$(rows --view all)" '13' 'all view keeps every live bind'
+
+	# Classification. SUPER+M is the one that matters: DMS declares it, we unbound it and rebound
+	# it with our own description — the exact case DMS's own cheat sheet gets wrong.
+	is "$(rows --view mine)" '3' 'mine view = our binds only'
+	is "$(rows --view dms)" '10' 'dms view = DMS binds only'
+	hb --view mine | grep -q '^ \* SUPER+M .*Workspace: mail$' && r=1 || r=0
+	ok "$r" 'a DMS key we rebound is attributed to us, with our label'
+	# Anchored: an unanchored 'SUPER+M' also matches SUPER+MOUSE:272 and passes for the wrong reason.
+	hb --view dms | grep -q '^SUPER+M ' && r=0 || r=1
+	ok "$r" 'that key no longer appears as a DMS bind'
+
+	# Labels for DMS rows must come from the .lua file: the live table only says "__lua".
+	hb --view dms | grep -q 'SUPER+SPACE .*Spotlight: toggle$' && r=1 || r=0
+	ok "$r" 'an undescribed DMS bind is labelled from its dispatcher'
+	hb --view dms | grep -q 'SUPER+Q .*Close window' && r=1 || r=0
+	ok "$r" 'a non-exec dispatcher is labelled too'
+
+	# Curated view: 13 -> drop 3 noise -> merge the arrow/letter twin -> collapse the digit run.
+	is "$(rows --view curated)" '7' 'curated view drops noise, merges aliases, collapses digits'
+	is "$(hb --view curated | grep -c 'XF86\|MOUSE:\|CODE:')" '0' 'curated drops XF86, mouse and keycode binds'
+	hb --view curated | grep -q 'SUPER+LEFT / SUPER+H .*Focus left' && r=1 || r=0
+	ok "$r" 'arrow and letter twins merge into one row'
+	hb --view curated | grep -q 'SUPER+1…3 .*Focus workspace 1…3' && r=1 || r=0
+	ok "$r" 'a numbered-workspace run collapses to one row'
+
+	# Ours are never curated away, however noisy the key looks.
+	is "$(hb --view curated | grep -c '^ \*')" '3' 'curated always keeps our own binds'
+
+	# The no-DMS machine. Without this the fallback silently files everything as [dms] and the
+	# sheet claims a plain-Hyprland box is running DMS.
+	is "$(python3 "$HB" --binds-json "$FX/hyprbinds-binds.json" --dms-lua /nonexistent --view mine | grep -c '^ \*')" '13' \
+		'with no DMS bind file, every bind is ours'
+
+	# Grouping. Headers must appear, and every bind must land under one -- a row whose group is
+	# unmapped falls into "Other", which is the tell that DMS renamed a section.
+	# 4, not 7: the fixture only populates Workspaces, Windows, Focus & movement and Launchers.
+	is "$(hb --view curated | grep -c '^── ')" '4' 'curated renders one header per non-empty group'
+	is "$(hb --view all | grep -c '^── Other ')" '0' 'no bind falls through to the Other group'
+
+	# The label is the LAST field and is never padded, so it cannot be pushed off a narrow
+	# window -- which is what the old right-hand [src] column did.
+	is "$(hb --view curated | grep '^ ' | grep -c ' $')" '0' 'no row has trailing padding'
+
+	# Colour is opt-in: piped output must stay plain so these greps match text, not escapes.
+	is "$(hb --view curated | grep -c $'\033')" '0' 'piped output carries no ANSI escapes'
+	# Every line is coloured (header or bind), so the count equals the line count -- asserting a
+	# literal would just re-encode the fixture size.
+	is "$(hb --view curated --color | grep -c $'\033')" "$(hb --view curated | grep -c .)" \
+		'the --color flag colours every line'
+fi
+
 printf '\n%d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"
 [ "$FAIL" -eq 0 ]

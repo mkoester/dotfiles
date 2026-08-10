@@ -1,0 +1,420 @@
+#!/usr/bin/env python3
+"""hyprbinds — a keybind cheat sheet built from the LIVE Hyprland bind table.
+
+    hyprbinds [--view curated|all|mine|dms] [--fzf]
+
+Why this exists: DMS ships its own cheat sheet on SUPER+SHIFT+Slash, but it renders DMS's
+own static list and cannot see `hl.unbind()`. So it still labels SUPER+M "processlist" and
+SUPER+T "terminal" long after those keys were taken. Reading `hyprctl -j binds` instead makes
+the sheet correct by construction: a key that was unbound is simply not in the table.
+
+WHAT THE LIVE TABLE CAN AND CANNOT TELL US (measured 2026-08-10, Hyprland 0.56.1)
+--------------------------------------------------------------------------------
+Every bind from a Lua config reports `dispatcher: "__lua"` and `arg: "<n>"`, where n is an
+opaque callback index:
+
+    { "modmask": 64, "key": "space", "description": "", "dispatcher": "__lua", "arg": "7" }
+
+So the live table is authoritative for WHICH keys are bound and for whatever `description`
+the config set -- and carries NO information about what a bind does. That is the single fact
+this whole script is shaped around, and it rules out the obvious design of labelling rows
+from the dispatcher.
+
+Consequences:
+
+  * Labels for DMS's binds must come from parsing ~/.config/hypr/dms/binds.lua, which is the
+    only place their meaning exists. Conveniently every line there is a literal
+    `hl.bind("SUPER + X", hl.dsp.…)`, so it parses with a regex and no Lua interpreter.
+  * Our own binds need no parsing at all: they set `description`, so the live table already
+    carries their labels. This matters because our config builds keys with loops and
+    `mod .. " + " .. w.key` concatenation, which a regex could not follow.
+
+CLASSIFICATION IS BY KEY, NOT BY DESCRIPTION
+--------------------------------------------
+DMS sets `description` on only 4 of its 118 binds, so "has a description" alone would file
+~114 DMS rows as unknown. The test is inverted instead:
+
+    key present in dms/binds.lua  ->  dms
+    …but with a description DMS's file does not set for it  ->  mine (we took the key)
+    key absent from dms/binds.lua ->  mine
+
+The middle case is what makes SUPER+M and SUPER+T come out as ours rather than as stale DMS
+rows -- i.e. exactly the bug in DMS's own sheet.
+
+If dms/binds.lua does not exist (a machine running plain Hyprland), every live bind is
+reported as `mine`, which is then true.
+
+TESTING
+-------
+Both inputs can be replaced with fixtures, which is what dotfiles/scripts/test drives:
+
+    hyprbinds --binds-json tests/fixtures/binds.json --dms-lua tests/fixtures/dms-binds.lua
+
+Without those it shells out to `hyprctl`, so the tests never need a compositor.
+"""
+
+import argparse
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+
+# Hyprland modmask bits. SUPER=64 and ALT=8 were confirmed against real output (SUPER+space
+# and ALT+space are lines 5-6 of dms/binds.lua and report 64 / 8); the rest are Hyprland's
+# standard XKB order. Order here is the order they render in.
+MODS = [(64, "SUPER"), (4, "CTRL"), (8, "ALT"), (1, "SHIFT")]
+
+DMS_LUA = os.path.expanduser("~/.config/hypr/dms/binds.lua")
+
+# --- curated view -------------------------------------------------------------------------
+# Dropped from the default view only; `--view all` always shows everything. These are rules
+# about NOISE, not about importance -- edit freely, nothing else depends on them.
+#
+#   XF86*     dedicated hardware keys (volume, brightness, media). Nothing to memorise.
+#   mouse*    click and wheel binds; you already know you can drag a window.
+#   code:NN   raw keycodes. DMS binds code:20/21 as duplicates of SUPER+minus/equal.
+CURATED_DROP = re.compile(r"XF86|MOUSE|CODE:", re.I)
+
+# --- grouping ------------------------------------------------------------------------------
+# DMS's own section comments are close to useful but too fine-grained (five separate sections
+# just for workspaces), so they are folded into these. Render order is this order.
+GROUPS = ["Workspaces", "Windows", "Focus & movement", "Launchers",
+          "Displays", "Screenshots", "Media & hardware", "System", "Other"]
+
+DMS_SECTION_GROUP = {
+    "Application Launchers": "Launchers",
+    "Cheat sheet": "System",
+    "Security": "System",
+    "System Controls": "System",
+    "Display Profiles": "Displays",
+    "Screenshots": "Screenshots",
+    "Audio Controls": "Media & hardware",
+    "Brightness Controls": "Media & hardware",
+    "Window Management": "Windows",
+    "Column Management": "Windows",
+    "Sizing & Layout": "Windows",
+    "Manual Sizing": "Windows",
+    "Move/resize windows with mainMod + LMB/RMB and dragging": "Windows",
+    "Focus Navigation": "Focus & movement",
+    "Window Movement": "Focus & movement",
+    "Column Navigation": "Focus & movement",
+    "Monitor Navigation": "Focus & movement",
+    "Move to Monitor": "Focus & movement",
+    "Mouse Wheel Navigation": "Focus & movement",
+    "Touchpad Gestures": "Focus & movement",
+    "Workspace Navigation": "Workspaces",
+    "Workspace Management": "Workspaces",
+    "Move Workspaces": "Workspaces",
+    "Numbered Workspaces": "Workspaces",
+    "Move to Numbered Workspaces": "Workspaces",
+}
+
+# Our own binds have no sections -- but their descriptions are already written as
+# "<topic>: <thing>", so the topic IS the group. That is why this needs no per-bind config.
+OUR_PREFIX_GROUP = {
+    "workspace": "Workspaces",
+    "move to workspace": "Workspaces",
+    "monitors": "Displays",
+    "scroll": "Windows",
+    "screenshot": "Screenshots",
+    "bluetooth": "Media & hardware",
+}
+OUR_LABEL_GROUP = {
+    "terminal": "Launchers",
+    "file manager": "Launchers",
+    "launch gitaw": "Launchers",
+    "keybind cheat sheet": "System",
+}
+
+
+def group_for(label, section):
+    """Group from the label's own topic prefix first, then DMS's section, then Other."""
+    head = label.split(":", 1)[0].strip().lower() if ":" in label else ""
+    if head in OUR_PREFIX_GROUP:
+        return OUR_PREFIX_GROUP[head]
+    if label.strip().lower() in OUR_LABEL_GROUP:
+        return OUR_LABEL_GROUP[label.strip().lower()]
+    return DMS_SECTION_GROUP.get(section, "Other")
+
+
+def sh(cmd):
+    return subprocess.run(cmd, capture_output=True, text=True, check=True).stdout
+
+
+def canon_key(modmask, key):
+    """(64, 'space') -> 'SUPER+SPACE'. Uppercased so the two sources compare directly:
+    dms/binds.lua writes 'Slash' and 'Page_Down', hyprctl reports its own casing."""
+    parts = [name for bit, name in MODS if modmask & bit]
+    parts.append(str(key).strip().upper())
+    return "+".join(parts)
+
+
+def canon_lua_key(spec):
+    """'SUPER + SHIFT + Slash' -> 'SUPER+SHIFT+SLASH', with modifiers in MODS order so a
+    differently-ordered spec still matches the live table."""
+    tokens = [t.strip().upper() for t in spec.split("+") if t.strip()]
+    names = [n for _, n in MODS]
+    mods = [n for n in names if n in tokens]
+    rest = [t for t in tokens if t not in names]
+    return "+".join(mods + rest)
+
+
+# Dispatcher -> human label. Only covers what dms/binds.lua actually uses; anything else
+# falls through to the raw expression, which is ugly but never wrong.
+DIRS = {"l": "left", "r": "right", "u": "up", "d": "down"}
+
+
+def label_from_dispatch(expr, section):
+    """Turn a `hl.dsp.…` expression from dms/binds.lua into something readable."""
+    expr = expr.strip()
+
+    # Both quoting styles DMS uses: exec_cmd("…") and exec_cmd([[… "" …]]). Anchoring on the
+    # opening delimiter and stopping at its partner is what keeps the trailing `")` of the
+    # surrounding call out of the label.
+    m = re.search(r'exec_cmd\(\s*(?:\[\[(.*?)\]\]|"(.*?)")', expr, re.S)
+    if m:
+        cmd = (m.group(1) or m.group(2)).strip()
+        # `dms ipc call spotlight toggle` reads better as `Spotlight: toggle`; the prefix is
+        # pure plumbing and repeats on nearly every DMS bind.
+        c = re.sub(r"^dms ipc (call|outputs)\s*", "", cmd).strip()
+        if c != cmd:
+            bits = c.split()
+            # Capitalise WITHOUT lowering the rest: str.capitalize() would turn the
+            # camelCase IPC verbs into "Cycleprofile" / "Focusortoggle".
+            head = bits[0].replace("-", " ")
+            head = head[:1].upper() + head[1:]
+            return f"{head}: {' '.join(bits[1:])}" if len(bits) > 1 else head
+        return cmd
+
+    for pat, out in (
+        (r"window\.close", "Close window"),
+        (r"window\.drag", "Move window (drag)"),
+        (r"window\.resize\(\)", "Resize window (drag)"),
+        (r"group\.toggle", "Toggle group"),
+        (r"dpms", "Monitors off/on"),
+        (r"exit", "Exit Hyprland"),
+    ):
+        if re.search(pat, expr):
+            return out
+
+    m = re.search(r'fullscreen\(\{\s*mode\s*=\s*"(\w+)"', expr)
+    if m:
+        return "Maximize" if m.group(1) == "maximized" else "Fullscreen"
+    if "window.float" in expr:
+        return "Toggle floating"
+
+    m = re.search(r'(focus|window\.move)\(\{\s*(direction|monitor|workspace|window)\s*=\s*"?([\w+\-]+)"?', expr)
+    if m:
+        verb = "Focus" if m.group(1) == "focus" else "Move window to"
+        what, val = m.group(2), m.group(3)
+        if what == "direction":
+            return f"{verb} {DIRS.get(val, val)}"
+        if what == "monitor":
+            return f"{verb} monitor {DIRS.get(val, val)}"
+        if what == "window":
+            return f"{verb} {val} window"
+        if val == "e+1":
+            return f"{verb} next workspace"
+        if val == "e-1":
+            return f"{verb} previous workspace"
+        return f"{verb} workspace {val}"
+
+    m = re.search(r'window\.resize\(\{\s*x\s*=\s*(-?\d+),\s*y\s*=\s*(-?\d+)', expr)
+    if m:
+        x, y = int(m.group(1)), int(m.group(2))
+        axis = "width" if x else "height"
+        return ("Grow " if (x or y) > 0 else "Shrink ") + axis
+
+    m = re.search(r'hl\.dsp\.layout\("([^"]+)"\)', expr)
+    if m:
+        return "Layout: " + m.group(1)
+
+    return f"{section}: {expr}" if section else expr
+
+
+def parse_dms(path):
+    """-> {canonical key: (label, description_set_by_dms_or_None)}
+
+    Section comments (`-- === Audio Controls ===`) are tracked so an unrecognised dispatcher
+    still gets a meaningful prefix rather than a bare expression."""
+    out = {}
+    if not path or not os.path.exists(path):
+        return out
+    section = ""
+    for line in open(path, encoding="utf-8"):
+        m = re.match(r"\s*--\s*=+\s*(.*?)\s*=*\s*$", line)
+        if m and m.group(1):
+            section = m.group(1)
+            continue
+        m = re.match(r'\s*hl\.bind\("([^"]+)"\s*,\s*(.*)$', line)
+        if not m:
+            continue
+        key, rest = m.group(1), m.group(2)
+        desc = None
+        d = re.search(r'description\s*=\s*"([^"]*)"', rest)
+        if d:
+            desc = d.group(1)
+        # Strip the trailing options table so only the dispatcher expression is left.
+        expr = re.sub(r",\s*\{[^{}]*\}\s*\)\s*$", ")", rest.rstrip())
+        expr = expr.rstrip(")").strip() + ")" if not expr.endswith(")") else expr
+        out[canon_lua_key(key)] = (desc or label_from_dispatch(expr, section), desc, section)
+    return out
+
+
+def load_binds(path):
+    raw = open(path, encoding="utf-8").read() if path else sh(["hyprctl", "-j", "binds"])
+    return json.loads(raw)
+
+
+def collect(binds_json, dms_lua):
+    dms = parse_dms(dms_lua)
+    rows = []
+    for b in binds_json:
+        key = canon_key(b.get("modmask", 0), b.get("key") or b.get("keycode") or "?")
+        desc = (b.get("description") or "").strip()
+        if key in dms:
+            dms_label, dms_desc, section = dms[key]
+            # A description the DMS file does not set for this key means we rebound it.
+            if desc and desc != (dms_desc or ""):
+                rows.append((key, desc, "mine", group_for(desc, section)))
+            else:
+                rows.append((key, dms_label, "dms", group_for(dms_label, section)))
+        else:
+            lab = desc or "(no description)"
+            rows.append((key, lab, "mine", group_for(lab, "")))
+    return rows
+
+
+def merge_aliases(rows):
+    """Collapse rows that do the same thing under different keys.
+
+    DMS binds every motion twice (arrows and hjkl), which is 30+ duplicate rows. Merging on
+    an identical (label, source) is data-driven -- no hardcoded key list to drift -- and
+    yields `SUPER+H / SUPER+left  Focus left`."""
+    seen, order = {}, []
+    for key, label, src, grp in rows:
+        k = (label, src, grp)
+        if k not in seen:
+            seen[k] = []
+            order.append(k)
+        seen[k].append(key)
+    out = []
+    for label, src, grp in order:
+        keys = seen[(label, src, grp)]
+        # Cap the alias list: DMS binds "move to next workspace" FOUR ways, and spelling all
+        # of them blows the key column past any sane width. Two is enough to recognise it.
+        shown = " / ".join(keys[:2]) + (f" (+{len(keys) - 2})" if len(keys) > 2 else "")
+        out.append((shown, label, src, grp))
+    return out
+
+
+def collapse_digits(rows):
+    """`SUPER+1 Focus workspace 1` … `SUPER+9 Focus workspace 9` -> one row.
+
+    Kept separate from merge_aliases because these labels genuinely DIFFER (per workspace),
+    so no label-equality rule can catch them."""
+    groups, order, out = {}, [], []
+    for key, label, src, grp in rows:
+        m = re.match(r"^(.*?)(\d)$", key)
+        n = re.match(r"^(.*?)(\d)$", label)
+        if m and n and m.group(2) == n.group(2):
+            k = (m.group(1), n.group(1), src, grp)
+            if k not in groups:
+                groups[k] = []
+                order.append(("g", k))
+            groups[k].append(int(m.group(2)))
+        else:
+            order.append(("r", (key, label, src, grp)))
+    for kind, item in order:
+        if kind == "r":
+            out.append(item)
+        elif item in groups:
+            digits = sorted(groups.pop(item))
+            kp, lp, src, grp = item
+            span = f"{digits[0]}…{digits[-1]}" if len(digits) > 2 else "/".join(map(str, digits))
+            out.append((f"{kp}{span}", f"{lp}{span}", src, grp))
+    return out
+
+
+def build(view, binds_json, dms_lua):
+    rows = collect(binds_json, dms_lua)
+    if view == "mine":
+        rows = [r for r in rows if r[2] == "mine"]
+    elif view == "dms":
+        rows = [r for r in rows if r[2] == "dms"]
+    elif view == "curated":
+        rows = [r for r in rows if r[2] == "mine" or not CURATED_DROP.search(r[0])]
+        rows = collapse_digits(merge_aliases(rows))
+    # Group order first, then yours ahead of DMS's inside each group -- yours are the ones you
+    # actually need reminding of.
+    rows.sort(key=lambda r: (GROUPS.index(r[3]) if r[3] in GROUPS else len(GROUPS),
+                             r[2] != "mine", r[1].lower()))
+    return rows
+
+
+def render(rows, color=False):
+    """Grouped, with the source as a LEFT-HAND marker.
+
+    The source used to be a third column at the right (`[mine]`), which the window simply cut
+    off -- a column you cannot see is not a column. A leading `*` cannot be clipped, survives
+    any window width, and stays greppable. The label goes last and is never padded, so nothing
+    depends on guessing a terminal width."""
+    if not rows:
+        return ""
+    dim, grn, cyn, rst = ("\033[2m", "\033[32m", "\033[36m", "\033[0m") if color else ("",) * 4
+    # Width is per GROUP, not global: one 46-char alias row in "Focus & movement" otherwise
+    # indents every short key in every other group behind it.
+    widths = {}
+    for key, _, _, grp in rows:
+        widths[grp] = max(widths.get(grp, 0), len(key))
+    out, current = [], None
+    for key, label, src, grp in rows:
+        if grp != current:
+            current = grp
+            w = widths[grp]
+            out.append(f"{cyn}── {grp} {'─' * max(0, 58 - len(grp))}{rst}")
+        mark = f"{grn}*{rst}" if src == "mine" else " "
+        keyc = f"{grn}{key}{rst}" if src == "mine" else f"{dim}{key}{rst}"
+        pad = " " * (w - len(key))
+        out.append(f" {mark} {keyc}{pad}  {label}")
+    return "\n".join(out)
+
+
+def main():
+    p = argparse.ArgumentParser(description="Hyprland keybind cheat sheet")
+    p.add_argument("--view", default="curated", choices=["curated", "all", "mine", "dms"])
+    p.add_argument("--fzf", action="store_true", help="interactive picker with view switching")
+    p.add_argument("--color", action="store_true", help="force ANSI colour (fzf reload uses this)")
+    p.add_argument("--binds-json", help="read bind JSON from a file instead of hyprctl (tests)")
+    p.add_argument("--dms-lua", default=DMS_LUA)
+    a = p.parse_args()
+
+    if a.fzf:
+        if not shutil.which("fzf"):
+            sys.exit("hyprbinds: fzf not installed")
+        self = os.path.abspath(__file__)
+        # --view is re-read on every reload, so switching is a fresh run against the LIVE
+        # table rather than a cached list -- reload after `hyprctl reload` shows the change.
+        binds = ",".join(
+            f"alt-{i}:reload({self} --color --view {v})"
+            for i, v in enumerate(["curated", "all", "dms", "mine"], start=1)
+        )
+        out = subprocess.run(
+            ["fzf", "--ansi", "--reverse", "--no-sort", "--info=inline",
+             "--prompt=binds> ",
+             "--header=ALT+1 curated  ALT+2 all  ALT+3 dms  ALT+4 mine   ·   ESC closes",
+             f"--bind={binds}"],
+            input=render(build(a.view, load_binds(a.binds_json), a.dms_lua), color=True),
+            text=True,
+        )
+        sys.exit(out.returncode if out.returncode in (0, 130) else 0)
+
+    # Colour on a terminal, plain when piped -- so the tests compare text, not escape codes.
+    print(render(build(a.view, load_binds(a.binds_json), a.dms_lua),
+                 color=a.color or sys.stdout.isatty()))
+
+
+if __name__ == "__main__":
+    main()

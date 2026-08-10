@@ -268,8 +268,11 @@ fi
 if ask_yn DF_HYPR "Hyprland compositor (tracked hyprland.lua)?"; then
 	DF_HYPR_ON=1
 	step "  hyprland: hyprland.lua skeleton"
+	# fzf drives the `hyprbinds` cheat sheet on SUPER+SHIFT+Slash (stowed below as
+	# .local/bin/hyprbinds). Without it that keybind opens a terminal that immediately exits
+	# with "fzf not installed" — which looks like a broken bind rather than a missing package.
 	case "$PM" in
-		pacman) pm_install hyprland xdg-desktop-portal-hyprland ;;
+		pacman) pm_install hyprland xdg-desktop-portal-hyprland fzf ;;
 		*)      info "install hyprland from its own docs on this distro." ;;
 	esac
 	# Shared with the hyprlock package (~/.config/hypr): mkdir first so stow does not fold the
@@ -280,6 +283,7 @@ if ask_yn DF_HYPR "Hyprland compositor (tracked hyprland.lua)?"; then
 	if [ -f "$HOST_DIR/hypr/local.lua" ]; then
 		run ln -sf "$HOST_DIR/hypr/local.lua" "$HOME/.config/hypr/local.lua"
 	fi
+	info "keybind cheat sheet: SUPER+SHIFT+/ (hyprbinds; reads the live table, so it cannot go stale)."
 	info "validate before logging in:  Hyprland --verify-config -c ~/.config/hypr/hyprland.lua"
 	info "hyprland machine-specific settings go in ~/.config/hypr/local.lua (require'd by hyprland.lua)."
 fi
