@@ -401,11 +401,17 @@ def main():
             f"alt-{i}:reload({self} --color --view {v})"
             for i, v in enumerate(["curated", "all", "dms", "mine"], start=1)
         )
+        # Scrolling: fzf moves ONE line per wheel notch out of the box, which is unusable on a
+        # 150-row list. The wheel events are rebound to three lines, and ctrl-d/ctrl-u get the
+        # half-page actions (pgup/pgdn already page by default). Trade-off, deliberate:
+        # ctrl-u normally clears the query -- ctrl-w still deletes a word, and ESC closes.
+        scroll = ("scroll-up:up+up+up,scroll-down:down+down+down,"
+                  "ctrl-u:half-page-up,ctrl-d:half-page-down")
         out = subprocess.run(
-            ["fzf", "--ansi", "--reverse", "--no-sort", "--info=inline",
+            ["fzf", "--ansi", "--reverse", "--no-sort", "--info=inline", "--cycle",
              "--prompt=binds> ",
              "--header=ALT+1 curated  ALT+2 all  ALT+3 dms  ALT+4 mine   ·   ESC closes",
-             f"--bind={binds}"],
+             f"--bind={binds},{scroll}"],
             input=render(build(a.view, load_binds(a.binds_json), a.dms_lua), color=True),
             text=True,
         )

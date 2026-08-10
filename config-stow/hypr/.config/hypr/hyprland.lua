@@ -214,6 +214,13 @@ hl.bind(mod .. " + ALT + S", hl.dsp.exec_cmd("kanshictl switch solo"),   { descr
 -- nothing has added it. A bare name therefore fails to exec, alacritty exits instantly, and the
 -- keybind looks dead with no error anywhere. herdr and alacritty are unaffected because they
 -- live in /usr/bin. Built from $HOME so no home directory is hardcoded, same as the xkb path.
+--
+-- The window is sized by the window rules below, NOT here. An earlier version passed
+-- `-o window.dimensions.columns=… lines=…` to alacritty as a workaround while rule-based sizing
+-- appeared broken; that turned out to be a rule-ordering bug (see the rules), so the workaround
+-- was removed rather than left as a second mechanism fighting the first. `window.dimensions`
+-- does work and sizes in CELLS — reach for it if the sheet should ever track the font size
+-- instead of the monitor.
 local cheatsheet = os.getenv("HOME") .. "/.local/bin/hyprbinds"
 hl.unbind(mod .. " + SHIFT + Slash")
 hl.bind(mod .. " + SHIFT + Slash",
@@ -356,7 +363,32 @@ hl.window_rule({ match = { class = "herdr" }, workspace = "name:herdr" })
 -- The cheat sheet floats and stays on the CURRENT workspace — deliberately no `workspace`
 -- field, unlike every rule above: a reference you open mid-task must not yank you elsewhere.
 -- Same `--class` trick as herdr, since a terminal has no class of its own to match on.
-hl.window_rule({ match = { class = "hyprbinds" }, float = true, size = "55% 70%" })
+-- TWO RULES, NOT ONE — the split is what makes sizing work at all, confirmed 2026-08-10.
+-- As a single `{ match = …, float = true, size = … }` the window came up 800x600 (Hyprland's
+-- default float size, read from `hyprctl -j clients`): the float took effect and the size was
+-- silently dropped. A Lua table has NO defined iteration order, so the effects can be applied
+-- in any order, and sizing a window that is not floating YET is a no-op. Declared as separate
+-- rules, float lands first and the size sticks.
+--
+-- Three things follow, all of which cost a round of trial and error here:
+--   * `Hyprland --verify-config` says `config ok` for the broken form. It validates field NAMES
+--     (an invented one gives "unknown field 'x'") and cannot see application order.
+--   * "no effect" and "wrong value" are indistinguishable without measuring: 800x600 is neither
+--     the rule's size nor alacritty's own window.dimensions, which is what finally gave it away.
+--
+-- PIXELS ONLY — a PERCENTAGE STRING IS SILENTLY IGNORED HERE. `size = "40% 70%"` validates and
+-- then leaves the window at the 800x600 default, measured on BOTH monitors (2026-08-10) in the
+-- split-rule form that demonstrably works with pixels. So this is not the ordering bug above and
+-- not a monitor-dependent effect: the percentage form itself does nothing in a Lua window rule
+-- on 0.56.2. Percentages were briefly assumed innocent because they had only been tried inside
+-- the broken combined rule; that assumption was wrong and cost a round.
+--
+-- Consequence, accepted: the size is absolute, so the window is the same on the 3440 ultrawide
+-- and the 2560 panel rather than proportional to each. The sheet needs ~100 columns, so keep the
+-- width comfortably above ~900px. If proportional sizing is ever wanted, alacritty's
+-- `window.dimensions` (cells) is the working alternative — not a percentage here.
+hl.window_rule({ match = { class = "hyprbinds" }, float = true })
+hl.window_rule({ match = { class = "hyprbinds" }, size = { 900, 1000 } })
 
 -- If login focus-jumping becomes annoying (both autostarted apps open on workspaces you are not
 -- on, and `focus_on_activate = true` is set at the top), add `no_initial_focus = true` to these
