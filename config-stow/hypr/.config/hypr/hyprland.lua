@@ -126,14 +126,46 @@ local have_dms_binds = want("dms.binds")
 -- is visible — a silent second action would just look like a haunted desktop.
 
 -- Applications. SUPER+Return is muscle memory from niri; DMS's own SUPER+T stays too.
--- SUPER+B was "launch firefox" until 2026-08-10; it now focuses the `browser` workspace.
--- This IS a behaviour change, deliberately (MK, 2026-08-10): firefox is no longer pinned to
--- that workspace and no longer autostarts, so SUPER+B focuses an empty workspace if nothing
--- is running there. Launch firefox from DMS's spotlight (SUPER+space) instead.
--- Rationale: a new firefox window must be openable on ANY workspace — see the workspace and
--- window-rule sections below, where both halves of the old behaviour were removed.
-hl.bind(mod .. " + Return", hl.dsp.exec_cmd(term),       { description = "Terminal" })
-hl.bind(mod .. " + E",      hl.dsp.exec_cmd("nautilus"), { description = "File manager" })
+--
+-- SUPER+B was "launch firefox" until 2026-08-10, when it became the `browser` workspace focus.
+-- Losing the launcher was NOT intended and was felt immediately (MK, 2026-08-10): under niri
+-- that key spawned a browser window (`MOD+B { spawn-sh "firefox"; }`) and the muscle memory is
+-- years old. Both behaviours are wanted, so they now sit on adjacent keys rather than one
+-- replacing the other:
+--
+--   SUPER+B        focus the `browser` workspace          (the 2026-08-10 scheme, unchanged)
+--   SUPER+SHIFT+B  move a window to `browser`             (       "        "        "      )
+--   SUPER+ALT+B    spawn a new browser window             (RESTORED here)
+--
+-- ALT is where the other secondary actions already live (kanshi on SUPER+ALT+D/S), and
+-- SUPER+ALT+B is free on both sides: absent from this file and from DMS's 100 SUPER binds
+-- (`~/.config/hypr/dms/binds.lua` — only ALT+space, SUPER+ALT+L, CTRL+ALT+Delete, ALT+Print
+-- use ALT at all). No `hl.unbind` needed; see the accumulation note above for why that matters.
+--
+-- The command is a bare `firefox`, byte-for-byte what niri spawned, because that is the
+-- behaviour being restored and it is the one already known to feel right. Two rejected
+-- alternatives, both of which LOOK better and are worse:
+--
+--   `xdg-open <url>` would follow `xdg-settings get default-web-browser` (firefox.desktop
+--     here) instead of hardcoding a browser — but it must be given a URL, and a URL handed to
+--     a running Firefox opens a TAB, not a window. Generic in the wrong dimension: it drops
+--     the very property asked for.
+--   `firefox --new-window` needs a `<url>` argument per `firefox --help`, so it is not simply
+--     a stronger form of the bare command.
+--
+-- Bare `firefox` is right by the help text rather than by assumption: `--new-instance` is
+-- documented as "Open new instance, not a new window in running instance", which states that
+-- the default for an already-running Firefox is exactly a new window. With none running it
+-- starts one. Hardcoding the browser is the accepted cost; change this line if the default
+-- browser ever changes.
+--
+-- Note the `browser` workspace still has NO window rule and NO autostart, deliberately (see
+-- the workspace and window-rule sections below): a browser window opens wherever you are, and
+-- this key is what makes that convenient again. SUPER+B is then "go where the browsing lives",
+-- which is a different question from "give me a window", and the two no longer fight.
+hl.bind(mod .. " + Return",  hl.dsp.exec_cmd(term),                     { description = "Terminal" })
+hl.bind(mod .. " + E",       hl.dsp.exec_cmd("nautilus"),               { description = "File manager" })
+hl.bind(mod .. " + ALT + B", hl.dsp.exec_cmd("firefox"),                { description = "New browser window" })
 
 -- Named workspaces — SUPER+<mnemonic letter> to focus, +SHIFT to move a window there.
 -- DMS owns SUPER+1..9 / SUPER+SHIFT+1..9 for the numbered ones, which stay entirely free
@@ -153,7 +185,9 @@ hl.bind(mod .. " + E",      hl.dsp.exec_cmd("nautilus"), { description = "File m
 --
 -- Was SUPER+0/SUPER+SHIFT+0 for mail until 2026-08-10; replaced by the letter scheme so
 -- all four named workspaces are reached the same way. 0 is free again.
---   SUPER+B was our own "launch firefox" bind, so reusing it costs nothing external.
+--   SUPER+B was our own "launch firefox" bind, so reusing it cost nothing EXTERNAL — but it
+--     did cost the launcher, which turned out to matter. That moved to SUPER+ALT+B rather
+--     than being dropped; see the applications block above.
 --   SUPER+A was free. Mnemonic is "agents" — herdr is the agent terminal manager.
 --   SUPER+T is DMS's ghostty launcher and is TAKEN (MK, 2026-08-10), also via `unbind`.
 --     A slightly worse deal than SUPER+M because it is not duplicated elsewhere: ghostty must
