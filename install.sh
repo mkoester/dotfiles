@@ -420,6 +420,15 @@ if ask_yn DF_DEV "Dev machine (gh + glab forge CLIs)?"; then
 	# the AI CLIs. It is a separate file because it owns a separate concern — see its header for
 	# why it exists at all (their installers edit the stow-symlinked ~/.zshrc, i.e. this repo).
 	link_omz oh-my-zsh-custom agent-cli.zsh
+	# herdr's config rides on the same flag for the same reason: it is the terminal workspace
+	# manager *for* those AI agents. Tracked since 2026-08-10 — it used to be hand-created per
+	# machine, so settings silently differed between hosts (mkMac2014 had only
+	# `onboarding = false` and still prompted on every new tab). Only config.toml is stowed;
+	# session.json / sockets / logs in that directory stay machine-local.
+	# herdr itself is NOT installed here: use `paru -S herdr-bin`, never the `herdr` AUR package,
+	# which is a source build needing a full Rust+zig toolchain (hours on the 2014 MacBook) for a
+	# byte-identical result. See okf practices/herdr.md.
+	stow_pkg "$HOME" herdr
 	# GITLAB_HOST is private, so it lives in workstation-private (shared/shell.env) and is
 	# already in this shell if that repo is cloned — hence reading it rather than printing a
 	# hostname into this public repo. Without it, glab defaults to gitlab.com for every
