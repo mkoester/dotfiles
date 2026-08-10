@@ -420,6 +420,51 @@ if ask_yn DF_DEV "Dev machine (gh + glab forge CLIs)?"; then
 	# the AI CLIs. It is a separate file because it owns a separate concern — see its header for
 	# why it exists at all (their installers edit the stow-symlinked ~/.zshrc, i.e. this repo).
 	link_omz oh-my-zsh-custom agent-cli.zsh
+
+	# Claude Code's OS-level sandbox dependencies. These ride on DF_DEV for the same reason
+	# agent-cli.zsh does: a machine that runs the AI CLIs is the machine that needs them.
+	#
+	# WHY THIS IS INSTALLED RATHER THAN DOCUMENTED: a missing dependency does NOT disable the
+	# sandbox loudly — it disables it SILENTLY. `sandbox.enabled: true` in settings.json is
+	# accepted, the session runs completely UNSANDBOXED, and the only notice is inside the
+	# interactive `/sandbox` view. `claude doctor` reports "No installation issues found".
+	# The message lives in the Claude Code binary:
+	#   "sandbox is enabled but dependencies are missing: …
+	#    install missing tools (e.g. apt install bubblewrap socat)"
+	# Measured on mkMac2014 (2026-08-10): bubblewrap present, socat absent, settings.json
+	# correctly symlinked with sandbox.enabled true — and every Bash command ran unsandboxed
+	# with full write access to $HOME. Nothing anywhere said so.
+	#
+	# Unlike gh/glab above, both packages are in the standard repos of every distro here, so
+	# listing apt/dnf names is safe rather than a guess.
+	case "$PM" in
+		pacman) pm_install bubblewrap socat ;;
+		apt)    pm_install bubblewrap socat ;;
+		dnf)    pm_install bubblewrap socat ;;
+		# macOS has its own sandbox implementation — bubblewrap is Linux-only and is neither
+		# needed nor available. Network filters are installed from inside Claude Code.
+		brew)   info "macOS sandbox: run '/sandbox install' inside Claude Code for the network filters." ;;
+	esac
+
+	# Verify rather than trust the install: this is the one dependency whose absence is
+	# invisible at runtime, so a failed install must not pass quietly.
+	for tool in bwrap socat; do
+		if have "$tool"; then
+			info "sandbox dep ok: $tool"
+		elif [ "$PM" != brew ]; then
+			warn "$tool MISSING — Claude Code will run UNSANDBOXED despite sandbox.enabled=true."
+			warn "  Nothing warns you at runtime; check with /sandbox inside Claude Code."
+		fi
+	done
+	# herdr's config rides on the same flag for the same reason: it is the terminal workspace
+	# manager *for* those AI agents. Tracked since 2026-08-10 — it used to be hand-created per
+	# machine, so settings silently differed between hosts (mkMac2014 had only
+	# `onboarding = false` and still prompted on every new tab). Only config.toml is stowed;
+	# session.json / sockets / logs in that directory stay machine-local.
+	# herdr itself is NOT installed here: use `paru -S herdr-bin`, never the `herdr` AUR package,
+	# which is a source build needing a full Rust+zig toolchain (hours on the 2014 MacBook) for a
+	# byte-identical result. See okf practices/herdr.md.
+	stow_pkg "$HOME" herdr
 	# GITLAB_HOST is private, so it lives in workstation-private (shared/shell.env) and is
 	# already in this shell if that repo is cloned — hence reading it rather than printing a
 	# hostname into this public repo. Without it, glab defaults to gitlab.com for every

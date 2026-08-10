@@ -1,0 +1,85 @@
+# herdr — terminal workspace manager for AI coding agents (https://herdr.dev)
+#
+# TRACKED AND STOWED since 2026-08-10 -> ~/.config/herdr/config.toml
+#
+# It was previously hand-created per machine and deliberately not tracked, which the vault
+# (okf practices/herdr.md) recorded as "a candidate for future stowing; not done yet". The cost
+# of that showed up in practice: mkMac2014 had a 19-byte config.toml holding only
+# `onboarding = false`, so every setting below was silently missing there — most visibly, it
+# still prompted for a name on every new tab. Nothing was broken and nothing had failed to
+# sync; there was simply no sync path. Hence this package.
+#
+# Only ~/.config/herdr/config.toml is stowed. The rest of that directory is machine-local
+# runtime state and must NEVER be tracked: session.json (live spaces/tabs/panes), *.sock,
+# *.log, release-notes.json, .plugins.lock. stow folds into the existing real directory and
+# links this single file, leaving those untouched.
+#
+# APPLY A CHANGE TO A RUNNING SERVER:  herdr server reload-config
+#   That is a *client* command — it re-reads an ALREADY-RUNNING server's config. With no
+#   server up it fails with `Os { code: 2, NotFound }`, which looks like a missing config file
+#   but is the missing socket. On a fresh machine just run `herdr`, which reads this at startup.
+#
+# KEY NAMES ARE FROM THE BINARY, NOT FROM MEMORY. herdr has no command to dump its defaults
+# (`herdr keys` -> unknown command), but the fully commented sample config is embedded in the
+# executable:
+#     strings -a $(command -v herdr) | grep -A5 '^\[ui\]'
+#     strings -a $(command -v herdr) | grep 'prefix+'
+# The second form is the authoritative list of built-in bindings — check it BEFORE adding a
+# [[keys.command]]. That is how prefix+g was found to be the built-in `goto` (and
+# prefix+shift+g `new_worktree`), which is why the gita picker below sits on prefix+alt+t.
+# If a custom binding goes wrong, `herdr config reset-keys` backs up this file and strips them.
+
+onboarding = false
+
+# ── Custom keybindings ────────────────────────────────────────────────────────────
+# type = "pane" means a temporary pane that closes when the command exits.
+#
+# DEPENDENCY: all three call a BARE command name, so the scripts must be on $PATH. They live
+# in the vault (okf/scripts/herdr-*) and are symlinked into ~/.local/bin by okf's
+# `scripts/link-scripts`, which is run once per machine. Without that, these keys do nothing.
+# Also needs: fzf (>= 0.65), GNU find, jq, lazygit, gita.
+
+# lazygit in a temporary pane at the current space's cwd
+[[keys.command]]
+key = "prefix+alt+g"
+type = "pane"
+command = "lazygit"
+description = "lazygit"
+
+# fzf-pick an immediate subdir and open it as a tab
+[[keys.command]]
+key = "prefix+t"
+type = "pane"
+command = "herdr-tab"
+description = "sub-project tab"
+
+# fzf-pick a repo needing attention and open it as a tab.
+# NB prefix+g is herdr's own `goto`, hence alt — and it pairs with prefix+t above.
+[[keys.command]]
+key = "prefix+alt+t"
+type = "pane"
+command = "herdr-tab-gita"
+description = "new tab from repo needing attention (gita + fzf)"
+
+[ui]
+# Instant tab creation with a generated name. The binary's embedded sample shows the default
+# is `true`, i.e. herdr prompts — that default is exactly what made mkMac2014 feel different.
+# There is a sibling `prompt_new_workspace_name` (same default); left alone deliberately,
+# since a space is created rarely and is worth naming.
+prompt_new_tab_name = false
+
+[ui.toast]
+# Desktop notification when a background agent needs a decision. Switch to "terminal" if the
+# OS notification path stays silent on a given machine.
+delivery = "system"
+
+[ui.sound]
+enabled = true
+
+# Notifications + sound are the core value once several agents run in parallel: the sidebar
+# plus a ping is how you see *which* space needs a decision without watching every pane.
+# Other knobs worth knowing: agent_panel_sort ("spaces" default vs "priority" attention
+# queue), theme.auto_switch (follow terminal light/dark), new_cwd (default "follow").
+
+[worktrees]
+directory = "~/.herdr/worktrees"

@@ -20,8 +20,25 @@
 # user-level `codex` both install into ~/.local/bin and are therefore already on PATH.
 #
 # Nothing else is set up yet either: `agy` 1.1.11 advertises no completion subcommand (checked
-# 2026-08-07) and `codex` is not installed on any machine. When either grows completions, cache
-# them the way forge.zsh caches gh/glab rather than eval'ing per shell.
+# 2026-08-07). When either tool grows completions, cache them the way forge.zsh caches gh/glab
+# rather than eval'ing per shell.
+#
+# ── codex: INSTALL FROM THE REPO, NOT THE UPSTREAM INSTALLER (updated 2026-08-10) ──
+# This file said "codex is not installed on any machine" until 2026-08-10; it is now on mkDell
+# and is being rolled out to mkMac2014, mkDesktop and mkMac2017.
+#
+# On Arch/CachyOS install it as the package **`openai-codex`** (official `extra`, plus a
+# CachyOS-optimised rebuild in `cachyos-extra-v3` — verified with `pacman -Si` on 2026-08-10,
+# both at 0.146.1). The command it provides is `codex`.
+#
+#     paru -S openai-codex
+#
+# That route matters for the reason this whole file exists: a packaged binary lands on PATH via
+# /usr/bin and touches nothing, whereas the npm/curl installers are the kind that append an
+# `export PATH=…` line to ~/.zshrc — a stow symlink into this public repo. Prefer the package.
+#
+# mkMac2017 is back on macOS (DOTFILES_PM=brew), so it needs the brew/npm route instead; the
+# ~/.zshrc hazard applies there too, so check `git diff` in this clone afterwards either way.
 #
 # So this file is currently a no-op by design — it exists to be the place the next such line
 # goes, instead of ~/.zshrc.
