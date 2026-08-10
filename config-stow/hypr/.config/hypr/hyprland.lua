@@ -149,21 +149,38 @@ hl.bind(mod .. " + E",      hl.dsp.exec_cmd("nautilus"), { description = "File m
 -- Was SUPER+0/SUPER+SHIFT+0 for mail until 2026-08-10; replaced by the letter scheme so
 -- all four named workspaces are reached the same way. 0 is free again.
 --   SUPER+B was our own "launch firefox" bind, so reusing it costs nothing external.
+--   SUPER+A was free. Mnemonic is "agents" — herdr is the agent terminal manager.
+--   SUPER+T is DMS's ghostty launcher and is OVERRIDDEN (MK, 2026-08-10). Second deliberate
+--     DMS override after SUPER+M, and a slightly worse deal than that one because it is not
+--     duplicated elsewhere: ghostty must now be launched from spotlight (SUPER+space).
+--     SUPER+Return still opens alacritty. Cheatsheet will keep saying "terminal".
+--
+-- `no_move` — SUPER+SHIFT+T is DMS's FLOAT TOGGLE, which is genuinely useful and has no second
+-- binding, unlike the processlist behind SUPER+M. So `term` gets a focus bind only rather than
+-- silently costing float. Uncomment the line below the loop if you want the move bind and are
+-- happy to lose float toggle; SUPER+ALT+T is free if you would rather keep both.
 local named_workspaces = {
     { key = "M", ws = "mail",    label = "mail"         },
     { key = "B", ws = "browser", label = "browser"      },
     { key = "C", ws = "code",    label = "code"         },
     { key = "G", ws = "google",  label = "google"       },
     { key = "S", ws = "social",  label = "social media" },
+    { key = "A", ws = "herdr",   label = "herdr"        },
+    { key = "T", ws = "term",    label = "terminal", no_move = true },
 }
 for _, w in ipairs(named_workspaces) do
     hl.bind(mod .. " + " .. w.key,
             hl.dsp.focus({ workspace = "name:" .. w.ws }),
             { description = "Workspace: " .. w.label })
-    hl.bind(mod .. " + SHIFT + " .. w.key,
-            hl.dsp.window.move({ workspace = "name:" .. w.ws }),
-            { description = "Move to " .. w.label })
+    if not w.no_move then
+        hl.bind(mod .. " + SHIFT + " .. w.key,
+                hl.dsp.window.move({ workspace = "name:" .. w.ws }),
+                { description = "Move to " .. w.label })
+    end
 end
+-- Move-to-term, off by default (see `no_move` above). Pick ONE:
+-- hl.bind(mod .. " + SHIFT + T", hl.dsp.window.move({ workspace = "name:term" }))  -- costs float toggle
+-- hl.bind(mod .. " + ALT + T",   hl.dsp.window.move({ workspace = "name:term" }))  -- keeps both
 
 -- Monitor layout (kanshi profiles; define them in the kanshi package's config.d/).
 -- Note DMS binds SUPER+P to its own output profile cycling — related but a different
@@ -232,16 +249,38 @@ end
 -- firefox must be openable on any workspace and must not autostart. The workspace still
 -- exists and SUPER+B still focuses it — it is simply a destination you move windows to by
 -- hand (SUPER+SHIFT+B) rather than one that claims every firefox window.
+--
+-- BAR ORDER IS ALPHABETICAL BY NAME — declaration order here does NOT affect it. DMS sorts
+-- numbered workspaces first by id, then all named ones together: every named workspace maps to
+-- the same sort key, so the tiebreak is `localeCompare` on the name
+-- (`WorkspaceSwitcher.qml:257`, hyprlandWorkspaceOrder). So the bar reads
+--   browser · code · google · herdr · mail · social · term
+-- and the ONLY way to move one is to rename it. Accepted as-is 2026-08-10 (the request was for
+-- `herdr` left of `code`, which no config change can deliver while it is called "herdr").
 hl.workspace_rule({ workspace = "name:mail",    persistent = true, on_created_empty = "thunderbird" })
-hl.workspace_rule({ workspace = "name:browser", persistent = true })
+hl.workspace_rule({ workspace = "name:browser", persistent = true, layout = "scrolling" })
+hl.workspace_rule({ workspace = "name:code",    persistent = true, layout = "scrolling" })
 hl.workspace_rule({ workspace = "name:google",  persistent = true, on_created_empty = "floorp" })
 hl.workspace_rule({ workspace = "name:social",  persistent = true, on_created_empty = "brave" })
-hl.workspace_rule({ workspace = "name:code",    persistent = true })
+
+-- herdr: nothing is *pinned* here (herdr is a terminal app, so there is no class to match on);
+-- instead the workspace starts a terminal already attached to the herdr session. Note this
+-- re-fires whenever the workspace goes empty, not only at login — quit herdr and come back and
+-- you get a fresh one, which is the intended behaviour.
+hl.workspace_rule({ workspace = "name:herdr",   persistent = true, on_created_empty = "alacritty -e herdr" })
+
+-- term: deliberately bare — a scratch terminal workspace, nothing pinned, nothing autostarted.
+-- Add `on_created_empty = term` if you want SUPER+T to keep launching a terminal the way DMS's
+-- ghostty bind used to.
+hl.workspace_rule({ workspace = "name:term",    persistent = true })
 -- hl.workspace_rule({ workspace = "name:code", persistent = true, on_created_empty = "code" })
 
--- TRY SCROLLING HERE. The property no other candidate has: one workspace scrolls,
--- everything else tiles, one line apart. Delete the line to go back to plain tiling.
-hl.workspace_rule({ workspace = "2", layout = "scrolling" })
+-- Numbered workspace 2 carried `layout = "scrolling"` as the original "try scrolling here"
+-- experiment. Removed 2026-08-10: scrolling is now a deliberate choice on `browser` and `code`
+-- above, so leaving a numbered workspace silently scrolling as well is just a surprise. The
+-- per-workspace scrolling layout — one workspace scrolls, everything else tiles, one line
+-- apart — is still the property no other candidate WM had; it is simply pointed at the right
+-- workspaces now.
 
 --------------------------------------------------------------------------------
 -- Window rules
