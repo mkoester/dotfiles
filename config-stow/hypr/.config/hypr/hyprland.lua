@@ -119,10 +119,12 @@ local have_dms_binds = want("dms.binds")
 -- reality, so add a bind only after checking it against the list above.
 
 -- Applications. SUPER+Return is muscle memory from niri; DMS's own SUPER+T stays too.
--- SUPER+B was "launch firefox" until 2026-08-10. It now focuses the `browser` workspace
--- instead (below) — which is not a regression, because firefox is pinned there AND the
--- workspace carries `on_created_empty`, so pressing it with no browser running still
--- launches one. Same keystroke, same outcome, plus it now also *returns* you to firefox.
+-- SUPER+B was "launch firefox" until 2026-08-10; it now focuses the `browser` workspace.
+-- This IS a behaviour change, deliberately (MK, 2026-08-10): firefox is no longer pinned to
+-- that workspace and no longer autostarts, so SUPER+B focuses an empty workspace if nothing
+-- is running there. Launch firefox from DMS's spotlight (SUPER+space) instead.
+-- Rationale: a new firefox window must be openable on ANY workspace — see the workspace and
+-- window-rule sections below, where both halves of the old behaviour were removed.
 hl.bind(mod .. " + Return", hl.dsp.exec_cmd(term),       { description = "Terminal" })
 hl.bind(mod .. " + E",      hl.dsp.exec_cmd("nautilus"), { description = "File manager" })
 
@@ -226,8 +228,12 @@ end
 -- `pacman -Qq` lists neither `code`, `visual-studio-code-bin` nor `vscodium-bin`), and the
 -- three builds have different binaries. Uncomment the matching line after installing; see
 -- the window rules below for the same caveat about the class name.
+-- `browser` deliberately has NEITHER on_created_empty NOR a window rule (MK, 2026-08-10):
+-- firefox must be openable on any workspace and must not autostart. The workspace still
+-- exists and SUPER+B still focuses it — it is simply a destination you move windows to by
+-- hand (SUPER+SHIFT+B) rather than one that claims every firefox window.
 hl.workspace_rule({ workspace = "name:mail",    persistent = true, on_created_empty = "thunderbird" })
-hl.workspace_rule({ workspace = "name:browser", persistent = true, on_created_empty = "firefox" })
+hl.workspace_rule({ workspace = "name:browser", persistent = true })
 hl.workspace_rule({ workspace = "name:google",  persistent = true, on_created_empty = "floorp" })
 hl.workspace_rule({ workspace = "name:social",  persistent = true, on_created_empty = "brave" })
 hl.workspace_rule({ workspace = "name:code",    persistent = true })
@@ -252,7 +258,9 @@ hl.window_rule({ match = { class = "thunderbird", title = "Alias" }, float = tru
 --   thunderbird  StartupWMClass=thunderbird   (lowercase — this also settles the open
 --                question in Workstation-Documentation/desktop/niri-workspaces.md, where
 --                the capital-T niri rule was suspected never to have fired)
---   firefox      StartupWMClass=firefox,  confirmed live via `hyprctl -j clients`
+--   firefox      StartupWMClass=firefox,  confirmed live via `hyprctl -j clients` — used only
+--                by the Picture-in-Picture float rule above; firefox is intentionally NOT
+--                pinned to a workspace (see below)
 --   floorp       StartupWMClass=floorp,   confirmed live via `hyprctl -j clients`
 --   brave        StartupWMClass=brave-browser  (package brave-bin, /usr/share/applications)
 --
@@ -260,8 +268,12 @@ hl.window_rule({ match = { class = "thunderbird", title = "Alias" }, float = tru
 -- own literal rule rather than one alternation, so the config is correct whether matching is
 -- regex or literal, and a wrong variant fails visibly (app does not move) instead of quietly.
 hl.window_rule({ match = { class = "thunderbird" }, workspace = "name:mail" })
-hl.window_rule({ match = { class = "firefox" },     workspace = "name:browser" })
 hl.window_rule({ match = { class = "floorp" },      workspace = "name:google" })
+
+-- NO firefox -> name:browser rule, on purpose. A new firefox window must be able to open on
+-- whatever workspace you are on; pinning it would yank every window to `browser`. This also
+-- removes the last reason the PiP float rule above was awkward — a Picture-in-Picture window
+-- now stays put instead of being re-homed along with its parent.
 
 -- Brave is Chromium-based: the class differs between native Wayland (lowercase) and XWayland
 -- (capitalised), which is the trap called out in desktop/niri-window-placement.md. Both are
