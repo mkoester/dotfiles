@@ -18,7 +18,32 @@
 -- do not exist) — measured 2026-08-03, see wm-comparison.md.
 
 local mod  = "SUPER"
-local term = "alacritty"
+
+-- GHOSTTY IS THE DEFAULT TERMINAL SINCE 2026-08-10 — provisional, under evaluation for a few
+-- days (MK). Was alacritty. Revert by putting "alacritty" back here; nothing else depends on it.
+--
+-- This variable governs the DEFAULT terminal only (SUPER+Return). The three class-pinned
+-- launchers below deliberately STAY ON ALACRITTY and are not covered by it:
+--
+--     hl.dsp.exec_cmd("alacritty --class hyprbinds -e " .. cheatsheet .. " --fzf")
+--     hl.exec_cmd("alacritty --class herdr -e herdr")
+--     local.lua's  "alacritty --class git -e zsh -i -c gitaw"
+--
+-- They cannot simply be swapped, and the reason is not preference. Their whole point is the
+-- custom `--class`, which is what the window rules pin on. Ghostty's equivalent option is
+-- documented in src/config/Config.zig:1504 as: "The class name must follow the requirements
+-- defined in the GTK documentation" (g_application_id_is_valid), which requires AT LEAST TWO
+-- period-separated elements. `herdr`, `git` and `hyprbinds` are all single-element and would be
+-- rejected by GTK at runtime — note ghostty's config PARSER accepts them (measured: `class =
+-- herdr` echoes back fine from `ghostty +show-config`), so this fails at the point where the
+-- window silently carries the default class instead, and the pinning quietly stops working.
+--
+-- Moving them therefore means renaming the classes to dotted form (`mk.herdr`, `mk.git`,
+-- `mk.hyprbinds`) AND updating every matching window rule in the same pass — too much to fold
+-- into a reversible few-day trial. Do it only if ghostty wins. Same source note also warns that
+-- a non-default class breaks .desktop/DBus activation and spawns separate instances under
+-- gtk-single-instance, so the rename needs its own testing.
+local term = "ghostty"
 
 --------------------------------------------------------------------------------
 -- Module search path — REQUIRED, do not remove

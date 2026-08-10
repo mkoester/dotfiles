@@ -43,7 +43,11 @@ binds {
     MOD+SHIFT+ESCAPE                     { show-hotkey-overlay; }
 
     // ─── Applications ───
-    MOD+RETURN                          hotkey-overlay-title="Open Terminal: alacritty" { spawn-sh "alacritty"; }
+    // Ghostty since 2026-08-10, provisional (MK) — kept in step with hyprland.lua's `term` so
+    // the default terminal is the same whichever session is picked at the greeter. Was
+    // alacritty; revert both together. niri is the migration fallback, so this is here for
+    // consistency rather than because it gets much use.
+    MOD+RETURN                          hotkey-overlay-title="Open Terminal: ghostty" { spawn-sh "ghostty"; }
     MOD+SPACE                           hotkey-overlay-title="Open App Launcher: wofi" { spawn-sh "wofi"; }
     MOD+B                               hotkey-overlay-title="Open Browser: firefox" { spawn-sh "firefox"; }
     // hyprlock, not swaylock: it authenticates the fingerprint reader itself over fprintd's
