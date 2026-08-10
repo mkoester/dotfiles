@@ -241,10 +241,9 @@ end
 -- empty named workspace starts its app, so one keystroke means "take me to my browser",
 -- whether or not it is already running. Delete the field to get plain focus-only behaviour.
 --
--- NOT SET for `code`: no VS Code is installed on this machine (verified 2026-08-10 —
--- `pacman -Qq` lists neither `code`, `visual-studio-code-bin` nor `vscodium-bin`), and the
--- three builds have different binaries. Uncomment the matching line after installing; see
--- the window rules below for the same caveat about the class name.
+-- NOT SET for `code`, by choice rather than necessity: `visual-studio-code-bin` IS installed
+-- (2026-08-10) and its window rule works, but VS Code is not wanted at login. Uncomment the
+-- line below to change that — the binary is `code`.
 -- `browser` deliberately has NEITHER on_created_empty NOR a window rule (MK, 2026-08-10):
 -- firefox must be openable on any workspace and must not autostart. The workspace still
 -- exists and SUPER+B still focuses it — it is simply a destination you move windows to by
@@ -293,44 +292,30 @@ hl.workspace_rule({ workspace = "name:term",    persistent = true })
 -- whose title settles later — which is exactly the restored-Firefox case
 -- (desktop/niri-window-placement.md). The Hyprland answer is an event handler; see below.
 hl.window_rule({ match = { class = "firefox", title = "^Picture-in-Picture$" }, float = true })
--- Thunderbird's real class is UNCONFIRMED (see the block below), so every rule that targets it
--- is emitted once per candidate spelling. The Alias float rule had the same latent bug as the
--- workspace rule: it matched lowercase only.
-local thunderbird_classes = { "thunderbird", "Thunderbird", "org.mozilla.Thunderbird" }
-for _, tb in ipairs(thunderbird_classes) do
-    hl.window_rule({ match = { class = tb, title = "Alias" }, float = true })
-end
+hl.window_rule({ match = { class = "org.mozilla.Thunderbird", title = "Alias" }, float = true })
 
--- App -> static workspace. Class strings are NOT recalled; each was read from the shipped
--- .desktop file's StartupWMClass or off a live window (2026-08-10, mkMac2014):
---   thunderbird  UNCONFIRMED — `StartupWMClass=thunderbird` in the .desktop file, but the
---                lowercase rule demonstrably did not fire (2026-08-10). See the Thunderbird
---                block below; all three spellings are bound until a live window is read.
---   firefox      StartupWMClass=firefox,  confirmed live via `hyprctl -j clients` — used only
---                by the Picture-in-Picture float rule above; firefox is intentionally NOT
---                pinned to a workspace (see below)
---   floorp       StartupWMClass=floorp,   confirmed live via `hyprctl -j clients`
---   brave        StartupWMClass=brave-browser  (package brave-bin, /usr/share/applications)
+-- App -> static workspace. EVERY class below was read off a LIVE WINDOW with
+-- `hyprctl -j clients | grep -i class` (2026-08-10, mkMac2014) — no guesses, no .desktop files.
 --
--- Hyprland links libre2, so these match as RE2 regexes — but each variant is written as its
--- own literal rule rather than one alternation, so the config is correct whether matching is
--- regex or literal, and a wrong variant fails visibly (app does not move) instead of quietly.
--- Thunderbird: all three spellings bound, because the lowercase one DID NOT WORK (2026-08-10 —
--- a manually started Thunderbird stayed on the current workspace with this rule loaded).
+-- WHY THAT SENTENCE IS EMPHATIC: this block previously used classes taken from
+-- `StartupWMClass`, and TWO of the four were wrong in a way that failed silently.
 --
--- The mistake worth not repeating: `StartupWMClass=thunderbird` was read out of the shipped
--- .desktop file and treated as settling the question. It does not. A .desktop file is a
--- PREDICTOR of the window class, not a measurement of it — exactly the caveat already written
--- down for Brave two sections below and then not applied here. The binary carries all three
--- strings (`thunderbird`, `Thunderbird`, `org.mozilla.Thunderbird`), so it cannot discriminate
--- either. Mozilla apps report a capitalised WM_CLASS under XWayland, which is the likely cause.
+--   Thunderbird  .desktop said `thunderbird`  ->  actually `org.mozilla.Thunderbird`
+--   VS Code      guessed `Code`/`code-oss`    ->  actually `code`
 --
--- PRUNE THESE once `hyprctl -j clients | grep -i class` has been read off a live Thunderbird.
-for _, tb in ipairs(thunderbird_classes) do
-    hl.window_rule({ match = { class = tb }, workspace = "name:mail" })
-end
-
-hl.window_rule({ match = { class = "floorp" },      workspace = "name:google" })
+-- The real pattern is not capitalisation and NOT XWayland (an earlier note here blamed a
+-- capitalised XWayland WM_CLASS — that was wrong): modern Wayland apps set a **reverse-DNS
+-- app_id**, while `StartupWMClass` in the .desktop file still carries the legacy X11-era short
+-- name. Both live here at once — `org.mozilla.Thunderbird` and `com.mitchellh.ghostty` are
+-- reverse-DNS, while `firefox`, `floorp`, `brave-browser` and `code` are short names. Nothing
+-- about the app tells you which style it uses. So: **read the live window, every time.**
+--
+-- Hyprland links libre2 so these match as RE2 regexes, but each is written as a plain literal:
+-- a wrong literal fails visibly (the app does not move) rather than quietly matching too much.
+hl.window_rule({ match = { class = "org.mozilla.Thunderbird" }, workspace = "name:mail" })
+hl.window_rule({ match = { class = "floorp" },                  workspace = "name:google" })
+hl.window_rule({ match = { class = "brave-browser" },           workspace = "name:social" })
+hl.window_rule({ match = { class = "code" },                    workspace = "name:code" })
 
 -- The herdr terminal, matched on the custom class set by `alacritty --class herdr` (both in the
 -- login autostart and in the workspace's on_created_empty). Plain Alacritty windows are class
@@ -347,27 +332,13 @@ hl.window_rule({ match = { class = "herdr" }, workspace = "name:herdr" })
 -- removes the last reason the PiP float rule above was awkward — a Picture-in-Picture window
 -- now stays put instead of being re-homed along with its parent.
 
--- Brave is Chromium-based: the class differs between native Wayland (lowercase) and XWayland
--- (capitalised), which is the trap called out in desktop/niri-window-placement.md. Both are
--- bound so it lands correctly either way.
-hl.window_rule({ match = { class = "brave-browser" }, workspace = "name:social" })
-hl.window_rule({ match = { class = "Brave-browser" }, workspace = "name:social" })
-
--- VS Code — no build is installed on this machine yet, so these class names are the one thing
--- in this block that is NOT measured on a live window. But the build is NOT a guess: this
--- repo's own `config-stow/vscode/` package targets **~/.config/Code/User/settings.json** (and
--- the flatpak path com.visualstudio.code), which is the directory of the OFFICIAL Microsoft
--- build — `visual-studio-code-bin`. Code - OSS uses "Code - OSS" and VSCodium uses "VSCodium",
--- so the tracked settings would not even load under those.
---   => the expected class here is "Code".
--- The other three stay bound as cheap insurance in case a machine installs a different build;
--- they cost nothing and cannot misfire (no other app uses those classes). Confirm and prune
--- once VS Code is actually running:
---   hyprctl -j clients | grep -i class
-hl.window_rule({ match = { class = "code-oss" },  workspace = "name:code" })
-hl.window_rule({ match = { class = "Code" },      workspace = "name:code" })
-hl.window_rule({ match = { class = "codium" },    workspace = "name:code" })
-hl.window_rule({ match = { class = "VSCodium" },  workspace = "name:code" })
+-- Brave and VS Code moved up into the measured block above (2026-08-10). Both had guessed
+-- classes here — Brave carried a `Brave-browser` XWayland variant that never applied (it runs
+-- native Wayland as `brave-browser`), and VS Code had FOUR guesses, none of which was the real
+-- `code`, so the `code` workspace had silently never worked. The build guess was right
+-- (`visual-studio-code-bin` is what is installed, and ~/.config/Code/User/settings.json is a
+-- live stow symlink) — the CLASS guess derived from it was not. Getting the package right does
+-- not get the class right.
 
 -- Post-restore Firefox placement, the in-config replacement for
 -- ~/.local/bin/place-firefox-windows.sh. Disabled until the Winger window-name prefixes are
