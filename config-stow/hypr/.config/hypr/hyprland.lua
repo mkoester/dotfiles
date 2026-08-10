@@ -19,30 +19,42 @@
 
 local mod  = "SUPER"
 
--- GHOSTTY IS THE DEFAULT TERMINAL SINCE 2026-08-10 — provisional, under evaluation for a few
--- days (MK). Was alacritty. Revert by putting "alacritty" back here; nothing else depends on it.
+-- GHOSTTY EVERYWHERE SINCE 2026-08-10 — provisional, under evaluation for a few days (MK).
+-- Was alacritty. This variable is the default terminal (SUPER+Return); the three class-pinned
+-- launchers were moved in the same pass, so alacritty is no longer spawned anywhere.
 --
--- This variable governs the DEFAULT terminal only (SUPER+Return). The three class-pinned
--- launchers below deliberately STAY ON ALACRITTY and are not covered by it:
+-- THE CLASS NAMES HAD TO CHANGE, and that is the whole risk of this switch. Those launchers
+-- exist to invent a class for a window rule to pin on, and ghostty will not take the old
+-- single-word names. src/config/Config.zig:1504: "The class name must follow the requirements
+-- defined in the GTK documentation" (g_application_id_is_valid) — AT LEAST TWO period-separated
+-- elements, no leading digit, `[A-Za-z0-9_-]` plus periods. So:
 --
---     hl.dsp.exec_cmd("alacritty --class hyprbinds -e " .. cheatsheet .. " --fzf")
---     hl.exec_cmd("alacritty --class herdr -e herdr")
---     local.lua's  "alacritty --class git -e zsh -i -c gitaw"
+--     herdr      -> mk.herdr        (login autostart, bottom of this file)
+--     hyprbinds  -> mk.hyprbinds    (cheat sheet, below)
+--     git        -> mk.git          (gitaw, mkDell/hypr/local.lua)
 --
--- They cannot simply be swapped, and the reason is not preference. Their whole point is the
--- custom `--class`, which is what the window rules pin on. Ghostty's equivalent option is
--- documented in src/config/Config.zig:1504 as: "The class name must follow the requirements
--- defined in the GTK documentation" (g_application_id_is_valid), which requires AT LEAST TWO
--- period-separated elements. `herdr`, `git` and `hyprbinds` are all single-element and would be
--- rejected by GTK at runtime — note ghostty's config PARSER accepts them (measured: `class =
--- herdr` echoes back fine from `ghostty +show-config`), so this fails at the point where the
--- window silently carries the default class instead, and the pinning quietly stops working.
+-- Each rename touches TWO places — the launcher and its window rule — and they must move
+-- together or the window silently lands unpinned.
 --
--- Moving them therefore means renaming the classes to dotted form (`mk.herdr`, `mk.git`,
--- `mk.hyprbinds`) AND updating every matching window rule in the same pass — too much to fold
--- into a reversible few-day trial. Do it only if ghostty wins. Same source note also warns that
--- a non-default class breaks .desktop/DBus activation and spawns separate instances under
--- gtk-single-instance, so the rename needs its own testing.
+-- THE FAILURE MODE IS SILENT, so verify by measurement rather than by reading this file.
+-- Ghostty's config PARSER accepts an invalid class perfectly happily (measured: `class = herdr`
+-- echoes back fine from `ghostty +show-config`); GTK rejects it later and the window simply
+-- carries the default `com.mitchellh.ghostty` instead. Nothing is logged. After any change here:
+--
+--     hyprctl -j clients | grep -i class
+--
+-- A window class is only knowable from a running window — a config file, a .desktop file or
+-- this comment are all predictions.
+--
+-- Two further caveats from the same source note, both accepted. A non-default class changes the
+-- DBus bus name, so it "may break launching Ghostty from .desktop files, via DBus activation, or
+-- systemd user services" — irrelevant here, since these three are compositor-spawned and the
+-- ordinary launcher path still uses the default class. And a differing class spawns a separate
+-- instance under `gtk-single-instance`; the default is `detect`, which does not apply to CLI
+-- launches, so these are separate processes by design rather than by accident.
+--
+-- REVERTING is a single pass: put "alacritty" back here, change the three launchers back to
+-- `alacritty --class <name>`, and drop the `mk.` prefix from the three window rules.
 local term = "ghostty"
 
 --------------------------------------------------------------------------------
@@ -216,7 +228,8 @@ hl.bind(mod .. " + ALT + B", hl.dsp.exec_cmd("firefox"),                { descri
 --   SUPER+A was free. Mnemonic is "agents" — herdr is the agent terminal manager.
 --   SUPER+T is DMS's ghostty launcher and is TAKEN (MK, 2026-08-10), also via `unbind`.
 --     A slightly worse deal than SUPER+M because it is not duplicated elsewhere: ghostty must
---     now be launched from spotlight (SUPER+space). SUPER+Return still opens alacritty.
+--     now be launched from spotlight (SUPER+space). SUPER+Return opens `term` (ghostty since
+--     2026-08-10), so a plain ghostty window is in fact still one keypress away.
 --
 -- `takes_dms_key` marks the two entries whose key DMS already binds. Without the unbind, BOTH
 -- actions fire on one press — that is not theory, it is what SUPER+M did: focused the mail
@@ -270,20 +283,22 @@ hl.bind(mod .. " + ALT + S", hl.dsp.exec_cmd("kanshictl switch solo"),   { descr
 --
 -- ABSOLUTE PATH, NOT A BARE `hyprbinds`. ~/.local/bin is put on PATH by .zshrc, i.e. only for
 -- INTERACTIVE shells — a process the compositor spawns inherits the session environment, where
--- nothing has added it. A bare name therefore fails to exec, alacritty exits instantly, and the
--- keybind looks dead with no error anywhere. herdr and alacritty are unaffected because they
+-- nothing has added it. A bare name therefore fails to exec, the terminal exits instantly, and
+-- the keybind looks dead with no error anywhere. herdr and ghostty are unaffected because they
 -- live in /usr/bin. Built from $HOME so no home directory is hardcoded, same as the xkb path.
 --
 -- The window is sized by the window rules below, NOT here. An earlier version passed
 -- `-o window.dimensions.columns=… lines=…` to alacritty as a workaround while rule-based sizing
 -- appeared broken; that turned out to be a rule-ordering bug (see the rules), so the workaround
--- was removed rather than left as a second mechanism fighting the first. `window.dimensions`
--- does work and sizes in CELLS — reach for it if the sheet should ever track the font size
--- instead of the monitor.
+-- was removed rather than left as a second mechanism fighting the first. Ghostty's equivalent is
+-- `--window-width=`/`--window-height=`, also in CELLS (Config.zig:2159 — "grid dimensions",
+-- minimum 10x4) — reach for it if the sheet should ever track the font size instead of the
+-- monitor. Note its documented GTK bug: window decorations are not accounted for, so the grid
+-- will not match exactly unless decorations are off.
 local cheatsheet = os.getenv("HOME") .. "/.local/bin/hyprbinds"
 hl.unbind(mod .. " + SHIFT + Slash")
 hl.bind(mod .. " + SHIFT + Slash",
-        hl.dsp.exec_cmd("alacritty --class hyprbinds -e " .. cheatsheet .. " --fzf"),
+        hl.dsp.exec_cmd("ghostty --class=mk.hyprbinds -e " .. cheatsheet .. " --fzf"),
         { description = "Keybind cheat sheet" })
 
 -- Screenshots on CTRL+SHIFT+<n>: Apple keyboards have no Print key, which is what DMS binds.
@@ -413,11 +428,15 @@ hl.window_rule({ match = { class = "floorp" },                  workspace = "nam
 hl.window_rule({ match = { class = "brave-browser" },           workspace = "name:social" })
 hl.window_rule({ match = { class = "code" },                    workspace = "name:code" })
 
--- The herdr terminal, matched on the custom class set by `alacritty --class herdr` in the login
--- autostart at the bottom of this file. Plain Alacritty windows are class
--- "Alacritty" and are deliberately NOT matched here — they must stay openable anywhere, the
--- same reasoning as firefox below.
-hl.window_rule({ match = { class = "herdr" }, workspace = "name:herdr" })
+-- The herdr terminal, matched on the custom class set by `ghostty --class=mk.herdr` in the login
+-- autostart at the bottom of this file. Plain ghostty windows are class
+-- "com.mitchellh.ghostty" and are deliberately NOT matched here — they must stay openable
+-- anywhere, the same reasoning as firefox below.
+--
+-- `mk.herdr`, not `herdr`: ghostty requires a valid GTK application id (two period-separated
+-- elements minimum). See the note beside `local term` at the top — an invalid class is accepted
+-- by ghostty's parser and dropped by GTK, so this rule would silently never match.
+hl.window_rule({ match = { class = "mk.herdr" }, workspace = "name:herdr" })
 
 -- The cheat sheet floats and stays on the CURRENT workspace — deliberately no `workspace`
 -- field, unlike every rule above: a reference you open mid-task must not yank you elsewhere.
@@ -444,10 +463,11 @@ hl.window_rule({ match = { class = "herdr" }, workspace = "name:herdr" })
 --
 -- Consequence, accepted: the size is absolute, so the window is the same on the 3440 ultrawide
 -- and the 2560 panel rather than proportional to each. The sheet needs ~100 columns, so keep the
--- width comfortably above ~900px. If proportional sizing is ever wanted, alacritty's
--- `window.dimensions` (cells) is the working alternative — not a percentage here.
-hl.window_rule({ match = { class = "hyprbinds" }, float = true })
-hl.window_rule({ match = { class = "hyprbinds" }, size = { 900, 1000 } })
+-- width comfortably above ~900px. If proportional sizing is ever wanted, ghostty's
+-- `--window-width=`/`--window-height=` (cells) is the working alternative — not a percentage
+-- here. That is still not proportional to the monitor, but it does track the font size.
+hl.window_rule({ match = { class = "mk.hyprbinds" }, float = true })
+hl.window_rule({ match = { class = "mk.hyprbinds" }, size = { 900, 1000 } })
 
 -- If login focus-jumping becomes annoying (both autostarted apps open on workspaces you are not
 -- on, and `focus_on_activate = true` is set at the top), add `no_initial_focus = true` to these
@@ -545,11 +565,15 @@ hl.on("hyprland.start", function()
     -- -> name:mail via the thunderbird window rule.
     hl.exec_cmd("thunderbird")
 
-    -- -> name:herdr via the `herdr` class rule. `--class` is what makes this pinnable at all:
-    -- a bare `alacritty` is class "Alacritty" like every other terminal, so a rule on it would
-    -- drag EVERY terminal to the herdr workspace. Keep this command identical to the one in the
-    -- workspace's on_created_empty, or the two paths produce differently-classed windows.
-    hl.exec_cmd("alacritty --class herdr -e herdr")
+    -- -> name:herdr via the `mk.herdr` class rule. `--class` is what makes this pinnable at all:
+    -- a bare `ghostty` is class "com.mitchellh.ghostty" like every other ghostty window, so a
+    -- rule on that would drag EVERY terminal to the herdr workspace. Keep this command identical
+    -- to the one in the workspace's on_created_empty, or the two paths produce differently-
+    -- classed windows.
+    --
+    -- The `mk.` prefix is not decoration: ghostty rejects a single-word class as an invalid GTK
+    -- application id, silently, falling back to the default. See the note beside `local term`.
+    hl.exec_cmd("ghostty --class=mk.herdr -e herdr")
 end)
 
 --------------------------------------------------------------------------------
