@@ -474,7 +474,11 @@ hl.workspace_rule({ workspace = "name:term",    persistent = true })
 -- whose title settles later — which is exactly the restored-Firefox case
 -- (desktop/niri-window-placement.md). The Hyprland answer is an event handler; see below.
 hl.window_rule({ match = { class = "firefox", title = "^Picture-in-Picture$" }, float = true })
-hl.window_rule({ match = { class = "org.mozilla.Thunderbird", title = "Alias" }, float = true })
+
+-- NO Thunderbird float rule here, deliberately — a title-matched one CANNOT work for that app.
+-- `{ class = "org.mozilla.Thunderbird", title = "Alias" }, float = true` stood here from the
+-- original skeleton until 2026-08-11 and had never once fired. See the `window.title` handler
+-- further down, which is the working replacement.
 
 -- App -> static workspace. EVERY class below was read off a LIVE WINDOW with
 -- `hyprctl -j clients | grep -i class` (2026-08-10, mkMac2014) — no guesses, no .desktop files.
@@ -556,6 +560,71 @@ hl.window_rule({ match = { class = "mk.hyprbinds" }, size = { 900, 1000 } })
 -- (`visual-studio-code-bin` is what is installed, and ~/.config/Code/User/settings.json is a
 -- live stow symlink) — the CLASS guess derived from it was not. Getting the package right does
 -- not get the class right.
+
+-- Float the send_as extension's "create identity?" dialog, WITHOUT floating the compose window.
+--
+-- This is the worked example of the static-rule limitation noted at the top of the rules block,
+-- and it is worth reading before writing any title-matched rule for a Firefox-family app.
+-- Measured 2026-08-11, `hyprctl -j clients` with the dialog open:
+--
+--   title                                              initialTitle          floating
+--   All (last 100 days) - … - Mozilla Thunderbird      Mozilla Thunderbird   false
+--   Write: Re: … - Thunderbird                         Write: (no subject)   false
+--   Send As Alias - Create Identity? - Mozilla Th…     Mozilla Thunderbird   false
+--
+-- The dialog is `messenger.windows.create({type = 'popup'})` (thunderbird_send_as
+-- background.js), so its title comes from the popup's <title> and is set only AFTER the window
+-- maps. At map time it is indistinguishable from the main window — BOTH are "Mozilla
+-- Thunderbird" — so no `float` rule, however well written, can select it. The compose window is
+-- the one Thunderbird window with a distinctive initialTitle, which is the wrong way round.
+--
+-- Note the failure mode: the old rule matched `Alias`, which really does appear in the settled
+-- title, so it read as correct and produced no error anywhere. The `floating: false` column above
+-- is the whole disproof.
+--
+-- The dispatcher call form was established by probing a LIVE window (`hyprctl dispatch` evaluates
+-- Lua, so a running dialog can be floated by hand). Two things that cost a round each:
+--   * `action = "enable"`, not the default. Called without it the dispatcher TOGGLES, so a probe
+--     that ran both forms in sequence floated the window and immediately unfloated it — and both
+--     calls returned `ok`. "ok" is not evidence; the `floating` field afterwards is.
+--   * A raw dispatcher string (`setfloating address:0x…`) is NOT accepted — `hyprctl dispatch`
+--     parses its argument as Lua and dies on the space.
+--
+-- FLOATING IT IS NOT ENOUGH — the dialog also arrives MAXIMIZED, and the second dispatch is what
+-- makes this actually useful. Measured with the window already floating:
+--
+--   floating   fullscreen   fullscreenClient   size
+--   true       1            1                  1596x952     <- full logical screen (2880x1800 @1.8
+--                                                              is 1600x1000) minus gaps and bar
+--
+-- `fullscreen = 1` is MAXIMIZED, not true fullscreen (0 none / 1 maximized / 2 fullscreen), and
+-- `fullscreenClient = 1` says THUNDERBIRD is asserting it, not Hyprland. That distinction decides
+-- the fix: `hl.dsp.window.fullscreen({ action = "unset" })` returns `ok` and changes nothing,
+-- because it clears only the internal state while the client's request keeps the geometry. Only
+-- `fullscreen_state`, which addresses both, works — clearing both drops the window to 556x404,
+-- i.e. the 550x300 the extension asks for in `messenger.windows.create` plus chrome.
+--
+-- Both dispatchers are self-documenting through their ERRORS, which is where every field name and
+-- enum below came from — `strings -a $(command -v Hyprland) | grep fullscreen_state` yields
+-- `expected a table { internal, client, action?, window? }` and
+-- `invalid action "{}" (expected toggle/set/unset)`. Note `float` takes "enable" while this one
+-- takes "set": the vocabularies are per-dispatcher, so do not carry one over to the other.
+--
+-- `window = "address:…"` IS honoured, verified rather than assumed: floating the COMPOSE window by
+-- address while a third window (the terminal) held focus moved the right one. Worth having checked
+-- — every earlier probe had targeted the focused window, so "the field works" and "dispatchers act
+-- on the active window" fit the evidence equally until that test.
+hl.on("window.title", function(w)
+    if w == nil or w.class ~= "org.mozilla.Thunderbird" then return end
+    if w.title == nil or not w.title:find("Send As Alias", 1, true) then return end
+    -- window.title fires on every title change; bail once the window is in the target state.
+    -- Both conditions, not just `floating` — the first pass leaves it floating AND maximized, so
+    -- guarding on `floating` alone would return early and never clear the maximize.
+    if w.floating and (w.fullscreen or 0) == 0 then return end
+    local sel = "address:" .. w.address
+    hl.dispatch(hl.dsp.window.float({ action = "enable", window = sel }))
+    hl.dispatch(hl.dsp.window.fullscreen_state({ internal = 0, client = 0, action = "set", window = sel }))
+end)
 
 -- Post-restore Firefox placement, the in-config replacement for
 -- ~/.local/bin/place-firefox-windows.sh. Disabled until the Winger window-name prefixes are
