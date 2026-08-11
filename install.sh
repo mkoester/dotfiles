@@ -23,9 +23,9 @@
 #   that stops being a quadlet/Node/atuin/... machine really stops loading those aliases.
 #   (Without a workstation-private clone there is nowhere to save — the run says so and still works.)
 #
-# Preseeding (skip prompts): export DF_DESKTOP / DF_NIRI / DF_HYPR / DF_DMS / DF_QUADLET /
-#   DF_ATUIN / DF_NODE / DF_DEV / DF_CADDY / DF_GO / DF_WSL / DF_GITA / DF_FRESH / DF_LESSPIPE /
-#   DF_TOPGRADE = 1|0.
+# Preseeding (skip prompts): export DF_DESKTOP / DF_NIRI / DF_HYPR / DF_DMS / DF_MESSENGERS /
+#   DF_QUADLET / DF_ATUIN / DF_NODE / DF_DEV / DF_CADDY / DF_GO / DF_WSL / DF_GITA / DF_FRESH /
+#   DF_LESSPIPE / DF_TOPGRADE = 1|0.
 #   An exported DF_* beats the stored host.env answer for that one run and is NOT saved, so
 #   `DF_NIRI=0 ./install.sh` is a one-off override rather than a decision.
 #   DF_STOW_BACKUP=1 answers "move conflicting files aside as *.pre-stow-backup?" up front
@@ -196,9 +196,10 @@ run ln -sf "$DOTFILES_REPO/.zshrc-update-os-$UPDATE_OS.zsh" "$HOME/.zshrc-update
 step "6/8  Host-class options"
 
 # Wayland desktop, compositor-agnostic (works under Niri, labwc, …): notifications, kanshi,
-# waybar unit, ydotool. Niri itself is a SEPARATE question below — not every desktop runs it.
+# waybar unit, ydotool, terminals, flatpak+Flathub. Niri itself is a SEPARATE question below —
+# not every desktop runs it.
 if ask_yn DF_DESKTOP "Wayland desktop (bar, monitor profiles, notifications)?"; then
-	step "  desktop: notifications, kanshi, waybar unit, idle+lock, ydotool"
+	step "  desktop: notifications, kanshi, waybar unit, idle+lock, ydotool, flatpak"
 	case "$PM" in
 		# hyprlock is the fleet locker (it drives fprintd itself, so the fingerprint works
 		# without a keypress). Arch-family only: it is NOT packaged on Debian/arm64, which is
@@ -211,11 +212,36 @@ if ask_yn DF_DESKTOP "Wayland desktop (bar, monitor profiles, notifications)?"; 
 		# shape as the missing `fzf` noted in the DF_HYPR block. Not added to apt/dnf: ghostty
 		# is not in Debian/Fedora's standard repos, so a package name there would be a guess
 		# that fails as "not found" rather than as "set up the vendor repo".
-		pacman) pm_install libnotify kanshi waybar swayidle hyprlock ghostty ;;
-		apt)    pm_install libnotify-bin ;;
-		dnf)    pm_install libnotify ;;
+		#
+		# flatpak is on every branch except brew: it is packaged under that exact name on
+		# Arch, Debian and Fedora, so unlike ghostty/hyprlock above there is no guessing.
+		pacman) pm_install libnotify kanshi waybar swayidle hyprlock ghostty flatpak ;;
+		apt)    pm_install libnotify-bin flatpak ;;
+		dnf)    pm_install libnotify flatpak ;;
 		brew)   : ;;
 	esac
+	# The official Flathub remote. Needed because several desktop apps on this fleet have no
+	# distro package at all in their current versions — ZapZap (the WhatsApp client) is
+	# flatpak-first, and Threema Desktop 2.0 ships from Threema AG's own flatpak repo, which
+	# cannot be added until flatpak itself works.
+	#
+	# SYSTEM remote, not --user. Two reasons: it matches what the fleet already had when this
+	# was done by hand, and vendor install instructions (Threema's included) are bare
+	# `flatpak install --from …` lines that resolve against the system installation — a --user
+	# remote would leave those failing with a confusing "no remote" rather than obviously.
+	#
+	# --if-not-exists is what makes a re-run a no-op instead of an error, so this is safe on
+	# every subsequent install.sh run.
+	#
+	# The `have` check is NOT redundant with the pm_install above: under --dry-run nothing was
+	# actually installed, and without the DRYRUN arm the preview would silently omit this step
+	# — a dry run that under-reports what a real run does is worse than no preview.
+	if [ "$PM" != brew ] && { have flatpak || [ "$DRYRUN" -eq 1 ]; }; then
+		run sudo flatpak remote-add --if-not-exists --system flathub \
+			https://dl.flathub.org/repo/flathub.flatpakrepo
+	elif [ "$PM" != brew ]; then
+		warn "flatpak missing after install — Flathub remote not registered"
+	fi
 	clone_if_absent https://github.com/MichaelAquilina/zsh-auto-notify.git "$ZSH_CUSTOM_DIR/plugins/auto-notify"
 	link_omz oh-my-zsh-plugins-optional auto-notify.zsh
 	link_omz oh-my-zsh-custom auto-notify.zsh
@@ -383,6 +409,75 @@ if ask_yn DF_DMS "DankMaterialShell (DMS) desktop shell?"; then
 			warn "    sudo pacman -Rns cachyos-hypr-noctalia   # then READ the list before confirming"
 			warn "  See Workstation-Documentation/hardware/intel-mac-cachyos.md (Noctalia section)."
 		fi
+	fi
+fi
+
+# Messengers. A SEPARATE question from DF_DESKTOP on purpose: the Pi 500 is a desktop machine
+# that has no business pulling four Electron/WebEngine apps, and the same split already exists
+# for DF_DEV ("writes JS" is not "files issues"). Answer 1 on the personal workstations only.
+#
+# Signal and Telegram are OFFICIAL native clients and are taken from the distro repo where one
+# exists. WhatsApp and Threema have no native Linux client at all:
+#   * ZapZap is a WhatsApp Web wrapper — the most actively maintained of several, and Flathub
+#     carries a newer version than the AUR (7.4 vs 7.2 as of 2026-08-11), so flatpak even on Arch.
+#   * Threema Desktop 2.0 ships from Threema AG's OWN flatpak repo, not Flathub. The `--from`
+#     form adds that remote as a side effect, which is why no separate remote-add is needed.
+#     It is labelled beta and is still the right choice: the Flathub `ch.threema.threema-web-desktop`
+#     is the OLD Threema-Web-in-Electron, in maintenance mode, and needs the phone online.
+#
+# On apt/dnf ALL FOUR come from Flathub, deliberately: telegram-desktop is packaged there but
+# signal-desktop is NOT (Signal ships its own apt repo), and a guessed package name fails as
+# "not found" rather than as "add the vendor repo" — the same reasoning as ghostty above.
+#
+# macOS is the platform where this all gets EASIER, and the branch is genuinely different rather
+# than a translation of the Linux one (cask names checked against formulae.brew.sh, 2026-08-11):
+#   * WhatsApp has an OFFICIAL native Mac client (`whatsapp`, Meta's own) — the thing that does
+#     not exist on Linux at all. No wrapper needed, so no ZapZap here.
+#   * Telegram is `telegram`, NOT `telegram-desktop`. Both casks exist: `telegram` is the native
+#     Swift app from macos.telegram.org (v12.9), `telegram-desktop` is the same cross-platform Qt
+#     build the Linux machines run (v7.0.9). The fleet is deliberately inconsistent on this one.
+#   * Threema has NO cask for Desktop 2.0. The `threema` cask is 1.2.50 — the same legacy
+#     Threema-Web-in-Electron rejected above — and `threema-desktop`/`threema-beta` do not exist
+#     (checked). 2.0 ships as a DMG in separate Intel and Apple Silicon builds, so it is handed
+#     over rather than guessed at: a hardcoded vendor URL breaks silently when they reorganise
+#     the download page, and installing the legacy app here would put this machine on a
+#     different Threema from the rest of the fleet.
+if ask_yn DF_MESSENGERS "Messengers (Signal, Telegram, WhatsApp/ZapZap, Threema)?"; then
+	if [ "$PM" = brew ]; then
+		step "  messengers: signal, telegram, whatsapp (casks); threema by hand"
+	else
+		step "  messengers: signal, telegram, zapzap (flatpak), threema (flatpak)"
+	fi
+	case "$PM" in
+		pacman) pm_install signal-desktop telegram-desktop ;;
+		brew)   run brew install --cask signal telegram whatsapp ;;
+	esac
+	if [ "$PM" = brew ]; then
+		# `uname -m` on the Mac itself, not a guess from the hostname: mkMac2017 is Intel and
+		# mkMac2014 was too, but the next Mac on this fleet will not be.
+		case "$(uname -m)" in
+			arm64) threema_dmg="Apple Silicon" ;;
+			*)     threema_dmg="Intel processor" ;;
+		esac
+		info "Threema: no cask for Desktop 2.0 (the \`threema\` cask is the legacy 1.2.50 web app)."
+		info "  Download the \"For macOS ($threema_dmg)\" DMG by hand, checksums are on the page:"
+		info "  https://threema.com/en/download/threema-private/desktop-beta"
+	elif have flatpak || [ "$DRYRUN" -eq 1 ]; then
+		[ "$PM" = pacman ] || run sudo flatpak install -y flathub org.signal.Signal
+		[ "$PM" = pacman ] || run sudo flatpak install -y flathub org.telegram.desktop
+		run sudo flatpak install -y flathub com.rtosta.zapzap
+		run sudo flatpak install -y --from \
+			https://releases.threema.ch/flatpak/threema-desktop/ch.threema.threema-desktop.flatpakref
+		# Threema's own documented workaround: the sandbox has no host file access by default,
+		# which breaks drag-and-drop of attachments.
+		run flatpak override --user ch.threema.threema-desktop --filesystem=host
+	else
+		warn "flatpak missing — skipping ZapZap and Threema (answer DF_DESKTOP=1, or install flatpak)"
+	fi
+	# Linux-only: the grid is a Hyprland window-rule + script arrangement, meaningless on macOS.
+	if [ "$PM" != brew ]; then
+		info "Hyprland users: SUPER+ALT+M opens all four as a 2x2 grid on the \`chat\` workspace."
+		info "  Verify the window classes once with: hypr-messengers probe"
 	fi
 fi
 

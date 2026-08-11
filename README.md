@@ -1310,6 +1310,91 @@ Configured in ghostty and kitty (not alacritty, which cannot do the first one):
 Full comparison incl. the window-class trap that forced the `mk.*` class renames:
 `Workstation-Documentation/desktop/terminal-emulator-comparison.md`.
 
+## flatpak + Flathub — under `DF_DESKTOP`
+
+Every `DF_DESKTOP` machine installs `flatpak` and registers the official Flathub remote:
+
+```sh
+sudo flatpak remote-add --if-not-exists --system flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+```
+
+Not a preference — several desktop apps on this fleet have **no distro package in their current
+version**. ZapZap (the WhatsApp client) ships 7.4 on Flathub against 7.2 in the AUR, and Threema
+Desktop 2.0 comes from Threema AG's own flatpak repo, which cannot be added at all until flatpak
+itself works.
+
+Three decisions worth not re-litigating:
+
+- **System remote, not `--user`.** Vendor install instructions are bare `flatpak install --from …`
+  lines that resolve against the *system* installation — Threema's documented command is exactly
+  that. A `--user` remote leaves those failing with a "no remote" error that reads like a broken
+  URL rather than a wrong scope.
+- **`--if-not-exists`** is what makes a re-run a no-op instead of an error, so this is safe on
+  every subsequent `install.sh` run.
+- **Not on `brew`.** macOS has no flatpak; the branch is skipped rather than guessed at.
+
+The `have flatpak` guard around the remote-add is deliberately **not** redundant with the
+`pm_install` above it: under `--dry-run` nothing is installed, so without the `DRYRUN` arm the
+preview would silently omit the step. Verified with the control — `DF_DESKTOP=0 ./install.sh
+--dry-run --yes` prints no flatpak line at all, which is what proves the gating is real rather
+than the grep merely finding the string.
+
+## messengers — Signal, Telegram, WhatsApp, Threema (`DF_MESSENGERS`)
+
+Its own host-class question, **not** part of `DF_DESKTOP`. A desktop machine is not automatically
+a machine that wants four Electron/WebEngine apps — the Pi 500 is the standing counter-example,
+exactly like `mknas1` is for `DF_DEV` ("writes JavaScript" ≠ "files issues").
+
+| App | Source on Arch | Why |
+|---|---|---|
+| **Signal** | `signal-desktop` (`extra`) | official native client; repo version tracks upstream releases 1:1 |
+| **Telegram** | `telegram-desktop` (`extra` / `cachyos-extra-v3`) | official native client, same |
+| **WhatsApp** | flatpak `com.rtosta.zapzap` | **no native client exists** — ZapZap wraps WhatsApp Web and is the most actively maintained of several wrappers |
+| **Threema** | flatpak `ch.threema.threema-desktop` | **no native client exists**; ships from Threema AG's own repo |
+
+Three things worth not re-deriving:
+
+- **ZapZap comes from Flathub even on Arch**, against this repo's prefer-the-distro-package habit:
+  Flathub carried 7.4 against the AUR's 7.2 as of 2026-08-11, and the AUR build has a single
+  maintainer. Avoid `wasistlos` entirely — still in the AUR, **archived upstream** since Oct 2024.
+- **Threema Desktop 2.0, not the Flathub `ch.threema.threema-web-desktop`.** The latter is the old
+  Threema-Web-in-Electron, now in maintenance mode, and needs the phone online and reachable.
+  Desktop 2.0 is multi-device (works with the phone off), open source, and installed with the
+  `--from <flatpakref>` form — which adds Threema's own remote as a side effect, so no separate
+  `remote-add` step is needed. It is labelled beta and limited to two linked computers.
+- **On apt/dnf all four come from Flathub.** `telegram-desktop` is packaged there but
+  `signal-desktop` is not (Signal ships its own apt repo), and a guessed package name fails as
+  "not found" rather than as "add the vendor repo" — the same reasoning as ghostty under
+  `DF_DESKTOP`.
+
+### macOS (`brew`) is a genuinely different branch, not a translation
+
+Cask names checked against `formulae.brew.sh`, 2026-08-11:
+
+```sh
+brew install --cask signal telegram whatsapp
+```
+
+| | macOS | vs Linux |
+|---|---|---|
+| **WhatsApp** | `whatsapp` — **official native Meta client** | no native client exists at all; Linux gets the ZapZap wrapper |
+| **Telegram** | `telegram` — the native Swift app (macos.telegram.org, v12.9) | `telegram-desktop`, the cross-platform Qt build (v7.0.9) |
+| **Signal** | `signal` | `signal-desktop`, same app and version |
+| **Threema** | **no cask** — DMG by hand | flatpak from Threema AG's repo |
+
+Two traps:
+
+- **`telegram` and `telegram-desktop` are both casks.** On macOS you want `telegram`; picking the
+  familiar Linux name silently gets you the Qt build instead of the native one.
+- **The `threema` cask is 1.2.50** — the same legacy Threema-Web-in-Electron rejected above.
+  `threema-desktop` and `threema-beta` do not exist (checked). Threema Desktop 2.0 ships as a DMG
+  in separate Intel and Apple Silicon builds, so `install.sh` prints the URL and the right build
+  for `uname -m` rather than hardcoding a vendor download that would break silently. Installing
+  the cask would also put that machine on a *different* Threema from the rest of the fleet.
+
+On Hyprland the four are pinned to a `chat` workspace and arranged as a 2×2 grid by
+`SUPER+ALT+M` — see the `hypr` section.
+
 ## waybar — supervised restart
 
 Waybar crashes around output add/remove (hotplug, docking, `kanshictl switch`, monitor blanking) —

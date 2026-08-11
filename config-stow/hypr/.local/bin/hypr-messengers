@@ -1,0 +1,152 @@
+#!/usr/bin/env bash
+#
+# hypr-messengers — open the four messengers on the `chat` workspace and arrange
+# them as a 2x2 grid (two scrolling columns of two windows each).
+#
+# Bound to SUPER+ALT+M in hyprland.lua, which also focuses the workspace.
+#
+# ── WHY A SCRIPT AND NOT WINDOW RULES ────────────────────────────────────────
+# Window rules can pin an app to a workspace but cannot say "go into column 2".
+# The scrolling layout puts every new window in its OWN column, so four apps give
+# four half-width columns on an infinite tape, not a grid. Turning that into a
+# 2x2 needs two `consume` messages, and `consume` acts on the FOCUSED window —
+# i.e. it is a sequence, which only a script can express.
+#
+# The grid is therefore built once per session. It is not persisted by Hyprland;
+# re-run this after closing/reopening one of the apps.
+#
+# ── WHY THE APPS ARE LAUNCHED SEQUENTIALLY ───────────────────────────────────
+# The tape order decides which app ends up in which quarter, and the tape order
+# is the order the windows MAP, not the order the commands were issued. Electron
+# and flatpak startup times differ by seconds, so firing all four at once gives a
+# different arrangement every time. Waiting for each window before starting the
+# next makes the layout reproducible:
+#
+#     column 1 (left)          column 2 (right)
+#     ┌────────────────┐       ┌────────────────┐
+#     │ WhatsApp       │       │ Telegram       │
+#     ├────────────────┤       ├────────────────┤
+#     │ Signal         │       │ Threema        │
+#     └────────────────┘       └────────────────┘
+#
+# ── WINDOW CLASSES ───────────────────────────────────────────────────────────
+# The `class` values below are matched against LIVE windows. They are duplicated
+# in hyprland.lua's window rules — KEEP THE TWO IN SYNC. A wrong class fails
+# silently: the app opens, nothing moves, and no error is logged anywhere.
+#
+# Read the truth off a running window, never off a .desktop file's
+# StartupWMClass (that is a launcher hint, and two of four were wrong the last
+# time this repo trusted one):
+#
+#     hypr-messengers probe
+#
+set -euo pipefail
+
+WS=chat
+
+# app-key | window class | launch command
+# Order is the tape order, i.e. the quarter each app lands in (see diagram above).
+APPS=(
+    "whatsapp|com.rtosta.zapzap|flatpak run com.rtosta.zapzap"
+    "signal|signal|signal-desktop"
+    "telegram|org.telegram.desktop|Telegram"
+    "threema|ch.threema.threema-desktop|flatpak run ch.threema.threema-desktop"
+)
+
+die() { printf '%s: %s\n' "${0##*/}" "$1" >&2; exit 1; }
+
+command -v hyprctl >/dev/null || die "hyprctl not found"
+command -v jq      >/dev/null || die "jq not found"
+
+# Address of the first window with the given class, or empty.
+addr_of() {
+    hyprctl -j clients | jq -r --arg c "$1" 'first(.[] | select(.class == $c) | .address) // empty'
+}
+
+# Wait up to ~15s for a window of the given class to map. Returns its address.
+wait_for() {
+    local class=$1 i addr
+    for ((i = 0; i < 150; i++)); do
+        addr=$(addr_of "$class")
+        [[ -n $addr ]] && { printf '%s\n' "$addr"; return 0; }
+        # `sleep` is fine here: this script never runs inside the Claude sandbox
+        # (it needs the compositor socket, which is blocked there anyway).
+        sleep 0.1
+    done
+    return 1
+}
+
+case "${1:-arrange}" in
+probe)
+    # What the classes actually are, right now. This is the only trustworthy source.
+    hyprctl -j clients | jq -r '.[] | "\(.workspace.name)\t\(.class)\t\(.title)"' | sort
+    exit 0
+    ;;
+arrange) ;;
+*) die "usage: ${0##*/} [arrange|probe]" ;;
+esac
+
+# ⚠ `hyprctl dispatch` TAKES A LUA EXPRESSION IN 0.56, NOT A DISPATCHER NAME. The string is
+# wrapped as `return hl.dispatch(<your text>)`, so the pre-0.56 form every recipe on the web
+# uses — `hyprctl dispatch layoutmsg consume` — dies with "')' expected near 'consume'".
+# Documented in Workstation-Documentation/desktop/hyprland-dms.md; this script was written with
+# the old syntax first and every dispatch in it would have failed.
+dispatch() { hyprctl dispatch "$1" >/dev/null; }
+
+dispatch "hl.dsp.focus({ workspace = \"name:$WS\" })"
+
+addrs=()
+for entry in "${APPS[@]}"; do
+    IFS='|' read -r key class cmd <<<"$entry"
+
+    addr=$(addr_of "$class" || true)
+    if [[ -z $addr ]]; then
+        # shellcheck disable=SC2086
+        setsid $cmd >/dev/null 2>&1 &
+        addr=$(wait_for "$class") || die "$key ($class) never opened a window — run '${0##*/} probe' and check the class"
+    fi
+    addrs+=("$addr")
+done
+
+# Give the last window a moment to be placed by the layout before reshuffling.
+sleep 0.4
+
+# Build the grid: pull window 2 into column 1, then window 4 into column 2.
+# `consume` merges the focused window into the PREVIOUS column, so after the
+# first consume the tape is [w1 w2] [w3] [w4] and w4 is again one column right
+# of its target — the same message works for both.
+for i in 1 3; do
+    dispatch "hl.dsp.focus({ window = \"address:${addrs[$i]}\" })"
+    dispatch 'hl.dsp.layout("consume")'
+done
+
+# Land on the first window so focus is predictable, and pull the tape back to
+# the start (two 0.5-width columns exactly fill the screen, so nothing scrolls
+# off — but a leftover offset from the consumes would still shift them).
+dispatch "hl.dsp.focus({ window = \"address:${addrs[0]}\" })"
+dispatch 'hl.dsp.layout("fit_into_view")'
+
+# ── Did it actually work? ─────────────────────────────────────────────────────
+# Every dispatch above returns `ok` as long as the Lua PARSES — `ok` says nothing
+# about the window having moved. So check the geometry instead: a 2x2 grid has
+# exactly two distinct x positions and two distinct y positions across the four
+# windows. Four columns (the un-arranged state) gives four distinct x and one y,
+# which is a different reading rather than the same one.
+sleep 0.3
+read -r nx ny < <(
+    hyprctl -j clients |
+        jq -r --arg ws "$WS" '
+            [ .[] | select(.workspace.name == $ws) ] as $w
+            | "\($w | map(.at[0]) | unique | length) \($w | map(.at[1]) | unique | length)"
+        '
+)
+if [[ $nx == 2 && $ny == 2 ]]; then
+    printf 'chat: 2x2 grid ok\n'
+else
+    printf '%s: grid NOT formed — %s distinct x, %s distinct y (expected 2 and 2)\n' \
+        "${0##*/}" "$nx" "$ny" >&2
+    printf '  the dispatches returned ok, so this is a targeting problem, not a syntax one.\n' >&2
+    printf '  check the window selector form: hyprctl dispatch %s\n' \
+        "'hl.dsp.focus({ window = \"address:${addrs[0]}\" })'" >&2
+    exit 1
+fi

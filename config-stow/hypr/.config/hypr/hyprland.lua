@@ -279,6 +279,23 @@ end
 -- hl.bind(mod .. " + SHIFT + T", hl.dsp.window.move({ workspace = "name:term" }))  -- costs float toggle
 -- hl.bind(mod .. " + ALT + T",   hl.dsp.window.move({ workspace = "name:term" }))  -- keeps both
 
+-- The messengers workspace, on the ALT layer rather than a plain SUPER letter. NOT a free
+-- choice: by 2026-08-11 the only plain-SUPER letters left were D and Z (DMS holds F,H,I,J,K,L,
+-- M,N,O,P,Q,R,T,U,V,W,X,Y; this config holds B,C,E,F,G,M,Q,S,T,A), and neither carries a
+-- mnemonic. SUPER+ALT+M keeps M for "messengers" next to SUPER+M "mail". Revisit if the DMS
+-- vim-motion binds (SUPER+H/J/K/L and the SHIFT+CTRL family) are ever unbound — this config
+-- already replaced them with `layoutmsg focus` on the arrow keys, so they are dead weight.
+--
+-- SUPER+ALT+M opens/arranges (the script is idempotent: an app already running is not
+-- relaunched, so a second press just rebuilds the grid). SUPER+SHIFT+ALT+M moves a window there.
+--
+-- ABSOLUTE PATH for the same reason as `hyprbinds` below: ~/.local/bin is on PATH only for
+-- interactive shells, and a compositor-spawned process is not one.
+hl.bind(mod .. " + ALT + M", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/hypr-messengers"),
+        { description = "Messengers: open + arrange 2x2 on `chat`" })
+hl.bind(mod .. " + SHIFT + ALT + M", hl.dsp.window.move({ workspace = "name:chat" }),
+        { description = "Move window to `chat`" })
+
 -- Monitor layout (kanshi profiles; define them in the kanshi package's config.d/).
 -- Note DMS binds SUPER+P to its own output profile cycling — related but a different
 -- mechanism; kanshi stays the source of truth for multi-monitor arrangements here.
@@ -449,6 +466,13 @@ hl.workspace_rule({ workspace = "name:code",    persistent = true })
 hl.workspace_rule({ workspace = "name:google",  persistent = true })
 hl.workspace_rule({ workspace = "name:social",  persistent = true })
 
+-- chat: the four messengers (WhatsApp/ZapZap, Signal, Telegram, Threema) as a 2x2 grid.
+-- Persistent like the rest, and deliberately NOT autostarted — four Electron/WebEngine apps at
+-- login is a slow login. SUPER+ALT+M opens and arranges them on demand; see the bind below.
+-- The grid itself cannot be expressed as config (the scrolling layout gives one column per
+-- window); `hypr-messengers` builds it. Bar order is alphabetical, so this sorts first.
+hl.workspace_rule({ workspace = "name:chat",    persistent = true })
+
 -- herdr is a terminal app with no class of its own, so it is not pinned by an app rule; it is
 -- launched at login with `--class herdr`, which invents a class the window rule below can match.
 hl.workspace_rule({ workspace = "name:herdr",   persistent = true })
@@ -502,6 +526,22 @@ hl.window_rule({ match = { class = "org.mozilla.Thunderbird" }, workspace = "nam
 hl.window_rule({ match = { class = "floorp" },                  workspace = "name:google" })
 hl.window_rule({ match = { class = "brave-browser" },           workspace = "name:social" })
 hl.window_rule({ match = { class = "code" },                    workspace = "name:code" })
+
+-- The four messengers -> name:chat. These pin the apps however they are started (menu,
+-- spotlight, terminal), so SUPER+ALT+M's script only has to build the grid, not the placement.
+--
+-- ⚠ THE SAME FOUR CLASSES ARE HARDCODED IN `hypr-messengers` (dotfiles hypr package). Change
+-- one and change the other, or the script will wait 15s for a window it can never find while
+-- the rule below still works — a half-broken state that looks like a slow app.
+--
+-- ⚠ UNVERIFIED AT THE TIME OF WRITING (2026-08-11): unlike every rule above, these four were
+-- NOT read off live windows — ZapZap and Threema were not installed yet. `signal` and
+-- `org.telegram.desktop` are also predictions. Confirm all four with `hypr-messengers probe`
+-- and correct them here; a wrong class fails silently (the app opens, nothing moves).
+hl.window_rule({ match = { class = "com.rtosta.zapzap" },          workspace = "name:chat" })
+hl.window_rule({ match = { class = "signal" },                     workspace = "name:chat" })
+hl.window_rule({ match = { class = "org.telegram.desktop" },       workspace = "name:chat" })
+hl.window_rule({ match = { class = "ch.threema.threema-desktop" }, workspace = "name:chat" })
 
 -- The herdr terminal, matched on the custom class set by `ghostty --class=mk.herdr` in the login
 -- autostart at the bottom of this file. Plain ghostty windows are class
