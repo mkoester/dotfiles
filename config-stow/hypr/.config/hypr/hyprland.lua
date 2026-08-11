@@ -89,18 +89,33 @@ hl.config({
         touchpad           = { natural_scroll = false, tap_to_click = true },
     },
     general = {
-        layout = "dwindle",          -- default; scrolling is opted into per workspace below
+        -- SCROLLING EVERYWHERE since 2026-08-11 (was "dwindle" with a per-workspace opt-in on
+        -- `browser` and `code`). The per-workspace split was abandoned because it makes every
+        -- scrolling-specific bind a key that silently does nothing on 5 of 7 workspaces — see
+        -- the SUPER+F note further down, which is the case that forced the decision.
+        layout = "scrolling",
     },
     misc = {
         disable_hyprland_logo    = true,
         disable_splash_rendering = true,
         focus_on_activate        = true,
     },
-    -- Scrolling layout defaults; only workspaces that opt in below actually use them.
+    -- Scrolling layout settings. These now apply to EVERY workspace (see general.layout).
+    -- `explicit_column_widths` is the preset list SUPER+F cycles through.
     scrolling = {
         column_width           = 0.5,
         direction              = "right",
-        explicit_column_widths = "0.333, 0.5, 0.667, 1.0",
+        -- Default is TRUE, i.e. focusing right from the last column jumps to the first.
+        -- Turned off 2026-08-11: at the edge the layout then resolves the target to the
+        -- column you are already on, so focus stays put (`ScrollingAlgorithm.cpp:1509/1532`).
+        -- Matches niri, which does not wrap either.
+        wrap_focus             = false,
+        -- TWO values on purpose (2026-08-11): this list is read by nothing except the
+        -- `colresize +conf` / `-conf` messages, which step to the next larger/smaller entry
+        -- and wrap at the end. With exactly two, SUPER+F becomes a plain 0.5 <-> 1.0 toggle,
+        -- which is what is wanted. Was "0.333, 0.5, 0.667, 1.0" — a four-step cycle that
+        -- needed three presses to get back to where it started.
+        explicit_column_widths = "0.5, 1.0",
     },
 })
 
@@ -142,7 +157,7 @@ want("dms.windowrules")
 -- Highlights, so this file is readable without launching the cheatsheet:
 --   SUPER+T terminal · SUPER+space spotlight · SUPER+V clipboard · SUPER+X powermenu
 --   SUPER+comma settings · SUPER+Tab/O overview · SUPER+SHIFT+/ cheatsheet
---   SUPER+Q close · SUPER+F maximize · SUPER+SHIFT+F fullscreen · SUPER+SHIFT+T float
+--   SUPER+Q close · SUPER+F maximize (REBOUND below) · SUPER+SHIFT+F fullscreen · SUPER+SHIFT+T float
 --   SUPER+<dir|hjkl> focus · SUPER+SHIFT+<dir|hjkl> move · SUPER+CTRL+<dir> focus monitor
 --   SUPER+<n> workspace · SUPER+SHIFT+<n> move to workspace · SUPER+ALT+L lock
 --   SUPER+SHIFT+E exit Hyprland · Print screenshot
@@ -307,9 +322,62 @@ hl.bind("CTRL + SHIFT + 1", hl.dsp.exec_cmd("dms screenshot"),        { descript
 hl.bind("CTRL + SHIFT + 2", hl.dsp.exec_cmd("dms screenshot full"),   { description = "Screenshot: screen" })
 hl.bind("CTRL + SHIFT + 3", hl.dsp.exec_cmd("dms screenshot window"), { description = "Screenshot: window" })
 
+-- SUPER+F: WIDEN THE COLUMN, DON'T FULLSCREEN (2026-08-11). This is niri's `maximize-column`,
+-- and it is bound here because Hyprland's fullscreen — even the layout-managed kind the
+-- scrolling layout implements — puts the window into a state that OTHER binds then refuse to
+-- act on. Both halves were measured in the 0.56.2 source:
+--
+--   * SUPER+SHIFT+<dir> (move window) is refused outright for any fullscreen window
+--     (`ConfigActions.cpp:482`, "Can't move fullscreen window"). No config option exists.
+--   * SUPER+<dir> (move focus) finds no candidate, because maximizing marks every other
+--     window `!allowedOverFullscreen` and the direction query then skips them all unless
+--     `binds:movefocus_cycles_fullscreen` is on (`WindowQuery.cpp:111-120`, default false).
+--     NOT set here — the point of this bind is to not enter that state at all.
+--
+-- `colresize +conf` steps up through scrolling.explicit_column_widths and wraps at the end.
+-- That list is deliberately just "0.5, 1.0" (see above), so this is a straight toggle: half
+-- width <-> full width, one key, no intermediate steps. At 1.0 it looks exactly like the old
+-- maximize, but the window stays an ordinary column: focus and move keep working. Real
+-- fullscreen is still SUPER+SHIFT+F (DMS's bind, for video).
+--
+-- The unbind is mandatory, not tidiness — see the accumulation note above: without it DMS's
+-- maximize fires on the same press and puts you straight back into the state this avoids.
+hl.unbind(mod .. " + F")
+hl.bind(mod .. " + F", hl.dsp.layout("colresize +conf"), { description = "Column width: cycle presets" })
+
+-- DIRECTIONAL FOCUS GOES THROUGH THE LAYOUT, NOT THROUGH movefocus (2026-08-11).
+-- DMS binds SUPER+<dir> and SUPER+hjkl to `hl.dsp.focus({direction=...})` = movefocus, which
+-- finds its target GEOMETRICALLY: it compares the focused window's rectangle against every
+-- other window's and requires the edges to be within 2 px (`WindowQuery.cpp:70-95`). On a
+-- scrolling tape that is the wrong question to ask, and it fails in a way that looks random:
+-- measured on `browser` with three columns (0.5 / 1.0 / 0.5), focus moved left and right
+-- fine until it reached the RIGHTMOST column, from where SUPER+left did nothing at all.
+--   * `hl.dsp.focus({direction="l"})`  -> no effect
+--   * `hl.dsp.layout("focus l")`       -> works
+-- both dispatched by hand in that exact state. The layout message walks the column list by
+-- index (`ScrollingAlgorithm.cpp:1451`) and never looks at a rectangle, so it cannot be
+-- defeated by a few pixels of gap. This is also literally niri's focus-column-left/right.
+--
+-- l/r move between columns and u/d within a column, automatically swapped when the scroll
+-- direction is vertical (`:1459-1471`) — so this stays correct if scrolling.direction changes.
+--
+-- TWO BEHAVIOUR CHANGES to know about:
+--   * `scrolling:wrap_focus` defaults to TRUE, so focus wrapped around at the ends of the
+--     tape instead of stopping. It is set to false in the scrolling block above.
+--   * movefocus's cross-monitor fallback is gone from these keys. SUPER+CTRL+<dir> (DMS)
+--     still moves focus between monitors, which is the explicit key for it anyway.
+for key, dir in pairs({ left = "l", right = "r", up = "u", down = "d",
+                        H = "l", L = "r", K = "u", J = "d" }) do
+    hl.unbind(mod .. " + " .. key)
+    hl.bind(mod .. " + " .. key, hl.dsp.layout("focus " .. dir),
+            { description = "Focus " .. dir .. " (scrolling layout)" })
+end
+
 -- Scrolling-layout motions, on SUPER+ALT+* because the natural keys are all taken by DMS
 -- (SUPER+comma = settings, SUPER+bracket* = preselect, SUPER+CTRL+F = maximize).
--- Harmless on tiling workspaces — the layout ignores them.
+-- SUPER+ALT+bracket* run the same +conf/-conf messages as SUPER+F. With a two-entry preset
+-- list all three keys now do the same toggle; they are kept because the list is the only thing
+-- that makes them equivalent, and adding widths back makes them distinct again.
 hl.bind(mod .. " + ALT + period",       hl.dsp.layout("move +col"),     { description = "Scroll: column right" })
 hl.bind(mod .. " + ALT + comma",        hl.dsp.layout("move -col"),     { description = "Scroll: column left" })
 hl.bind(mod .. " + ALT + bracketright", hl.dsp.layout("colresize +conf"), { description = "Scroll: widen" })
@@ -374,8 +442,10 @@ end
 -- and the ONLY way to move one is to rename it. Accepted as-is 2026-08-10 (the request was for
 -- `herdr` left of `code`, which no config change can deliver while it is called "herdr").
 hl.workspace_rule({ workspace = "name:mail",    persistent = true })
-hl.workspace_rule({ workspace = "name:browser", persistent = true, layout = "scrolling" })
-hl.workspace_rule({ workspace = "name:code",    persistent = true, layout = "scrolling" })
+-- No per-workspace `layout` here any more: general.layout is "scrolling" for everything as of
+-- 2026-08-11. Add `layout = "dwindle"` to a rule to carve an exception back out.
+hl.workspace_rule({ workspace = "name:browser", persistent = true })
+hl.workspace_rule({ workspace = "name:code",    persistent = true })
 hl.workspace_rule({ workspace = "name:google",  persistent = true })
 hl.workspace_rule({ workspace = "name:social",  persistent = true })
 
@@ -388,12 +458,13 @@ hl.workspace_rule({ workspace = "name:herdr",   persistent = true })
 -- not wanted at login. Add either to the hyprland.start handler if that changes.
 hl.workspace_rule({ workspace = "name:term",    persistent = true })
 
--- Numbered workspace 2 carried `layout = "scrolling"` as the original "try scrolling here"
--- experiment. Removed 2026-08-10: scrolling is now a deliberate choice on `browser` and `code`
--- above, so leaving a numbered workspace silently scrolling as well is just a surprise. The
--- per-workspace scrolling layout — one workspace scrolls, everything else tiles, one line
--- apart — is still the property no other candidate WM had; it is simply pointed at the right
--- workspaces now.
+-- History of the layout choice, because it moved twice in two days:
+--   * numbered workspace 2 carried `layout = "scrolling"` as the original "try it" experiment;
+--   * 2026-08-10 that was dropped and scrolling became a deliberate opt-in on `browser`/`code`;
+--   * 2026-08-11 it went global (general.layout) instead.
+-- The per-workspace layout is still Hyprland's distinguishing feature over niri and is one line
+-- away if it is ever wanted again — but a bind that works on two workspaces and silently does
+-- nothing on the other five is worse than either layout applied consistently.
 
 --------------------------------------------------------------------------------
 -- Window rules
