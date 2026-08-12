@@ -1,0 +1,135 @@
+#!/usr/bin/env python3
+"""Merge the shared DMS settings baseline and deploy it read-only.
+
+    shared/dms/base.json  +  shared/dms/laptop.json (if this machine has a battery)
+        -> ~/.config/DankMaterialShell/settings.json, mode 0444
+
+Two decisions worth knowing before changing anything here.
+
+READ-ONLY IS THE POINT. DMS probes `[ ! -f … ] || [ -w … ]` at load; when the file
+is not writable it never persists changes, shows "Settings are read-only" in the
+Settings modal, and offers a copy-to-clipboard button. That is a first-class,
+upstream-supported mode (the i18n comment names NixOS home-manager users), and it
+is what stops the GUI from silently drifting away from the repo. Settings still
+apply live — read-only blocks persistence, not experimentation.
+
+IT IS A COPY, NOT A SYMLINK. Quickshell writes with atomicWrites (QSaveFile), so
+a symlink would be replaced by a regular file the first time anything wrote. A
+copy also means the deployed file is disposable: `chmod u+w` it, experiment with
+persistence for as long as you like, and re-run this to get back to the baseline.
+
+The class is decided by hardware, not by a config answer: a machine with a
+battery gets the laptop overlay. That is exactly the semantic the overlay
+carries — the battery widget and the battery idle/lock timeouts.
+
+The widget does NOT self-hide when there is no battery: its root is
+`visible: true`, only its internals check availability, and
+`BatteryService.getBatteryIcon()` returns "power" — a plug glyph — so a desktop
+that keeps it in the bar shows a permanent plug icon. Hence it belongs to the
+laptop class rather than the base.
+"""
+
+import argparse
+import json
+import os
+import shutil
+import stat
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+DOTFILES = os.path.dirname(HERE)
+PRIVATE = os.path.join(os.path.dirname(DOTFILES), "workstation-private")
+SHARED = os.path.join(PRIVATE, "shared", "dms")
+TARGET = os.path.expanduser("~/.config/DankMaterialShell/settings.json")
+
+
+def has_battery():
+    power = "/sys/class/power_supply"
+    if not os.path.isdir(power):
+        return False
+    for entry in os.listdir(power):
+        if entry.startswith("BAT"):
+            return True
+    return False
+
+
+def load(path):
+    with open(path, encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def merge(base, *overlays):
+    """Shallow key merge. settings.json is flat (~530 keys), so an overlay that
+    wants to change a nested value — barConfigs is the only one — repeats that
+    key whole. Deliberately not a deep merge: DMS copies widget-entry keys
+    through one by one from a fixed list and silently drops the rest, so a
+    partial widget object would lose fields with no error anywhere."""
+    merged = dict(base)
+    for overlay in overlays:
+        merged.update(overlay)
+    return merged
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--target", default=TARGET,
+                        help="where to write (default: %(default)s)")
+    parser.add_argument("--class", dest="klass", choices=["auto", "desktop", "laptop"],
+                        default="auto", help="override hardware detection")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="print what would be deployed and change nothing")
+    args = parser.parse_args()
+
+    base_path = os.path.join(SHARED, "base.json")
+    if not os.path.exists(base_path):
+        print(f"no baseline at {base_path} — is workstation-private cloned beside dotfiles?",
+              file=sys.stderr)
+        return 1
+
+    klass = args.klass
+    if klass == "auto":
+        klass = "laptop" if has_battery() else "desktop"
+
+    layers = [load(base_path)]
+    names = ["base"]
+    if klass == "laptop":
+        overlay_path = os.path.join(SHARED, "laptop.json")
+        if not os.path.exists(overlay_path):
+            print(f"missing {overlay_path}", file=sys.stderr)
+            return 1
+        layers.append(load(overlay_path))
+        names.append("laptop")
+
+    settings = merge(*layers)
+    rendered = json.dumps(settings, indent=2) + "\n"
+
+    print(f"class: {klass} ({'+'.join(names)}), {len(settings)} keys -> {args.target}")
+    if args.dry_run:
+        return 0
+
+    os.makedirs(os.path.dirname(args.target), exist_ok=True)
+    if os.path.exists(args.target):
+        # Keep one generation. The deployed file is disposable by design, but a
+        # machine that has been experimented on may hold the only copy of a
+        # setting that was never copied back into the repo.
+        backup = args.target + ".pre-deploy"
+        shutil.copy2(args.target, backup)
+        os.chmod(backup, stat.S_IRUSR | stat.S_IWUSR)
+        print(f"previous settings kept at {backup}")
+        # Writing over a 0444 file fails; we own it, so make it writable first.
+        os.chmod(args.target, stat.S_IRUSR | stat.S_IWUSR)
+
+    with open(args.target, "w", encoding="utf-8") as handle:
+        handle.write(rendered)
+    os.chmod(args.target, stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
+
+    print("deployed read-only (0444). DMS reloads it live — no restart needed.")
+    print("To experiment: change things in the GUI (they apply immediately but do")
+    print("not persist), then use the Settings modal's copy button and paste into")
+    print(f"{SHARED}/base.json.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
