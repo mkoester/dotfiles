@@ -772,7 +772,7 @@ because `watch` runs its command through `sh -c` and would never see a function:
 
 ```
 ── claude ────────────────────────── as of 14:23 (6h ago) ──
-  5h     ████████░░░░░░░░░░░░  42%  resets 17:39 (in 2h13m)
+  5h     ████████░░░░░░░░░░░░  42%  resets 17:39 (in 2h 13m)
   week   ██████████████░░░░░░  71%  resets Wed 00:22 (in 2d 3h)
   extra  ███░░░░░░░░░░░░░░░░░  13%  3.93 / 30.00 EUR
 ── repos ───────────────────────────────────────────────────

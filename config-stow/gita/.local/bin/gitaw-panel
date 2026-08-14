@@ -2,7 +2,7 @@
 # gitaw-panel [group] — one frame of the `gitaw` live overview:
 #
 #   ── claude ──────────────────────── as of 14:23 (7h ago) ──
-#     5h    ████████░░░░░░░░░░░░  42%   resets 17:39 (in 2h13m)
+#     5h    ████████░░░░░░░░░░░░  42%   resets 17:39 (in 2h 13m)
 #     week  ██████████████░░░░░░  71%   resets Mon 14:59
 #     extra ██░░░░░░░░░░░░░░░░░░  13%   3.93 / 30.00 EUR
 #   ── repos ─────────────────────────────────────────────────
@@ -188,7 +188,7 @@ usage_block() {
 
 
 		def resets(iso):
-		    """'resets 17:39 (in 2h13m)', or a stale marker once the window has rolled over."""
+		    """'resets 17:39 (in 2h 13m)', or a stale marker once the window has rolled over."""
 		    try:
 		        at = dt.datetime.fromisoformat(iso)
 		    except ValueError:
@@ -206,7 +206,7 @@ usage_block() {
 		    if h >= 24:
 		        span = f"{h // 24}d {h % 24}h"  # a weekly window in hours reads as noise
 		    elif h:
-		        span = f"{h}h{m:02d}m"
+		        span = f"{h}h {m:02d}m"
 		    else:
 		        span = f"{m}m"
 		    return f"resets {when} (in {span})", False
