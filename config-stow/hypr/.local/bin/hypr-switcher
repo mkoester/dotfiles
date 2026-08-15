@@ -199,12 +199,16 @@ def main():
     out = subprocess.run(
         ["fzf", "--ansi", "--reverse", "--no-sort", "--info=inline", "--cycle",
          "--delimiter=\t", "--with-nth=2..", "--prompt=window> ",
-         # Two lines: the column header, then the key hint. The header is built from the same
-         # widths() as the body, so the labels sit over their columns. It cannot be passed as
-         # --header-lines=1 instead: those are taken from the INPUT and would be subject to
-         # --with-nth, i.e. fzf would look for a tab-separated address in the header too.
-         "--header=" + header(rows, color=True) + "\n"
-         + "ENTER focuses  ·  type to filter  ·  ESC cancels"],
+         # Two lines, KEY HINT FIRST and column labels SECOND, because fzf renders --header
+         # above the list: the labels have to be the line adjacent to the columns they label,
+         # or the hint sits between them and the table and the whole point is lost.
+         #
+         # The labels are built from the same widths() as the body, so they sit over their
+         # columns. This cannot be passed as --header-lines=1 instead: those lines are taken
+         # from the INPUT and are subject to --with-nth, i.e. fzf would look for a
+         # tab-separated address in the header too.
+         "--header=ENTER focuses  ·  type to filter  ·  ESC cancels\n"
+         + header(rows, color=True)],
         input=render(rows, color=True), text=True, capture_output=True)
     if out.returncode != 0 or not out.stdout.strip():
         return
