@@ -127,6 +127,16 @@ gitar() {
 		if [[ -d $d/.git ]]; then
 			echo "== $d =="
 			gita add -g workspace_extensions "$d"
+			# The clone directories are deliberately short (`thunderbird`,
+			# `herdr`) because the plugin takes a provider's identity from `id`
+			# inside provider.json, not from the directory. gita, though, names a
+			# repo after its path basename — so in a list of 50 repos those two
+			# read as unrelated to the plugin they belong to.
+			#
+			# The rename has to happen HERE rather than by hand: gitar
+			# unregisters and re-adds these paths on every run, so a manual
+			# `gita rename` survives exactly until the next gitar.
+			gita rename "${d:t}" "dms-attention-badges-${d:t}"
 		else
 			echo "== $d — skipped, not a git repo =="
 		fi

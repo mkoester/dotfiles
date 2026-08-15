@@ -443,6 +443,18 @@ if command -v zsh >/dev/null 2>&1; then
 		'the providers directory does not become its own group'
 	ok "$(printf '%s' "$log" | grep -qF "attention-providers/notes" && echo 0 || echo 1)" \
 		'a non-repo provider directory is skipped'
+	# The clone dirs are short on purpose, so gita would name them `herdr` and
+	# `thunderbird` — unrecognisable in a list of 50 repos. gitar re-adds on every
+	# run, so the rename cannot be done by hand: it would last until the next one.
+	ok "$(printf '%s' "$log" | grep -qF "rename thunderbird dms-attention-badges-thunderbird" && echo 1 || echo 0)" \
+		'a provider clone is renamed to say what it belongs to'
+	ok "$(printf '%s' "$log" | grep -qF "rename herdr dms-attention-badges-herdr" && echo 1 || echo 0)" \
+		'every provider clone is renamed, not just the first'
+	# Order: gita has to know the repo by its derived name before it can rename it.
+	ad=$(printf '%s\n' "$log" | grep -n "add -g workspace_extensions $d/.config/DankMaterialShell/attention-providers/herdr\$" | cut -d: -f1)
+	rn=$(printf '%s\n' "$log" | grep -n "rename herdr " | cut -d: -f1)
+	ok "$([ -n "$ad" ] && [ -n "$rn" ] && [ "$ad" -lt "$rn" ] && echo 1 || echo 0)" \
+		'the rename follows the add that created the name'
 	# Order is load-bearing: gita fixes group order by add order, so the group
 	# must already exist from the workspace pass before the providers join it.
 	ws=$(printf '%s\n' "$log" | grep -n "add -a $d/Projects/workspace_extensions\$" | cut -d: -f1)
