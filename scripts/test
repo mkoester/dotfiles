@@ -404,5 +404,56 @@ else
 	ok "$r" 'an empty client list exits cleanly'
 fi
 
+# ── gitar ────────────────────────────────────────────────────────────────────
+# gitar is a zsh function that rewrites gita's registry, so it cannot be run for
+# real in a test (or from a sandbox — ~/.config/gita is not writable there).
+# Drive it against a STUB `gita` on PATH instead: that exercises the real
+# function end to end — the fake HOME, the glob, the group choice — and records
+# the exact argv it would have issued.
+section "gitar"
+if command -v zsh >/dev/null 2>&1; then
+	d="$(work)"
+	mkdir -p "$d/bin" "$d/Projects/okf/.git" "$d/Projects/workspace_extensions/.git" "$d/src/dotfiles/.git"
+	mkdir -p "$d/.config/DankMaterialShell/attention-providers/herdr/.git"
+	mkdir -p "$d/.config/DankMaterialShell/attention-providers/thunderbird/.git"
+	# A provider directory that is NOT a clone: a flat-file provider's neighbour,
+	# or someone's notes. It must be skipped, not handed to gita.
+	mkdir -p "$d/.config/DankMaterialShell/attention-providers/notes"
+	mkdir -p "$d/.config/gita"
+
+	cat >"$d/bin/gita" <<-'STUB'
+		#!/usr/bin/env bash
+		[ "$1" = "ls" ] && exit 0
+		printf '%s\n' "$*" >>"$GITA_LOG"
+	STUB
+	chmod u+x "$d/bin/gita"
+
+	GITA_LOG="$d/calls.log" \
+	HOME="$d" PATH="$d/bin:$PATH" \
+		zsh -fc "source '$REPO/oh-my-zsh-custom/gita.zsh'; gitar" >/dev/null 2>&1
+	log="$(cat "$d/calls.log" 2>/dev/null)"
+
+	ok "$(printf '%s' "$log" | grep -qF "add -g workspace_extensions $d/.config/DankMaterialShell/attention-providers/herdr" && echo 1 || echo 0)" \
+		'a provider clone joins workspace_extensions'
+	ok "$(printf '%s' "$log" | grep -qF "add -g workspace_extensions $d/.config/DankMaterialShell/attention-providers/thunderbird" && echo 1 || echo 0)" \
+		'every provider clone is added, not just the first'
+	# -a would give each clone a group of its own, which is the whole thing this
+	# guards against; assert the group flag rather than merely "it was added".
+	ok "$(printf '%s' "$log" | grep -qF "add -a $d/.config/DankMaterialShell/attention-providers" && echo 0 || echo 1)" \
+		'the providers directory does not become its own group'
+	ok "$(printf '%s' "$log" | grep -qF "attention-providers/notes" && echo 0 || echo 1)" \
+		'a non-repo provider directory is skipped'
+	# Order is load-bearing: gita fixes group order by add order, so the group
+	# must already exist from the workspace pass before the providers join it.
+	ws=$(printf '%s\n' "$log" | grep -n "add -a $d/Projects/workspace_extensions\$" | cut -d: -f1)
+	pv=$(printf '%s\n' "$log" | grep -n "add -g workspace_extensions" | head -1 | cut -d: -f1)
+	ok "$([ -n "$ws" ] && [ -n "$pv" ] && [ "$ws" -lt "$pv" ] && echo 1 || echo 0)" \
+		'the workspace group is created before the providers join it'
+
+	rm -rf "$d"
+else
+	skip "gitar" "zsh not installed"
+fi
+
 printf '\n%d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"
 [ "$FAIL" -eq 0 ]

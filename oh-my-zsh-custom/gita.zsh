@@ -63,6 +63,13 @@ gitaw() {
 # below is unchanged; it now fixes display position only.
 gitar() {
 	local projects="$HOME/Projects" src="$HOME/src"
+	# dms-attention-badges provider repos are deployed as clones INSIDE DMS's
+	# config rather than under ~/Projects — the plugin scans that directory, so
+	# the checkout has to live there and gets no second clone. They are still
+	# workspace_extensions work, so they join that group instead of forming one of
+	# their own; the add below therefore has to run after the workspace loop has
+	# created it, or the group would take its position from here instead.
+	local providers="${XDG_CONFIG_HOME:-$HOME/.config}/DankMaterialShell/attention-providers"
 	# gita's own config-dir resolution (common.get_config_dir), so an overridden
 	# GITA_PROJECT_HOME / XDG_CONFIG_HOME is honoured here too.
 	local repos_csv="${GITA_PROJECT_HOME:-${XDG_CONFIG_HOME:-$HOME/.config}}/gita/repos.csv"
@@ -90,7 +97,7 @@ gitar() {
 		while IFS=, read -r rpath name rest; do
 			[[ -n ${known[$name]} ]] || continue
 			case $rpath in
-				($src|$src/*|$projects|$projects/*) stale+=("$name") ;;
+				($src|$src/*|$projects|$projects/*|$providers/*) stale+=("$name") ;;
 			esac
 		done < $repos_csv
 	fi
@@ -113,6 +120,18 @@ gitar() {
 		echo "== $ws =="
 		gita add -a "$ws"
 	done
+	# Into the EXISTING workspace_extensions group (-g), one repo per call. The
+	# loop runs after the workspace loop above so that group already exists and
+	# keeps its position; -a here would instead create a group per clone.
+	for d in $providers/*(N/); do
+		if [[ -d $d/.git ]]; then
+			echo "== $d =="
+			gita add -g workspace_extensions "$d"
+		else
+			echo "== $d — skipped, not a git repo =="
+		fi
+	done
+
 	if [[ -d $src ]]; then
 		echo "== $src =="
 		gita add -a "$src"
