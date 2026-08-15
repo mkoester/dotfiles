@@ -112,12 +112,33 @@ def order(clients, scope="all", active_workspace=None, active_monitor=None):
     return rows
 
 
+HEADERS = ("WORKSPACE", "CLASS", "TITLE")
+
+
+def widths(rows):
+    """Column widths, shared by the header and the body so the two cannot drift apart.
+
+    The header labels are part of the max: a workspace column sized only by its values would
+    be narrower than the word WORKSPACE and the header would run into the next column.
+    """
+    ws = max([len(clean((c.get("workspace") or {}).get("name"))) for c in rows]
+             + [len(HEADERS[0])])
+    cls = max([len(clean(c.get("class"))) for c in rows] + [len(HEADERS[1])])
+    return ws, cls
+
+
+def header(rows, color=False):
+    """The column header, padded to the same widths as the rows below it."""
+    ws_w, cls_w = widths(rows)
+    line = f"{HEADERS[0].ljust(ws_w)}  {HEADERS[1].ljust(cls_w)}  {HEADERS[2]}"
+    return f"{DIM}{line}{RESET}" if color else line
+
+
 def render(rows, color=False):
     """`<address>\\t<workspace>  <class>  <title>` — the address is hidden by fzf's --with-nth."""
     if not rows:
         return ""
-    ws_width = max(len(clean((c.get("workspace") or {}).get("name"))) for c in rows)
-    cls_width = max(len(clean(c.get("class"))) for c in rows)
+    ws_width, cls_width = widths(rows)
 
     out = []
     for c in rows:
@@ -148,6 +169,7 @@ def main():
     p = argparse.ArgumentParser(description="MRU window switcher for Hyprland")
     p.add_argument("--fzf", action="store_true", help="interactive picker")
     p.add_argument("--color", action="store_true", help="force ANSI colour")
+    p.add_argument("--with-header", action="store_true", help="print the column header too")
     p.add_argument("--scope", default="all", choices=["all", "monitor", "workspace"])
     p.add_argument("--clients-json", help="read client JSON from a file instead of hyprctl (tests)")
     a = p.parse_args()
@@ -159,7 +181,10 @@ def main():
                  active_monitor=focused.get("monitor"))
 
     if not a.fzf:
-        print(render(rows, color=a.color or sys.stdout.isatty()))
+        color = a.color or sys.stdout.isatty()
+        if a.with_header and rows:
+            print(header(rows, color=color))
+        print(render(rows, color=color))
         return
 
     if not shutil.which("fzf"):
@@ -174,7 +199,12 @@ def main():
     out = subprocess.run(
         ["fzf", "--ansi", "--reverse", "--no-sort", "--info=inline", "--cycle",
          "--delimiter=\t", "--with-nth=2..", "--prompt=window> ",
-         "--header=ENTER focuses  ·  type to filter  ·  ESC cancels"],
+         # Two lines: the column header, then the key hint. The header is built from the same
+         # widths() as the body, so the labels sit over their columns. It cannot be passed as
+         # --header-lines=1 instead: those are taken from the INPUT and would be subject to
+         # --with-nth, i.e. fzf would look for a tab-separated address in the header too.
+         "--header=" + header(rows, color=True) + "\n"
+         + "ENTER focuses  ·  type to filter  ·  ESC cancels"],
         input=render(rows, color=True), text=True, capture_output=True)
     if out.returncode != 0 or not out.stdout.strip():
         return

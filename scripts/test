@@ -381,6 +381,21 @@ else
 	is "$(hs | grep -c $'\033')" '0' 'piped output carries no ANSI escapes'
 	is "$(hs --color | grep -c $'\033')" '4' 'the --color flag colours every row'
 
+	# COLUMN HEADERS. The risk is drift: a header padded from different widths than the body
+	# reads as misalignment, which is worse than no header at all. So assert the CLASS label
+	# starts at the same offset as the class value in the first row, rather than just that a
+	# header exists. The fixture's longest class (org.mozilla.Thunderbird, 23) is wider than
+	# the word CLASS, and its longest workspace (herdr, 5) is NARROWER than WORKSPACE — so the
+	# header widens that column and both directions of the max() are exercised.
+	is "$(hs --with-header | head -1 | grep -bo 'CLASS' | cut -d: -f1)" \
+		"$(hs --with-header | sed -n 2p | cut -f2- | grep -bo 'com.mitchellh.ghostty' | cut -d: -f1)" \
+		'the CLASS header sits exactly over the class column'
+	is "$(hs --with-header | head -1)" 'WORKSPACE  CLASS                    TITLE' 'header labels all three columns'
+
+	# The header is OPT-IN: the default output stays pure data, or every consumer above (and
+	# any future script piping this) would have to skip a line it did not ask for.
+	is "$(rows)" "$(($(rows --with-header) - 1))" 'the header is absent unless --with-header'
+
 	# An empty client list must render nothing and exit clean, not traceback: it is the state
 	# right after the last window closes.
 	d=$(work); echo '[]' >"$d/empty-clients.json"
