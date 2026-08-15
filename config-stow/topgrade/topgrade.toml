@@ -6,9 +6,15 @@
 #   topgrade only pnpm    # a single step
 
 [misc]
-cleanup = true              # run paru -Sc etc. after updating
-disable = ["git_repos"]     # gita-fetch.timer already fetches tracked repos;
+cleanup = false             # topgrade's built-in cleanup is REPLACED by the [commands]
+                            # block at the bottom — see the reasoning there.
+disable = ["git_repos",     # gita-fetch.timer already fetches tracked repos;
                             # don't let topgrade auto-pull across worktrees
+           "hyprpm"]        # `hyprpm update` needs cmake (not installed) and there are
+                            # NO Hyprland plugins on this box (~/.local/share/hyprpm
+                            # does not exist), so the step could only ever fail.
+                            # Re-enable + `paru -S cmake` if a plugin is ever installed
+                            # (hyprland.lua's hyprshell note is the likely trigger).
 sudo_loop = true            # keep sudo credentials warm for the whole run (no mid-run
                             # password prompt). Tradeoff: a walk-away Ctrl-C could reuse
                             # the cached sudo session — fine on a personal workstation.
@@ -25,5 +31,29 @@ upgrade = true              # actually apply fwupd firmware updates (default: on
 # NOT bump the pnpm binary. On this box pnpm is the pacman package, so the
 # `system` step (paru) upgrades it — nothing else needed.
 # If you ever move pnpm to corepack management, uncomment to self-bump each run:
-# [commands]
 # "pnpm (corepack self-bump)" = "corepack install --global pnpm@latest"
+
+# ── cleanup, done non-interactively ─────────────────────────────────────────
+# `[misc] cleanup = true` adds exactly three commands on this box (measured
+# 2026-08-15 by diffing `topgrade --dry-run` with it on and off):
+#   paru --pacman pacman -Scc
+#   flatpak uninstall --user   --unused
+#   flatpak uninstall --system --unused
+# The paru one asks FOUR questions every run (pacman: cache / unused repos;
+# paru: AUR clones / saved diffs) and there is no way to silence only it —
+# `yay_arguments` reaches `-Syu` only, and `assume_yes` would also turn the
+# system UPGRADE unattended (both verified by dry-run). So cleanup is off and
+# the three commands are reproduced here with their prompts answered.
+#
+# `--noconfirm` answers each question with its DEFAULT, i.e. exactly what
+# hitting ENTER four times does — verified 2026-08-15 against scratch dirs
+# (pacman under fakeroot, paru via --pacman + XDG_CACHE_HOME):
+#   remove ALL files from cache?      [y/N] -> no   (package cache kept)
+#   remove unused repositories?       [Y/n] -> yes
+#   clean ALL AUR packages from cache [y/N] -> no   (paru clones kept)
+#   remove all saved diffs?           [Y/n] -> yes
+# It is NOT "say yes to everything" — don't "fix" this by adding -y anywhere.
+[commands]
+"cleanup: pacman + AUR cache" = "paru --pacman pacman -Scc --noconfirm"
+"cleanup: flatpak unused (user)" = "flatpak uninstall --user --unused -y"
+"cleanup: flatpak unused (system)" = "flatpak uninstall --system --unused -y"
