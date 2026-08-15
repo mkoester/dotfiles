@@ -342,5 +342,52 @@ else
 		'the --color flag colours every line'
 fi
 
+section 'hypr-switcher — MRU window picker'
+HS="$REPO/config-stow/hypr/.local/bin/hypr-switcher"
+if ! command -v python3 >/dev/null 2>&1; then
+	skip 'hypr-switcher' 'python3 not installed'
+else
+	# One fixture stands in for the compositor, so this needs no Hyprland — and could not use
+	# one anyway: hyprctl is unreachable from inside the Claude Code sandbox.
+	hs() { python3 "$HS" --clients-json "$REPO/tests/fixtures/hypr-switcher-clients.json" "$@"; }
+	rows() { hs "$@" | grep -c .; }
+
+	# 7 clients in, 4 out: the switcher's own window, a special workspace and an unmapped
+	# window are each dropped. Asserting the count alone would pass if the wrong three went.
+	is "$(rows)" '4' 'three unusable clients are filtered out'
+	is "$(hs | grep -c 'mk.switcher')" '0' "the switcher's own window is not in its own list"
+	is "$(hs | grep -c 'special')" '0' 'special workspaces are excluded'
+	is "$(hs | grep -c 'half-mapped')" '0' 'unmapped windows are excluded'
+
+	# THE ORDERING RULE, and the reason this script exists. focusHistoryID 1 is the window you
+	# were just in and must be row 1 so ENTER-on-open flips to it; the FOCUSED window (id 0)
+	# must be LAST, never preselected. A plain ascending sort would put it first and fail here.
+	is "$(hs | head -1 | cut -f2 | awk '{print $1}')" 'herdr' 'the previously focused window is row 1'
+	is "$(hs | tail -1 | cut -f2 | awk '{print $1}')" 'code' 'the focused window is moved to the end'
+
+	# The address is a hidden first field (fzf --with-nth=2..); losing it breaks focusing while
+	# the visible list still looks perfect.
+	is "$(hs | head -1 | cut -f1)" '0xaaa3' 'each row carries its address as field 1'
+
+	# A title with a tab or a newline would desync the columns or split one window across two
+	# rows -- the fixture's herdr title contains both.
+	is "$(hs | grep -c 'herdr split line')" '1' 'tabs and newlines in a title are collapsed'
+
+	# Scope filters resolve against the FOCUSED window, not the first row.
+	is "$(rows --scope workspace)" '1' 'workspace scope keeps only the focused workspace'
+	is "$(rows --scope monitor)" '3' 'monitor scope keeps only the focused monitor'
+
+	# Colour is opt-in so the greps above match text rather than escapes.
+	is "$(hs | grep -c $'\033')" '0' 'piped output carries no ANSI escapes'
+	is "$(hs --color | grep -c $'\033')" '4' 'the --color flag colours every row'
+
+	# An empty client list must render nothing and exit clean, not traceback: it is the state
+	# right after the last window closes.
+	d=$(work); echo '[]' >"$d/empty-clients.json"
+	python3 "$HS" --clients-json "$d/empty-clients.json" >/dev/null 2>&1 && r=1 || r=0
+	rm -rf "$d"
+	ok "$r" 'an empty client list exits cleanly'
+fi
+
 printf '\n%d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"
 [ "$FAIL" -eq 0 ]

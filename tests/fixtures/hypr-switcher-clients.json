@@ -1,0 +1,65 @@
+[
+  {
+    "address": "0xaaa1",
+    "class": "org.mozilla.Thunderbird",
+    "title": "Inbox — mk@example — Mozilla Thunderbird",
+    "monitor": 0,
+    "mapped": true,
+    "workspace": { "id": 11, "name": "mail" },
+    "focusHistoryID": 2
+  },
+  {
+    "address": "0xaaa2",
+    "class": "code",
+    "title": "hyprland.lua — dotfiles",
+    "monitor": 0,
+    "mapped": true,
+    "workspace": { "id": 14, "name": "code" },
+    "focusHistoryID": 0
+  },
+  {
+    "address": "0xaaa3",
+    "class": "com.mitchellh.ghostty",
+    "title": "herdr\tsplit\nline",
+    "monitor": 0,
+    "mapped": true,
+    "workspace": { "id": 13, "name": "herdr" },
+    "focusHistoryID": 1
+  },
+  {
+    "address": "0xaaa4",
+    "class": "mk.switcher",
+    "title": "hypr-switcher",
+    "monitor": 0,
+    "mapped": true,
+    "workspace": { "id": 14, "name": "code" },
+    "focusHistoryID": 3
+  },
+  {
+    "address": "0xaaa5",
+    "class": "firefox",
+    "title": "Scratchpad",
+    "monitor": 0,
+    "mapped": true,
+    "workspace": { "id": -99, "name": "special:magic" },
+    "focusHistoryID": 4
+  },
+  {
+    "address": "0xaaa6",
+    "class": "brave-browser",
+    "title": "half-mapped",
+    "monitor": 1,
+    "mapped": false,
+    "workspace": { "id": 16, "name": "social" },
+    "focusHistoryID": 5
+  },
+  {
+    "address": "0xaaa7",
+    "class": "mk.git",
+    "title": "gitaw",
+    "monitor": 1,
+    "mapped": true,
+    "workspace": { "id": 19, "name": "git" },
+    "focusHistoryID": 6
+  }
+]

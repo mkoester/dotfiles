@@ -1,0 +1,185 @@
+#!/usr/bin/env python3
+"""hypr-switcher — an MRU window picker for Alt+Tab, built from Hyprland's own focus history.
+
+    hypr-switcher [--fzf] [--scope all|monitor|workspace]
+
+WHY THIS EXISTS
+---------------
+Hyprland binds nothing to Alt+Tab and DMS ships no switcher overlay — its only window-list
+surfaces are the bar's RunningApps widget and the Dock, neither ordered by focus. The obvious
+third-party answer, hyprshell, was tried and reverted on 2026-08-15: `hyprshell-bin` ships no
+Hyprland plugin, so it registers its keybinds over the socket and BREAKS OTHER MODIFIER
+HANDLING — every focus bind in this config died while it ran (upstream H3rmt/hyprshell#333).
+
+So this does the same job with no daemon and no key grabbing: a plain bind runs a plain script.
+
+THE MRU ORDER IS HYPRLAND'S, NOT OURS
+-------------------------------------
+`hyprctl -j clients` carries `focusHistoryID` per window: 0 is the focused window, 1 the
+previously focused one, and so on. That is a real focus stack maintained by the compositor,
+so this script keeps no state of its own and cannot drift.
+
+Rows are ordered 1, 2, 3, … and the CURRENT window is moved to the END. That is what makes
+Enter-on-open behave like a classic Alt+Tab: the preselected row is the window you were just
+in. Sorting plainly by focusHistoryID would preselect the window you are already looking at,
+which is the one row a switcher must never default to.
+
+WHAT IS FILTERED OUT, AND WHY EACH ONE MATTERS
+----------------------------------------------
+  * The switcher's own terminal (class `mk.switcher`). It is a real window and Hyprland is
+    happy to report it; without this it appears in its own list.
+  * Special/scratchpad workspaces (`workspace.name` starting with "special"). They are not
+    reachable by a plain focus dispatch in the way this expects.
+  * Unmapped windows. Hyprland reports windows mid-map; focusing one does nothing visible.
+
+TESTING
+-------
+The single input can be replaced with a fixture, which is what dotfiles/scripts/test drives:
+
+    hypr-switcher --clients-json tests/fixtures/hypr-switcher-clients.json
+
+Without it the script shells out to `hyprctl`, so the tests never need a compositor. This
+matters more than usual here: `hyprctl` cannot be reached from inside the Claude Code sandbox
+at all, so a fixture is the only way any of this is checkable while it is being written.
+"""
+
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import sys
+
+SELF_CLASS = "mk.switcher"
+
+# 8-colour SGR only, matching hyprbinds — a 256-colour palette renders differently under the
+# three terminals this fleet keeps configured.
+DIM = "\033[2m"
+BOLD = "\033[1m"
+GREEN = "\033[32m"
+YELLOW = "\033[33m"
+RESET = "\033[0m"
+
+
+def load_clients(path=None):
+    """Client list from a fixture when given, else from the live compositor."""
+    if path:
+        with open(path, encoding="utf-8") as fh:
+            return json.load(fh)
+    if not shutil.which("hyprctl"):
+        sys.exit("hypr-switcher: hyprctl not found")
+    out = subprocess.run(["hyprctl", "-j", "clients"],
+                         capture_output=True, text=True, check=True).stdout
+    return json.loads(out)
+
+
+def clean(text):
+    """One row is one line: a title carrying a tab or newline would desync the columns."""
+    return " ".join(str(text or "").split())
+
+
+def usable(client):
+    ws_name = str((client.get("workspace") or {}).get("name") or "")
+    if client.get("class") == SELF_CLASS:
+        return False
+    if ws_name.startswith("special"):
+        return False
+    if client.get("mapped") is False:
+        return False
+    return bool(client.get("address"))
+
+
+def order(clients, scope="all", active_workspace=None, active_monitor=None):
+    """MRU order with the current window moved to the end.
+
+    `focusHistoryID` is absent on old Hyprland versions and on hand-written fixtures; such
+    rows sort last rather than crashing, and keep their relative order.
+    """
+    rows = [c for c in clients if usable(c)]
+
+    if scope == "workspace" and active_workspace is not None:
+        rows = [c for c in rows if (c.get("workspace") or {}).get("id") == active_workspace]
+    elif scope == "monitor" and active_monitor is not None:
+        rows = [c for c in rows if c.get("monitor") == active_monitor]
+
+    missing = len(rows) + 1
+    rows.sort(key=lambda c: c.get("focusHistoryID", missing))
+
+    # Rotate the focused window (history id 0) to the back. Only when it is genuinely first:
+    # with a scope filter the focused window may not be in the list at all.
+    if rows and rows[0].get("focusHistoryID") == 0:
+        rows = rows[1:] + rows[:1]
+    return rows
+
+
+def render(rows, color=False):
+    """`<address>\\t<workspace>  <class>  <title>` — the address is hidden by fzf's --with-nth."""
+    if not rows:
+        return ""
+    ws_width = max(len(clean((c.get("workspace") or {}).get("name"))) for c in rows)
+    cls_width = max(len(clean(c.get("class"))) for c in rows)
+
+    out = []
+    for c in rows:
+        ws = clean((c.get("workspace") or {}).get("name")).ljust(ws_width)
+        cls = clean(c.get("class")).ljust(cls_width)
+        title = clean(c.get("title"))
+        if color:
+            row = f"{GREEN}{ws}{RESET}  {BOLD}{YELLOW}{cls}{RESET}  {DIM}{title}{RESET}"
+        else:
+            row = f"{ws}  {cls}  {title}"
+        # Title is last and never padded, so a narrow window cannot push a column off-screen.
+        out.append(f"{c['address']}\t{row.rstrip()}")
+    return "\n".join(out)
+
+
+def focus(address):
+    """`hyprctl dispatch` EVALUATES LUA in 0.56 — a bare dispatcher name is a syntax error.
+
+    This selector form is the one probed against a live window for hypr-messengers; note that
+    `ok` from a dispatcher only means the Lua parsed, so it is not proof the focus landed.
+    """
+    expr = f'hl.dsp.focus({{ window = "address:{address}" }})'
+    subprocess.run(["hyprctl", "dispatch", expr], check=False,
+                   stdout=subprocess.DEVNULL)
+
+
+def main():
+    p = argparse.ArgumentParser(description="MRU window switcher for Hyprland")
+    p.add_argument("--fzf", action="store_true", help="interactive picker")
+    p.add_argument("--color", action="store_true", help="force ANSI colour")
+    p.add_argument("--scope", default="all", choices=["all", "monitor", "workspace"])
+    p.add_argument("--clients-json", help="read client JSON from a file instead of hyprctl (tests)")
+    a = p.parse_args()
+
+    clients = load_clients(a.clients_json)
+    focused = next((c for c in clients if c.get("focusHistoryID") == 0), {})
+    rows = order(clients, a.scope,
+                 active_workspace=(focused.get("workspace") or {}).get("id"),
+                 active_monitor=focused.get("monitor"))
+
+    if not a.fzf:
+        print(render(rows, color=a.color or sys.stdout.isatty()))
+        return
+
+    if not shutil.which("fzf"):
+        sys.exit("hypr-switcher: fzf not installed")
+    if not rows:
+        return
+    # One window besides the switcher means there is nothing to choose: focus it and skip the UI.
+    if len(rows) == 1:
+        focus(rows[0]["address"])
+        return
+
+    out = subprocess.run(
+        ["fzf", "--ansi", "--reverse", "--no-sort", "--info=inline", "--cycle",
+         "--delimiter=\t", "--with-nth=2..", "--prompt=window> ",
+         "--header=ENTER focuses  ·  type to filter  ·  ESC cancels"],
+        input=render(rows, color=True), text=True, capture_output=True)
+    if out.returncode != 0 or not out.stdout.strip():
+        return
+    focus(out.stdout.split("\t", 1)[0].strip())
+
+
+if __name__ == "__main__":
+    main()

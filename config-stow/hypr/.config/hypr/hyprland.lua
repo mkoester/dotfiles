@@ -32,6 +32,7 @@ local mod  = "SUPER"
 --     herdr      -> mk.herdr        (login autostart, bottom of this file)
 --     hyprbinds  -> mk.hyprbinds    (cheat sheet, below)
 --     git        -> mk.git          (gitaw, mkDell/hypr/local.lua)
+--     switcher   -> mk.switcher     (ALT+TAB MRU window switcher, below)
 --
 -- Each rename touches TWO places — the launcher and its window rule — and they must move
 -- together or the window silently lands unpinned.
@@ -390,7 +391,18 @@ hl.bind(mod .. " + SHIFT + Slash",
         hl.dsp.exec_cmd("ghostty --class=mk.hyprbinds -e " .. cheatsheet .. " --fzf"),
         { description = "Keybind cheat sheet" })
 
--- SUPER+Tab REMOVED, not replaced (MK, 2026-08-14). DMS binds it to its workspace overview
+-- THE OVERVIEW IS ON SUPER+TAB AND *ONLY* SUPER+TAB (MK, 2026-08-15). DMS binds the same
+-- `dms ipc call hypr toggleOverview` to BOTH SUPER+Tab and SUPER+O (`dms/binds.lua:13-14`);
+-- SUPER+O is unbound here so there is one way in, on the key muscle memory expects.
+--
+-- This REVERSES the 2026-08-14 decision recorded below, and the reason it reversed is the whole
+-- point: the overview was unusable then, and is not now. Left as history because the mechanism
+-- is worth keeping — and because "we unbound this key" is exactly the kind of note that gets
+-- re-applied by someone tidying up.
+hl.unbind(mod .. " + O")
+
+-- SUPER+Tab REMOVED, not replaced (MK, 2026-08-14) — SUPERSEDED, see above; the unbind is gone
+-- and DMS's own SUPER+Tab binding stands. DMS binds it to its workspace overview
 -- (`~/.config/hypr/dms/binds.lua:13`, `dms ipc call hypr toggleOverview`), and that overview
 -- CANNOT SHOW THIS SETUP'S WORKSPACES: `OverviewWidget.qml:42-75` builds its cell grid as
 -- positive integers only (`for i = 1 .. maxExisting`, padded to rows x columns) and gates
@@ -399,10 +411,12 @@ hl.bind(mod .. " + SHIFT + Slash",
 -- down"). Every workspace here is named, so the overview could only ever render a grid of
 -- empty numbered placeholders. Not misconfiguration; a DMS limitation.
 --
--- The key is left FREE rather than rebound: Tab is where an Alt-Tab-style window switcher
--- belongs, and that is a separate decision.
+-- That limitation is FIXED — the workspaces are numbered now (see the `named_workspaces`
+-- section), the overview renders real cells with live previews, and MK confirmed it on screen
+-- 2026-08-15. Hence the reversal at the top of this block.
 --
--- ALT+TAB IS STILL UNBOUND, AND hyprshell WAS TRIED AND REVERTED (2026-08-14/15). Read this
+-- hyprshell WAS TRIED AND REVERTED (2026-08-14/15) — Alt+Tab is now `hypr-switcher`, below.
+-- Read this before installing hyprshell again:
 -- before installing it again: `hyprshell-bin` ships NO Hyprland plugin (`pacman -Ql` has no
 -- .so), so it falls back to registering its binds over the socket — and in that mode it
 -- BREAKS OTHER MODIFIER HANDLING. Measured here: with the daemon running, `SUPER+left/right`
@@ -417,9 +431,27 @@ hl.bind(mod .. " + SHIFT + Slash",
 -- So if this is revisited: build the AUR `hyprshell` (source) package rather than `-bin`, get
 -- the plugin loaded and version-matched via hyprpm, and re-test the focus binds FIRST.
 --
--- SUPER+O is DMS's SECOND bind for the same overview and is deliberately left alone — one way
--- in is still useful for dragging windows between the numbered workspaces.
-hl.unbind(mod .. " + TAB")
+
+-- ALT+TAB — MRU window switcher (2026-08-15).
+--
+-- `hypr-switcher` reads Hyprland's OWN focus stack: `hyprctl -j clients` carries
+-- `focusHistoryID` per window (0 = focused, 1 = previously focused, …), so the order is the
+-- compositor's and nothing here keeps state that could drift. It lists WINDOWS, not
+-- workspaces — DMS's overview covers workspaces and this deliberately does not duplicate it.
+--
+-- A picker, not a held-modifier switcher: press, choose (ENTER on open = flip to the window
+-- you were just in, because the focused window is rotated to the END of the list), ESC to
+-- cancel. The held-Alt feel needs a key grab, which is exactly what broke every focus bind
+-- when hyprshell tried it — see the block above. This trades that feel for a script that
+-- cannot interfere with anything.
+--
+-- ABSOLUTE PATH, and `--class=mk.switcher` for the float rule, for the same two reasons as the
+-- cheat sheet above: ~/.local/bin is on PATH only for interactive shells, and ghostty silently
+-- drops a class that is not a valid GTK application id.
+local switcher = os.getenv("HOME") .. "/.local/bin/hypr-switcher"
+hl.bind("ALT + TAB",
+        hl.dsp.exec_cmd("ghostty --class=mk.switcher -e " .. switcher .. " --fzf"),
+        { description = "Switch window (MRU)" })
 
 -- Screenshots on CTRL+SHIFT+<n>: Apple keyboards have no Print key, which is what DMS binds.
 -- Routed through `dms screenshot` so both paths behave identically.
@@ -675,6 +707,13 @@ hl.window_rule({ match = { class = "mk.herdr" }, workspace = ws.herdr })
 -- here. That is still not proportional to the monitor, but it does track the font size.
 hl.window_rule({ match = { class = "mk.hyprbinds" }, float = true })
 hl.window_rule({ match = { class = "mk.hyprbinds" }, size = { 900, 1000 } })
+
+-- The MRU switcher, same shape as the cheat sheet: floating, on the CURRENT workspace (no
+-- `workspace` field — it must appear where you are, and it is where you leave from). Smaller,
+-- because it lists windows rather than ~150 binds. Two rules rather than one for the same
+-- ordering reason documented above.
+hl.window_rule({ match = { class = "mk.switcher" }, float = true })
+hl.window_rule({ match = { class = "mk.switcher" }, size = { 900, 600 } })
 
 -- If login focus-jumping becomes annoying (both autostarted apps open on workspaces you are not
 -- on, and `focus_on_activate = true` is set at the top), add `no_initial_focus = true` to these
