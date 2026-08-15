@@ -42,7 +42,13 @@
 #
 set -euo pipefail
 
+# The `chat` workspace, addressed BY ID (2026-08-15). It became a numbered workspace carrying
+# `default_name = "chat"` when the skeleton renumbered 11-18 so DMS's overview would work.
+# Both uses below switched from the name to the id deliberately: whether `hyprctl -j clients`
+# reports `.workspace.name` as "chat" or as "18" for such a workspace is UNVERIFIED, and the
+# id is unambiguous either way. WS stays as the human label for messages.
 WS=chat
+WS_ID=18
 
 # app-key | window class | launch command
 # Order is the tape order, i.e. the quarter each app lands in (see diagram above).
@@ -93,7 +99,7 @@ esac
 # the old syntax first and every dispatch in it would have failed.
 dispatch() { hyprctl dispatch "$1" >/dev/null; }
 
-dispatch "hl.dsp.focus({ workspace = \"name:$WS\" })"
+dispatch "hl.dsp.focus({ workspace = $WS_ID })"
 
 addrs=()
 for entry in "${APPS[@]}"; do
@@ -135,8 +141,8 @@ dispatch 'hl.dsp.layout("fit_into_view")'
 sleep 0.3
 read -r nx ny < <(
     hyprctl -j clients |
-        jq -r --arg ws "$WS" '
-            [ .[] | select(.workspace.name == $ws) ] as $w
+        jq -r --argjson ws "$WS_ID" '
+            [ .[] | select(.workspace.id == $ws) ] as $w
             | "\($w | map(.at[0]) | unique | length) \($w | map(.at[1]) | unique | length)"
         '
 )

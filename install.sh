@@ -333,6 +333,9 @@ if ask_yn DF_HYPR "Hyprland compositor (tracked hyprland.lua)?"; then
 	if [ -f "$HOST_DIR/hypr/local.lua" ]; then
 		run ln -sf "$HOST_DIR/hypr/local.lua" "$HOME/.config/hypr/local.lua"
 	fi
+	# NO Alt+Tab switcher is installed. hyprshell was tried and reverted on 2026-08-15 — it
+	# breaks every focus bind while running; the full finding is in hyprland.lua beside the
+	# SUPER+Tab unbind. Read that before adding one back.
 	info "keybind cheat sheet: SUPER+SHIFT+/ (hyprbinds; reads the live table, so it cannot go stale)."
 	info "validate before logging in:  Hyprland --verify-config -c ~/.config/hypr/hyprland.lua"
 	info "hyprland machine-specific settings go in ~/.config/hypr/local.lua (require'd by hyprland.lua)."

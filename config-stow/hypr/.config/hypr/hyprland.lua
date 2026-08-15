@@ -100,6 +100,21 @@ hl.config({
         disable_splash_rendering = true,
         focus_on_activate        = true,
     },
+    binds = {
+        -- niri's behaviour, restored (2026-08-14): pressing the focus key of the workspace you
+        -- are ALREADY on takes you back to the previous one. `workspace_back_and_forth` is the
+        -- switch itself; `allow_workspace_cycles` is what lets it be pressed repeatedly, since
+        -- without it a workspace forgets where you came from ("workspaces don't forget their
+        -- previous workspace" — the binary's own description).
+        --
+        -- CONFIRMED WORKING (MK, 2026-08-14), back when these were true NAMED workspaces reached
+        -- by `focus({workspace = "name:mail"})` — which was the uncertain case, since every
+        -- description of the option talks about workspace *ids*. They are numbered workspaces
+        -- as of 2026-08-15, i.e. the case the option is actually documented for, so this is now
+        -- safer than when it was verified. No `focus({workspace = "previous"})` bind is needed.
+        workspace_back_and_forth = true,
+        allow_workspace_cycles   = true,
+    },
     -- Scrolling layout settings. These now apply to EVERY workspace (see general.layout).
     -- `explicit_column_widths` is the preset list SUPER+F cycles through.
     scrolling = {
@@ -254,30 +269,72 @@ hl.bind(mod .. " + ALT + B", hl.dsp.exec_cmd("firefox"),                { descri
 -- binding, unlike the processlist behind SUPER+M. So `term` gets a focus bind only rather than
 -- silently costing float. Uncomment the line below the loop if you want the move bind and are
 -- happy to lose float toggle; SUPER+ALT+T is free if you would rather keep both.
+-- NUMBERED WORKSPACES WITH NAMES, NOT NAMED WORKSPACES (changed 2026-08-15). Each entry now
+-- carries an explicit `id`, and the workspace rules below declare it as a NUMBERED workspace
+-- with `default_name` — so it has a POSITIVE id and still displays its name in the bar.
+--
+-- Why: Hyprland gives a purely named workspace a negative id (measured here: -1345 … -1337),
+-- and DMS's overview (SUPER+O) tests `workspaceValue > 0` in three places
+-- (`OverviewWidget.qml` — `workspaceExists`, `hasWindows`, and the window filter's
+-- `minId…maxId` range). With every workspace negative it built its cell list from
+-- `maxExisting + 1` upward, i.e. ~-1336 up — SYNTHETIC ids matching no workspace — so the
+-- overview drew empty cells labelled with nonsense numbers and filtered out every window,
+-- which is why it showed no icons and no previews. Positive ids satisfy all three gates.
+--
+-- The bar still shows NAMES: `getWorkspaceIndex` (`WorkspaceSwitcher.qml`) returns
+-- `modelData.name` whenever it is non-empty, whatever the id's sign, and this fleet runs
+-- `"showWorkspaceName": true` with `"showWorkspaceIndex": false`.
+--
+-- SECOND BENEFIT, AND IT UNDOES A DOCUMENTED IMPOSSIBILITY: bar order is now OURS. DMS maps
+-- every *named* workspace to one sort key and tiebreaks on `localeCompare(name)`, which is why
+-- "herdr left of code" was previously unachievable without renaming. Positive ids sort by id,
+-- so the order below is exactly what the bar renders.
+--
+-- IDS START AT 11, NOT 1 (MK, 2026-08-15) — 1-10 stay free for ad-hoc numbered workspaces, and
+-- DMS's SUPER+1…9 keep reaching those rather than these. Two consequences to expect:
+--   * the SUPER+<n> keys are NOT synonyms for the mnemonic keys;
+--   * the overview builds its cells as `1..maxExisting`, so it shows 1-10 as empty cells above
+--     these. That is the cost of the offset, and they stop being empty the moment you use one.
+--
+-- 19 IS RESERVED for `git`, which is machine-specific and lives in mkDell's local.lua. Do not
+-- claim it here.
 local named_workspaces = {
-    { key = "M", ws = "mail",    label = "mail",         takes_dms_key = true },
-    { key = "B", ws = "browser", label = "browser"      },
-    { key = "C", ws = "code",    label = "code"         },
-    { key = "G", ws = "google",  label = "google"       },
-    { key = "S", ws = "social",  label = "social media" },
-    { key = "A", ws = "herdr",   label = "herdr"        },
-    { key = "T", ws = "term",    label = "terminal", no_move = true, takes_dms_key = true },
+    { id = 11, key = "M", ws = "mail",    label = "mail",         takes_dms_key = true },
+    { id = 12, key = "B", ws = "browser", label = "browser"      },
+    { id = 13, key = "A", ws = "herdr",   label = "herdr"        },
+    { id = 14, key = "C", ws = "code",    label = "code"         },
+    { id = 15, key = "G", ws = "google",  label = "google"       },
+    { id = 16, key = "S", ws = "social",  label = "social media" },
+    { id = 17, key = "T", ws = "term",    label = "terminal", no_move = true, takes_dms_key = true },
 }
 for _, w in ipairs(named_workspaces) do
     -- Remove DMS's binding first, or both actions fire on the same press.
     if w.takes_dms_key then hl.unbind(mod .. " + " .. w.key) end
     hl.bind(mod .. " + " .. w.key,
-            hl.dsp.focus({ workspace = "name:" .. w.ws }),
+            hl.dsp.focus({ workspace = w.id }),
             { description = "Workspace: " .. w.label })
     if not w.no_move then
         hl.bind(mod .. " + SHIFT + " .. w.key,
-                hl.dsp.window.move({ workspace = "name:" .. w.ws }),
+                hl.dsp.window.move({ workspace = w.id }),
                 { description = "Move to " .. w.label })
     end
 end
+
+-- The `chat` workspace is declared here rather than in the table because its binds are on the
+-- ALT layer (see below) and it has no plain-SUPER key.
+local ws_chat = 18
+
+-- name -> id, so the window rules further down can stay readable (`ws.mail`) while addressing
+-- workspaces NUMERICALLY. That matters: a window rule's `workspace` is resolved once, at open,
+-- and a rule that silently stops matching is this config's most-repeated failure (Thunderbird's
+-- class, then its title). Whether `"name:mail"` still resolves to a NUMBERED workspace carrying
+-- that `default_name` is undocumented and untested — so the question is avoided rather than
+-- answered: every rule below uses the id.
+local ws = { chat = ws_chat }
+for _, w in ipairs(named_workspaces) do ws[w.ws] = w.id end
 -- Move-to-term, off by default (see `no_move` above). Pick ONE:
--- hl.bind(mod .. " + SHIFT + T", hl.dsp.window.move({ workspace = "name:term" }))  -- costs float toggle
--- hl.bind(mod .. " + ALT + T",   hl.dsp.window.move({ workspace = "name:term" }))  -- keeps both
+-- hl.bind(mod .. " + SHIFT + T", hl.dsp.window.move({ workspace = ws.term }))  -- costs float toggle
+-- hl.bind(mod .. " + ALT + T",   hl.dsp.window.move({ workspace = ws.term }))  -- keeps both
 
 -- The messengers workspace, on the ALT layer rather than a plain SUPER letter. NOT a free
 -- choice: by 2026-08-11 the only plain-SUPER letters left were D and Z (DMS holds F,H,I,J,K,L,
@@ -293,7 +350,7 @@ end
 -- interactive shells, and a compositor-spawned process is not one.
 hl.bind(mod .. " + ALT + M", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/hypr-messengers"),
         { description = "Messengers: open + arrange 2x2 on `chat`" })
-hl.bind(mod .. " + SHIFT + ALT + M", hl.dsp.window.move({ workspace = "name:chat" }),
+hl.bind(mod .. " + SHIFT + ALT + M", hl.dsp.window.move({ workspace = ws_chat }),
         { description = "Move window to `chat`" })
 
 -- Monitor layout (kanshi profiles; define them in the kanshi package's config.d/).
@@ -332,6 +389,37 @@ hl.unbind(mod .. " + SHIFT + Slash")
 hl.bind(mod .. " + SHIFT + Slash",
         hl.dsp.exec_cmd("ghostty --class=mk.hyprbinds -e " .. cheatsheet .. " --fzf"),
         { description = "Keybind cheat sheet" })
+
+-- SUPER+Tab REMOVED, not replaced (MK, 2026-08-14). DMS binds it to its workspace overview
+-- (`~/.config/hypr/dms/binds.lua:13`, `dms ipc call hypr toggleOverview`), and that overview
+-- CANNOT SHOW THIS SETUP'S WORKSPACES: `OverviewWidget.qml:42-75` builds its cell grid as
+-- positive integers only (`for i = 1 .. maxExisting`, padded to rows x columns) and gates
+-- `workspaceExists`/`hasWindows` on `workspaceValue > 0`, while Hyprland gives NAMED
+-- workspaces negative ids — DMS says so itself in `WorkspaceSwitcher.qml:283` ("from -1337
+-- down"). Every workspace here is named, so the overview could only ever render a grid of
+-- empty numbered placeholders. Not misconfiguration; a DMS limitation.
+--
+-- The key is left FREE rather than rebound: Tab is where an Alt-Tab-style window switcher
+-- belongs, and that is a separate decision.
+--
+-- ALT+TAB IS STILL UNBOUND, AND hyprshell WAS TRIED AND REVERTED (2026-08-14/15). Read this
+-- before installing it again: `hyprshell-bin` ships NO Hyprland plugin (`pacman -Ql` has no
+-- .so), so it falls back to registering its binds over the socket — and in that mode it
+-- BREAKS OTHER MODIFIER HANDLING. Measured here: with the daemon running, `SUPER+left/right`
+-- and every other focus bind stopped working while workspace switching kept working, and
+-- `pkill hyprshell` restored them instantly. Upstream is the same report
+-- (github.com/H3rmt/hyprshell#333, "mod key inputs are sometimes not recognized during normal
+-- usage" — same movefocus binds, same "stopping hyprshell fixes it"), and its reporter saw it
+-- with modifiers hyprshell was not configured for, so changing `switch.modifier` is not a
+-- workaround. The maintainer's own explanation: the plugin exists precisely to "replicate
+-- hyprland internal keyhandling", and without it the socket-registered binds interfere.
+--
+-- So if this is revisited: build the AUR `hyprshell` (source) package rather than `-bin`, get
+-- the plugin loaded and version-matched via hyprpm, and re-test the focus binds FIRST.
+--
+-- SUPER+O is DMS's SECOND bind for the same overview and is deliberately left alone — one way
+-- in is still useful for dragging windows between the numbered workspaces.
+hl.unbind(mod .. " + TAB")
 
 -- Screenshots on CTRL+SHIFT+<n>: Apple keyboards have no Print key, which is what DMS binds.
 -- Routed through `dms screenshot` so both paths behave identically.
@@ -454,33 +542,37 @@ end
 -- BAR ORDER IS ALPHABETICAL BY NAME — declaration order here does NOT affect it. DMS sorts
 -- numbered workspaces first by id, then all named ones together: every named workspace maps to
 -- the same sort key, so the tiebreak is `localeCompare` on the name
--- (`WorkspaceSwitcher.qml:257`, hyprlandWorkspaceOrder). So the bar reads
---   browser · code · google · herdr · mail · social · term
--- and the ONLY way to move one is to rename it. Accepted as-is 2026-08-10 (the request was for
--- `herdr` left of `code`, which no config change can deliver while it is called "herdr").
-hl.workspace_rule({ workspace = "name:mail",    persistent = true })
+-- (`WorkspaceSwitcher.qml:257`, hyprlandWorkspaceOrder) — TRUE ONLY FOR NAMED (negative-id)
+-- WORKSPACES, which these no longer are. Since 2026-08-15 each is a NUMBERED workspace carrying
+-- `default_name`, so the same sort function takes the `a.id - b.id` branch and BAR ORDER IS THE
+-- ID ORDER declared in `named_workspaces` above:
+--   mail · browser · herdr · code · google · social · term · chat
+-- The 2026-08-10 note that `herdr` left of `code` "no config change can deliver" is dead; that
+-- was a property of named workspaces, not of the shell.
+--
+-- These rules are generated from the same table as the binds, so a name/id can only be changed
+-- in one place. `default_name` is what keeps the bar showing "mail" rather than "11".
+for _, w in ipairs(named_workspaces) do
+    hl.workspace_rule({ workspace = tostring(w.id), default_name = w.ws, persistent = true })
+end
 -- No per-workspace `layout` here any more: general.layout is "scrolling" for everything as of
 -- 2026-08-11. Add `layout = "dwindle"` to a rule to carve an exception back out.
-hl.workspace_rule({ workspace = "name:browser", persistent = true })
-hl.workspace_rule({ workspace = "name:code",    persistent = true })
-hl.workspace_rule({ workspace = "name:google",  persistent = true })
-hl.workspace_rule({ workspace = "name:social",  persistent = true })
 
 -- chat: the four messengers (WhatsApp/ZapZap, Signal, Telegram, Threema) as a 2x2 grid.
 -- Persistent like the rest, and deliberately NOT autostarted — four Electron/WebEngine apps at
 -- login is a slow login. SUPER+ALT+M opens and arranges them on demand; see the bind below.
 -- The grid itself cannot be expressed as config (the scrolling layout gives one column per
--- window); `hypr-messengers` builds it. Bar order is alphabetical, so this sorts first.
-hl.workspace_rule({ workspace = "name:chat",    persistent = true })
+-- window); `hypr-messengers` builds it. Id 18, so it sorts LAST in the bar (it used to sort
+-- first, back when the order was alphabetical).
+hl.workspace_rule({ workspace = tostring(ws_chat), default_name = "chat", persistent = true })
 
 -- herdr is a terminal app with no class of its own, so it is not pinned by an app rule; it is
--- launched at login with `--class herdr`, which invents a class the window rule below can match.
-hl.workspace_rule({ workspace = "name:herdr",   persistent = true })
-
--- term: deliberately bare — a scratch terminal workspace, nothing pinned, nothing autostarted.
--- `code` likewise: visual-studio-code-bin IS installed and its window rule works, it is simply
--- not wanted at login. Add either to the hyprland.start handler if that changes.
-hl.workspace_rule({ workspace = "name:term",    persistent = true })
+-- launched at login with `--class mk.herdr`, which invents a class the window rule below can
+-- match. Its workspace rule comes from the `named_workspaces` loop above (id 13).
+--
+-- term: deliberately bare — a scratch terminal workspace, nothing pinned, nothing autostarted
+-- (id 17). `code` likewise: visual-studio-code-bin IS installed and its window rule works, it
+-- is simply not wanted at login. Add either to the hyprland.start handler if that changes.
 
 -- History of the layout choice, because it moved twice in two days:
 --   * numbered workspace 2 carried `layout = "scrolling"` as the original "try it" experiment;
@@ -522,10 +614,10 @@ hl.window_rule({ match = { class = "firefox", title = "^Picture-in-Picture$" }, 
 --
 -- Hyprland links libre2 so these match as RE2 regexes, but each is written as a plain literal:
 -- a wrong literal fails visibly (the app does not move) rather than quietly matching too much.
-hl.window_rule({ match = { class = "org.mozilla.Thunderbird" }, workspace = "name:mail" })
-hl.window_rule({ match = { class = "floorp" },                  workspace = "name:google" })
-hl.window_rule({ match = { class = "brave-browser" },           workspace = "name:social" })
-hl.window_rule({ match = { class = "code" },                    workspace = "name:code" })
+hl.window_rule({ match = { class = "org.mozilla.Thunderbird" }, workspace = ws.mail })
+hl.window_rule({ match = { class = "floorp" },                  workspace = ws.google })
+hl.window_rule({ match = { class = "brave-browser" },           workspace = ws.social })
+hl.window_rule({ match = { class = "code" },                    workspace = ws.code })
 
 -- The four messengers -> name:chat. These pin the apps however they are started (menu,
 -- spotlight, terminal), so SUPER+ALT+M's script only has to build the grid, not the placement.
@@ -538,10 +630,10 @@ hl.window_rule({ match = { class = "code" },                    workspace = "nam
 -- NOT read off live windows — ZapZap and Threema were not installed yet. `signal` and
 -- `org.telegram.desktop` are also predictions. Confirm all four with `hypr-messengers probe`
 -- and correct them here; a wrong class fails silently (the app opens, nothing moves).
-hl.window_rule({ match = { class = "com.rtosta.zapzap" },          workspace = "name:chat" })
-hl.window_rule({ match = { class = "signal" },                     workspace = "name:chat" })
-hl.window_rule({ match = { class = "org.telegram.desktop" },       workspace = "name:chat" })
-hl.window_rule({ match = { class = "ch.threema.threema-desktop" }, workspace = "name:chat" })
+hl.window_rule({ match = { class = "com.rtosta.zapzap" },          workspace = ws.chat })
+hl.window_rule({ match = { class = "signal" },                     workspace = ws.chat })
+hl.window_rule({ match = { class = "org.telegram.desktop" },       workspace = ws.chat })
+hl.window_rule({ match = { class = "ch.threema.threema-desktop" }, workspace = ws.chat })
 
 -- The herdr terminal, matched on the custom class set by `ghostty --class=mk.herdr` in the login
 -- autostart at the bottom of this file. Plain ghostty windows are class
@@ -551,7 +643,7 @@ hl.window_rule({ match = { class = "ch.threema.threema-desktop" }, workspace = "
 -- `mk.herdr`, not `herdr`: ghostty requires a valid GTK application id (two period-separated
 -- elements minimum). See the note beside `local term` at the top — an invalid class is accepted
 -- by ghostty's parser and dropped by GTK, so this rule would silently never match.
-hl.window_rule({ match = { class = "mk.herdr" }, workspace = "name:herdr" })
+hl.window_rule({ match = { class = "mk.herdr" }, workspace = ws.herdr })
 
 -- The cheat sheet floats and stays on the CURRENT workspace — deliberately no `workspace`
 -- field, unlike every rule above: a reference you open mid-task must not yank you elsewhere.
@@ -673,7 +765,7 @@ end)
 -- hl.on("window.title", function(w)
 --     if w == nil or w.title == nil then return end
 --     if w.title:match("^mail") then
---         hl.dispatch(hl.dsp.window.move({ workspace = "name:mail" }))
+--         hl.dispatch(hl.dsp.window.move({ workspace = ws.mail }))
 --     end
 -- end)
 
