@@ -47,8 +47,81 @@ keybind = performable:ctrl+c=copy_to_clipboard
 # ghostty's default CTRL+SHIFT+V stays bound too, so this only adds a second way to paste.
 keybind = ctrl+v=paste_from_clipboard
 
-# NOT AVAILABLE HERE: plain middle-click paste inside a mouse-grabbing TUI (herdr et al.).
-# Ghostty has mouse *options* (mouse-hide-while-typing, mouse-shift-capture, mouse-reporting,
-# mouse-scroll-multiplier) but no mouse BINDING map, so middle-click cannot be remapped at all.
-# shift+middle-click still works, via mouse-shift-capture. kitty is the terminal that can do it
-# (`mouse_map middle release grabbed,ungrabbed paste_from_selection`).
+# MIDDLE-CLICK PASTE IS A GSETTING, NOT A GHOSTTY OPTION — AND IT IS OFF BY DEFAULT ON ARCH.
+#
+# This block used to say middle-click paste was unavailable and that shift+middle still worked.
+# Both were wrong, and for one cause: ghostty's GTK apprt gates EVERY middle-click event on
+# `org.gnome.desktop.interface gtk-enable-primary-paste`, whose glib schema default is `false`
+# (`/usr/share/glib-2.0/schemas/org.gnome.desktop.interface.gschema.xml` — nothing here had
+# overridden it, so it had never worked on this fleet). GNOME distros ship an override to true;
+# Arch does not.
+#
+#   src/apprt/gtk/class/surface.zig @ v1.3.1
+#     1786  priv.gtk_enable_primary_paste = gsettings.get(.@"gtk-enable-primary-paste") orelse true;
+#     2794  if (button == .middle and !priv.gtk_enable_primary_paste) return;   // gcMouseDown
+#     2854  if (button == .middle and !priv.gtk_enable_primary_paste) return;   // gcMouseUp
+#
+# The gate sits ABOVE the modifier handling, so with it false the event never reaches the paste
+# path OR the mouse report — plain and shift+middle are equally dead, and nothing is logged.
+# (Upstream #12940 calls the "not even forwarded to TUIs" half a regression from #10328.)
+#
+# `install.sh` sets it under DF_DESKTOP. By hand:
+#   gsettings set org.gnome.desktop.interface gtk-enable-primary-paste true
+# Read ONCE per surface init (line 1786), so open a NEW window/tab — existing panes keep the old
+# value, which reads exactly like the setting not having worked.
+#
+# With it on, from src/Surface.zig @ v1.3.1 (`mouseButtonCallback`, and the paste at :4154):
+#   no mouse reporting  plain middle pastes PRIMARY
+#   grabbing TUI        plain middle goes to the app; SHIFT+MIDDLE pastes, because the report
+#                       block breaks out on `mods.shift and !shift_capture` and falls through
+#                       — i.e. it depends on `mouse-shift-capture = false`, ghostty's default.
+#
+# Still not available: plain middle-click INSIDE a grabbing TUI. Ghostty has no mouse BINDING
+# map at all in 1.3.1, so it cannot be remapped; kitty can
+# (`mouse_map middle release grabbed,ungrabbed paste_from_selection`). PR #12109
+# (`middle-click-paste = selection|clipboard|false`) is NOT merged and the key is absent from
+# the installed binary — don't add it.
+
+# INSTALL xterm-ghostty ON REMOTE HOSTS AUTOMATICALLY, ON FIRST SSH.
+#
+# Needed because `ghostty-terminfo` exists ONLY on Arch: it is not packaged in Fedora or Debian
+# (checked against mdapi.fedoraproject.org and packages.debian.org, where `kitty-terminfo` IS
+# present in both — so the fleet's Fedora servers and the Pi cannot get it from a package, and
+# install.sh installs what it can). Without it a bare ssh carries TERM=xterm-ghostty to a host
+# that has never heard of it.
+#
+# The zsh integration (/usr/share/ghostty/shell-integration/zsh/ghostty-integration:333-383)
+# wraps `ssh` as a function: it pipes `infocmp -0 -x xterm-ghostty` over the connection, runs
+# `tic -x -` into the remote's ~/.terminfo, then caches the host via `ghostty +ssh-cache` so
+# later connections skip straight to TERM=xterm-ghostty. If any of that fails it falls back to
+# TERM=xterm-256color, which is strictly better than today's broken-remote default. Needs `tic`
+# (ncurses) on the remote; no root, no package, nothing to install on the fleet.
+#
+# THE VALUE MERGES, it does not replace — measured, because the obvious reading is the opposite
+# and a replacement here would silently drop `cursor`, `title` and `path`:
+#   XDG_CONFIG_HOME=<scratch> ghostty +show-config
+#   -> shell-integration-features = cursor,no-sudo,title,no-ssh-env,ssh-terminfo,path
+# with the scratch config containing only the line below. So one feature name is the whole edit.
+#
+# `ssh-env` deliberately left OFF: it adds `-o SetEnv COLORTERM=truecolor` and `-o SendEnv
+# TERM_PROGRAM…`, both of which need a matching AcceptEnv on the remote sshd and otherwise do
+# nothing at all — silently. Enable it only alongside the sshd side.
+#
+# ⚠ CHANGING THIS KEY NEEDS A FULL GHOSTTY RESTART — A NEW WINDOW IS NOT ENOUGH, and the
+# difference is invisible. `GHOSTTY_SHELL_FEATURES` is injected into the shell's environment
+# when a surface spawns its command (src/termio/shell_integration.zig:222-235, which writes
+# every enabled feature unconditionally), from the config the PROCESS holds. With
+# `gtk-single-instance = detect` resolving true in a desktop session, every window — including
+# ones opened by a Hyprland launcher or ctrl+shift+n — is served by the one long-lived process,
+# so it keeps handing out the feature list it loaded at startup. Measured 2026-08-16: a new
+# window still reported `cursor:blink,path,title` while
+#   ghostty --gtk-single-instance=false -e zsh -ic 'echo $GHOSTTY_SHELL_FEATURES'
+# reported `cursor:blink,path,ssh-terminfo,title` from the same file. Whether `reload_config`
+# (ctrl+shift+,) is sufficient was NOT established — quit every ghostty process and relaunch.
+#
+# The failure is silent in both halves, which is why this is worth the paragraph: the env var
+# simply lacks the feature, so no `ssh` wrapper is defined, so ssh runs bare and carries
+# TERM=xterm-ghostty to a host that cannot resolve it. Nothing logs anything. Verify with
+# `echo $GHOSTTY_SHELL_FEATURES` in a NEW PROCESS, never by re-reading this file or by trusting
+# `ghostty +show-config` — both were correct throughout while the live shells were not.
+shell-integration-features = ssh-terminfo

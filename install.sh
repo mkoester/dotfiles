@@ -140,6 +140,40 @@ case "$PM" in
 	brew)   pm_install zsh zoxide tmux git curl wget eza fzf ;;
 esac
 
+# TERMINFO FOR THE TERMINALS WE SSH *FROM* — deliberately NOT under DF_DESKTOP.
+#
+# This is a property of a machine you ssh INTO, so the machines that need it most are exactly
+# the ones that answer DF_DESKTOP=0: the Fedora servers and the Pi. Without the entry, a bare
+# ssh carries TERM=xterm-ghostty / xterm-kitty to a host that has never heard of it, and the
+# remote side fails as `Error opening terminal` / a garbled TUI — which reads as a broken
+# program rather than as a missing terminfo.
+#
+# Availability was checked per distro, not guessed (mdapi.fedoraproject.org, packages.debian.org):
+#
+#   kitty-terminfo    Arch yes   Fedora yes (noarch)   Debian yes (trixie)
+#   ghostty-terminfo  Arch yes   Fedora NO             Debian NO
+#
+# So ghostty's is Arch-only, the same reasoning as the ghostty binary itself in the DF_DESKTOP
+# block — naming it on dnf/apt would fail as "not found" rather than as "no such package
+# exists". The Fedora/Debian gap is covered from the CLIENT side instead:
+# config-stow/terminals/.config/ghostty/config sets `shell-integration-features = ssh-terminfo`,
+# which pushes the description over the connection and `tic`s it into the remote's ~/.terminfo
+# on first connect. That needs no package and no root, and covers hosts outside the fleet too —
+# so this step is belt-and-braces for the fleet, not the only mechanism.
+#
+# On Arch both are already HARD dependencies of `ghostty` and `kitty` (`pacman -Si`), so naming
+# them here changes nothing on a desktop and is the whole point on a headless box, where
+# neither terminal is installed.
+#
+# brew: skipped. macOS ships an ancient ncurses and neither terminfo has a formula; the Mac is
+# an ssh client here, not a target.
+case "$PM" in
+	pacman) pm_install kitty-terminfo ghostty-terminfo ;;
+	apt)    pm_install kitty-terminfo ;;
+	dnf)    pm_install kitty-terminfo ;;
+	brew)   : ;;
+esac
+
 # ══════════════════════════════════════════════════════════════════════════
 step "3/8  Stow base config (git, vscode)"
 stow_pkg "$HOME" git
@@ -275,6 +309,35 @@ if ask_yn DF_DESKTOP "Wayland desktop (bar, monitor profiles, notifications)?"; 
 	# Guarding here would instead mean a machine that later installs kitty silently gets an
 	# unconfigured one.
 	stow_pkg "$HOME" terminals
+	# MIDDLE-CLICK PASTE IN GHOSTTY IS THIS GSETTING — it is not a ghostty option.
+	#
+	# ghostty's GTK apprt drops every middle-click event when this is false
+	# (src/apprt/gtk/class/surface.zig:2794 and :2854 at v1.3.1), ABOVE the modifier handling,
+	# so plain AND shift+middle are equally dead and nothing is logged anywhere. The glib
+	# schema default is false on Arch (GNOME distros ship an override), so it had never worked
+	# on this fleet — see the long comment in config-stow/terminals/.config/ghostty/config.
+	#
+	# Not guarded on `have ghostty`: it is a GTK-wide setting, correct for every GTK app here,
+	# and gsettings is part of glib which any Wayland desktop already has.
+	#
+	# GUARDED ON THE SCHEMA, NOT ON `have gsettings` — the binary existing is not the same
+	# claim. brew installs glib as a dependency of plenty, so a Mac can have `gsettings` with
+	# no org.gnome.desktop.interface schema (that ships in gsettings-desktop-schemas, a Linux
+	# desktop package); `gsettings set` then exits 1, and under `set -euo pipefail` with run()
+	# exec'ing directly that ABORTS the installer halfway through step 6. Same for a headless
+	# Linux box that has glib but not the desktop schemas.
+	#
+	# `gsettings writable <schema> <key>` is the discriminating check — verified with both
+	# controls: exit 0 when schema and key exist, exit 1 for "No such schema" and exit 1 for
+	# "No such key". Output discarded; inside the Claude Code sandbox it also emits harmless
+	# dconf-CRITICAL noise about a read-only /run/user, which does not affect the exit code.
+	#
+	# Read once per ghostty SURFACE init, so it takes effect in new windows/tabs only — the
+	# installer says so rather than leaving it looking like the setting failed.
+	if have gsettings && gsettings writable org.gnome.desktop.interface gtk-enable-primary-paste >/dev/null 2>&1; then
+		run gsettings set org.gnome.desktop.interface gtk-enable-primary-paste true
+		info "middle-click paste: applies to NEW ghostty windows/tabs (read once per surface)"
+	fi
 	# per-machine kanshi profiles from workstation-private, if present
 	if [ -d "$HOST_DIR/kanshi" ]; then
 		run_sh "ln -sf \"$HOST_DIR/kanshi/\"* \"$HOME/.config/kanshi/config.d/\""
