@@ -53,7 +53,32 @@ upgrade = true              # actually apply fwupd firmware updates (default: on
 #   clean ALL AUR packages from cache [y/N] -> no   (paru clones kept)
 #   remove all saved diffs?           [Y/n] -> yes
 # It is NOT "say yes to everything" — don't "fix" this by adding -y anywhere.
+#
+# ── DMS plugins and their providers ─────────────────────────────────────────
+# topgrade has no DMS step. Plugins are git checkouts under
+# ~/.config/DankMaterialShell/plugins that `dms plugins update` pulls; the
+# attention-badges providers are separate clones in a sibling directory that
+# only its own script knows how to fast-forward (--ff-only, so a locally edited
+# provider is reported and left alone).
+#
+# BOTH ARE GUARDED, because this config is stowed fleet-wide and mkMac2017 runs
+# macOS, where neither exists. The guard is `… || exit 0` rather than
+# `… && cmd || true`: a missing dms is a silent skip, but a dms that runs and
+# FAILS must still fail the step — `|| true` would swallow both alike. The
+# provider guard tests the script itself, which also covers a DMS machine that
+# simply does not have this plugin installed.
+#
+# NO `dms restart` HERE, deliberately. An updated plugin is only picked up when
+# the shell restarts — DMS sets up its plugin directory watcher at startup —
+# but restarting unconditionally would kill and relaunch the bar on every
+# topgrade run, and making it conditional needs either a wrapper script diffing
+# the plugin checkouts or parsing `dms plugins update` output. So: run
+# `dms restart` yourself when the plugin step reports an update. Providers need
+# no restart either way, since the daemon reads those files through FileView
+# with watchChanges.
 [commands]
 "cleanup: pacman + AUR cache" = "paru --pacman pacman -Scc --noconfirm"
 "cleanup: flatpak unused (user)" = "flatpak uninstall --user --unused -y"
 "cleanup: flatpak unused (system)" = "flatpak uninstall --system --unused -y"
+"dms: plugin updates" = "command -v dms >/dev/null || exit 0; dms plugins update -a"
+"dms: attention-badges providers" = "p=~/.config/DankMaterialShell/plugins/attentionBadges/scripts/providers; test -x $p || exit 0; $p update"
