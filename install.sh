@@ -510,6 +510,30 @@ if ask_yn DF_DMS "DankMaterialShell (DMS) desktop shell?"; then
 		info "niri also has:  dms setup alttab   (niri-only subcommand)"
 	fi
 
+	# settings.json is the ONE exception to the "machine-local and untracked" rule above, and it
+	# is deliberate (MK, 2026-08-16: one central config, not per machine). The first two-machine
+	# diff found 97.7% of its ~530 keys already identical, so the per-host half is small enough to
+	# live in one overlay — which is what shared/dms/{base,laptop}.json are.
+	#
+	# OVERWRITING WHATEVER THE GUI HOLDS IS THE POINT, not a side effect: the file is written 0444,
+	# DMS then reports it read-only and never persists a change, and the previous file is kept as
+	# .pre-deploy. Read-only blocks persistence, NOT tuning — the GUI still applies changes live,
+	# so experimenting costs nothing and a re-run returns to the baseline. To keep a tweak, use the
+	# Settings modal's copy button and paste into base.json.
+	#
+	# Skipped where the baseline is absent (no workstation-private clone) rather than failing: a
+	# machine without the private repo is already handled that way for the kanshi/niri overlays.
+	if [ -f "$PRIVATE_REPO/shared/dms/base.json" ]; then
+		step "  dms: deploy the shared settings baseline (read-only)"
+		run "$DOTFILES_REPO/scripts/dms-settings-deploy"
+		# An external edit does NOT apply live — watchChanges reloads what is PARSED, not what is
+		# drawn, and the bar's widget lists are not re-rendered (measured 2026-08-16 reordering
+		# rightWidgets). So this is a real step, not a courtesy note.
+		info "  run 'dms restart' to pick it up — the bar does not reload settings.json live."
+	else
+		info "  no shared/dms/base.json — skipping the DMS settings baseline."
+	fi
+
 	# CachyOS's Niri and Hyprland editions install NOCTALIA, a second full Quickshell shell —
 	# with its own idle daemon, ext-session-lock client and polkit agent, each of which fights
 	# the DMS/swayidle ones (three lockouts on mkMac2014, 2026-07-30). Warn only when DMS was

@@ -124,7 +124,13 @@ def main():
         handle.write(rendered)
     os.chmod(args.target, stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
 
-    print("deployed read-only (0444). DMS reloads it live — no restart needed.")
+    # NOT "reloads live" — this said exactly that until 2026-08-16, on the strength of
+    # `watchChanges: true` and an onFileChanged -> reload() handler on the same FileView. Both
+    # are real; what they establish is what gets PARSED, never what gets re-rendered, and the
+    # bar's widget lists are not (measured by reordering rightWidgets — unchanged until a
+    # restart). Untested whether some scalar/theme keys do apply live; the safe rule is a
+    # restart after any external edit.
+    print("deployed read-only (0444). Run `dms restart` to pick it up.")
     print("To experiment: change things in the GUI (they apply immediately but do")
     print("not persist), then use the Settings modal's copy button and paste into")
     print(f"{SHARED}/base.json.")
