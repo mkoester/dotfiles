@@ -137,7 +137,35 @@ case "$PM" in
 	pacman) pm_install zsh zoxide tmux git git-delta curl wget eza sqlite fzf ;;
 	apt)    pm_install zsh zoxide tmux git git-delta gitk curl wget eza fzf ;;
 	dnf)    pm_install zsh zoxide tmux git git-delta gitk curl wget eza sqlite fzf ;;
-	brew)   pm_install zsh zoxide tmux git curl wget eza fzf ;;
+	# git-delta was MISSING here until 2026-08-16, and its absence broke git itself: the tracked
+	# config-stow/git/.gitconfig sets `pager = delta` unconditionally, so on a Mac every
+	# `git diff`/`git log` piped into a binary that does not exist. Not a cosmetic divergence —
+	# the config and the package have to arrive together, the same pairing rule as hyprlock's
+	# config in the DF_DESKTOP block.
+	#
+	# sqlite is deliberately NOT here, unlike the three Linux branches: macOS ships a working
+	# system sqlite3, and Homebrew's is keg-only (it does not land on PATH), so naming it would
+	# install something that changes nothing.
+	brew)   pm_install zsh zoxide tmux git git-delta curl wget eza fzf ;;
+esac
+
+# THE GNU USERLAND ON macOS — the other half of oh-my-zsh-custom/macos.zsh, which was shipping
+# without it. That file puts $HOMEBREW_PREFIX/opt/<f>/libexec/gnubin on PATH for coreutils,
+# gnu-tar, gnu-sed, grep, findutils and gawk so that scripts written on the Linux boxes behave.
+# None of those formulae was ever installed, so every `[[ -d $d ]]` test in it silently failed
+# and the shell kept using the BSD tools — PATH *looked* configured, and `sed -i`, `grep -P` and
+# `tar` went on failing in the exact way the comment there describes. Found 2026-08-16.
+#
+# The two must stay paired: the PATH block is inert without the formulae, and the formulae are
+# invisible without the PATH block (Homebrew installs them g-prefixed — gsed, ggrep — precisely
+# so they do NOT shadow the system tools).
+#
+# bash is here for the same reason: macOS still ships 3.2 (2007) at /bin/bash, and the fleet's
+# `#!/usr/bin/env bash` convention only reaches a modern one if brew has installed it.
+# gnu-getopt is keg-only and ships no gnubin, so macos.zsh puts its plain bin/ on PATH instead.
+case "$PM" in
+	brew)   pm_install coreutils gnu-tar gnu-sed grep findutils gawk gnu-getopt bash ;;
+	*)      : ;;
 esac
 
 # TERMINFO FOR THE TERMINALS WE SSH *FROM* — deliberately NOT under DF_DESKTOP.
@@ -225,6 +253,15 @@ case "$PM" in
 	brew)   UPDATE_OS=brew ;;
 esac
 run ln -sf "$DOTFILES_REPO/.zshrc-update-os-$UPDATE_OS.zsh" "$HOME/.zshrc-update-os.zsh"
+# The brew variant's update-os calls `brew cu -y -a`, which is NOT part of Homebrew — it comes
+# from the buo/cask-upgrade tap and is what upgrades casks (plain `brew upgrade` leaves most of
+# them alone). Without the tap, update-os dies partway through on `Unknown command: cu`, after
+# `brew upgrade` has already run, so it looks like a half-finished update rather than a missing
+# tap. Printed rather than run: a tap is a persistent choice about where software comes from.
+if [ "$PM" = brew ]; then
+	info "update-os needs the cask-upgrade tap once on this machine:"
+	info "  brew tap buo/cask-upgrade"
+fi
 
 # ══════════════════════════════════════════════════════════════════════════
 step "6/8  Host-class options"
@@ -232,7 +269,13 @@ step "6/8  Host-class options"
 # Wayland desktop, compositor-agnostic (works under Niri, labwc, …): notifications, kanshi,
 # waybar unit, ydotool, terminals, flatpak+Flathub. Niri itself is a SEPARATE question below —
 # not every desktop runs it.
+# Recorded for the same reason as DF_NIRI_ON/DF_HYPR_ON below: ask_yn returns a STATUS and does
+# not assign the variable, so nothing after this block can read $DF_DESKTOP to decide anything.
+# The terminal configs are stowed outside the block and need it.
+DF_DESKTOP_ON=0
+
 if ask_yn DF_DESKTOP "Wayland desktop (bar, monitor profiles, notifications)?"; then
+	DF_DESKTOP_ON=1
 	step "  desktop: notifications, kanshi, waybar unit, idle+lock, ydotool, flatpak"
 	case "$PM" in
 		# hyprlock is the fleet locker (it drives fprintd itself, so the fingerprint works
@@ -308,7 +351,10 @@ if ask_yn DF_DESKTOP "Wayland desktop (bar, monitor profiles, notifications)?"; 
 	# arrive together; a config for a terminal that is not installed is simply an inert file.
 	# Guarding here would instead mean a machine that later installs kitty silently gets an
 	# unconfigured one.
-	stow_pkg "$HOME" terminals
+	#
+	# THE STOW ITSELF NOW LIVES BELOW THE BLOCK — see "Terminal emulator configs" after the
+	# compositor questions. Only this reasoning stayed here, next to the packages it is about.
+	#
 	# MIDDLE-CLICK PASTE IN GHOSTTY IS THIS GSETTING — it is not a ghostty option.
 	#
 	# ghostty's GTK apprt drops every middle-click event when this is false
@@ -349,6 +395,23 @@ if ask_yn DF_DESKTOP "Wayland desktop (bar, monitor profiles, notifications)?"; 
 else
 	unlink_omz oh-my-zsh-plugins-optional auto-notify.zsh
 	unlink_omz oh-my-zsh-custom auto-notify.zsh
+fi
+
+# Terminal emulator configs: ghostty (the default since 2026-08-10), kitty (fallback) and
+# alacritty (previous default, kept working). The reasoning for the one-package-for-three shape
+# and for having no `have` guard is in the DF_DESKTOP block above, next to the packages.
+#
+# NOT GATED ON DF_DESKTOP — moved out 2026-08-16. That flag means *Wayland* desktop, so a Mac
+# answers 0 to it correctly and was silently getting no terminal config at all: no Nerd Font, no
+# Nord, none of the clipboard keys, and p10k rendering in fallback glyphs. The same reasoning as
+# the terminfo step near the top of this file, which is deliberately outside DF_DESKTOP for the
+# mirror-image reason — this is about the machine you SIT AT, which is not the same set as the
+# machines running a Wayland compositor.
+#
+# The `brew` arm is what makes that true rather than just intended; a headless Linux box still
+# answers DF_DESKTOP=0 and still gets nothing, which is correct — nobody sits at it.
+if [ "$DF_DESKTOP_ON" -eq 1 ] || [ "$PM" = brew ]; then
+	stow_pkg "$HOME" terminals
 fi
 
 # Which compositors this run enabled. ask_yn returns a STATUS and does not assign the variable,
