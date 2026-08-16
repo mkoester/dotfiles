@@ -595,8 +595,20 @@ if ask_yn DF_MESSENGERS "Messengers (Signal, Telegram, WhatsApp/ZapZap, Threema)
 		[ "$PM" = pacman ] || run sudo flatpak install -y flathub org.signal.Signal
 		[ "$PM" = pacman ] || run sudo flatpak install -y flathub org.telegram.desktop
 		run sudo flatpak install -y flathub com.rtosta.zapzap
-		run sudo flatpak install -y --from \
-			https://releases.threema.ch/flatpak/threema-desktop/ch.threema.threema-desktop.flatpakref
+		# `--from` ERRORS on an already-installed app; the `<remote> <id>` form above only warns.
+		# Not a cosmetic difference: under `set -e` the error aborts the whole installer, so every
+		# step below this one — through save_answers — silently never runs on a second pass.
+		# Verified against flatpak 1.18.1's source, because the two obvious flags do not help:
+		# install_from() (app/flatpak-builtins-install.c:217) never consults --or-update, which is
+		# handled only in the remote/ref path (:623), and --reinstall suppresses the error by
+		# uninstalling and re-downloading the app on every run. Hence an explicit guard. Keeping an
+		# installed Threema up to date is topgrade's job, not the installer's.
+		if have flatpak && flatpak info ch.threema.threema-desktop >/dev/null 2>&1; then
+			info "Threema Desktop already installed — leaving it to topgrade to update."
+		else
+			run sudo flatpak install -y --from \
+				https://releases.threema.ch/flatpak/threema-desktop/ch.threema.threema-desktop.flatpakref
+		fi
 		# Threema's own documented workaround: the sandbox has no host file access by default,
 		# which breaks drag-and-drop of attachments.
 		run flatpak override --user ch.threema.threema-desktop --filesystem=host
