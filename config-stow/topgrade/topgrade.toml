@@ -61,6 +61,13 @@ upgrade = true              # actually apply fwupd firmware updates (default: on
 # only its own script knows how to fast-forward (--ff-only, so a locally edited
 # provider is reported and left alone).
 #
+# The guards below rely on shell semantics, which topgrade does provide: a
+# [commands] value is run as `/usr/bin/zsh -c '<value>'` (verified 2026-08-16 by
+# `topgrade --config … --only custom_commands --dry-run`, which prints the exact
+# invocation), so `;`, `&&` and `~` expansion all work — including `~` on the
+# right-hand side of an assignment, which zsh expands and which the second entry
+# depends on.
+#
 # BOTH ARE GUARDED, because this config is stowed fleet-wide and mkMac2017 runs
 # macOS, where neither exists. The guard is `… || exit 0` rather than
 # `… && cmd || true`: a missing dms is a silent skip, but a dms that runs and
