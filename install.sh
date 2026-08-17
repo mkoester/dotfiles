@@ -875,7 +875,7 @@ if ask_yn DF_LESSPIPE "lesspipe (rich less previews)?"; then
 		pacman) pm_install 7zip unrar cabextract bat ;;
 		apt)    pm_install p7zip-full unrar-free cabextract bat; link_omz oh-my-zsh-custom bat.zsh ;;
 		dnf)    pm_install p7zip p7zip-plugins unrar cabextract bat ;;
-		brew)   pm_install p7zip unrar cabextract bat ;;
+		brew)   pm_install p7zip cabextract bat ;;
 	esac
 	link_omz oh-my-zsh-custom lesspipe.zsh
 	info "lesspipe itself is a source build — see README § lesspipe (kept manual)."
