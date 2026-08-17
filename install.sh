@@ -534,6 +534,50 @@ if ask_yn DF_DMS "DankMaterialShell (DMS) desktop shell?"; then
 		info "  no shared/dms/base.json — skipping the DMS settings baseline."
 	fi
 
+	# The settings baseline above carries {"id":"attentionBadges"} in barConfigs[].rightWidgets,
+	# so deploying it WITHOUT this step ships a bar entry for a plugin the machine does not have.
+	# That is the reason this sits here rather than being a manual tail step: the two are coupled,
+	# and the coupling is invisible until you look at the bar.
+	DMS_CFG="$HOME/.config/DankMaterialShell"
+	if have dms; then
+		# Idempotency is the plugin DIRECTORY, not `dms plugins list` — that subcommand clones the
+		# whole 308-entry registry to answer, so it needs network and prints a page of git progress
+		# on every install run. `dms plugins install` itself clones the plugin repo to exactly this
+		# path, so its presence is the same fact, offline.
+		if [ -d "$DMS_CFG/plugins/attentionBadges" ]; then
+			info "  dms: attentionBadges plugin already installed"
+		else
+			step "  dms: install the attentionBadges plugin from the registry"
+			run dms plugins install attentionBadges
+			# Same trap as settings.json, different mechanism: the plugin directory watcher is
+			# set up when the shell starts, so a freshly installed plugin is invisible until a
+			# restart. Updates (`dms plugins update attentionBadges`) need one too.
+			info "  run 'dms restart' — a new plugin is not picked up until the shell restarts."
+		fi
+	else
+		info "  no 'dms' on PATH — skipping the attentionBadges plugin."
+	fi
+
+	# Providers are a separate mechanism from the plugin: each is a small repo of its own that the
+	# plugin SCANS from this directory, so the checkout has to live here and gets no second clone
+	# elsewhere (gita.zsh's gitar() knows this path for the same reason). Unlike the plugin they
+	# need no restart — the plugin watches the directory.
+	#
+	# Gated on herdr being INSTALLED rather than on DF_DEV: a provider for a program this machine
+	# does not run would badge nothing, and "is the program here" is the question actually being
+	# asked. Cloned over HTTPS so a fresh machine needs no ssh key; mkDell's existing clone has an
+	# ssh remote because it is also the working copy, and is skipped by the -d test below.
+	if have herdr; then
+		if [ -d "$DMS_CFG/attention-providers/herdr" ]; then
+			info "  dms: herdr attention provider already present"
+		else
+			step "  dms: clone the herdr attention provider"
+			run mkdir -p "$DMS_CFG/attention-providers"
+			run git clone https://github.com/mkoester/dms-attention-badges-herdr.git \
+				"$DMS_CFG/attention-providers/herdr"
+		fi
+	fi
+
 	# CachyOS's Niri and Hyprland editions install NOCTALIA, a second full Quickshell shell —
 	# with its own idle daemon, ext-session-lock client and polkit agent, each of which fights
 	# the DMS/swayidle ones (three lockouts on mkMac2014, 2026-07-30). Warn only when DMS was
