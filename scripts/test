@@ -467,5 +467,76 @@ else
 	skip "gitar" "zsh not installed"
 fi
 
+# ── dms-plugin-enable ────────────────────────────────────────────────────────
+# Every case runs against a --target in a temp dir, so nothing here can touch the
+# real DMS store.
+section "dms-plugin-enable"
+DPE="$REPO/scripts/dms-plugin-enable"
+
+d=$(work); t="$d/plugin_settings.json"
+
+# The case that made this script exist: a machine with the plugin installed and no
+# store at all.
+python3 "$DPE" attentionBadges --target "$t" >/dev/null 2>&1
+is "$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["attentionBadges"]["enabled"])' "$t")" \
+	'True' 'a missing store is created with the plugin enabled'
+
+# The whole reason it merges rather than deploys: this file also holds each plugin's
+# own GUI-written settings, and a sibling plugin's entry must survive untouched.
+cat >"$t" <<-'JSON'
+	{
+	  "otherPlugin": { "enabled": true, "interval": 42 },
+	  "attentionBadges": { "enabled": false, "showZero": true }
+	}
+JSON
+python3 "$DPE" attentionBadges --target "$t" >/dev/null 2>&1
+is "$(python3 -c 'import json,sys;d=json.load(open(sys.argv[1]));print(d["otherPlugin"]["interval"])' "$t")" \
+	'42' 'another plugin keeps its settings'
+is "$(python3 -c 'import json,sys;d=json.load(open(sys.argv[1]));print(d["attentionBadges"]["showZero"])' "$t")" \
+	'True' "the plugin's own settings survive the flip"
+is "$(python3 -c 'import json,sys;d=json.load(open(sys.argv[1]));print(d["attentionBadges"]["enabled"])' "$t")" \
+	'True' 'a stored false is flipped to true'
+
+# A no-op run must not rewrite the file: install.sh calls this on every pass, and a
+# needless write would suggest a `dms restart` that is not needed.
+before=$(md5sum <"$t")
+out=$(python3 "$DPE" attentionBadges --target "$t" 2>&1)
+is "$(md5sum <"$t")" "$before" 'a second run leaves the file byte-identical'
+ok "$(printf '%s' "$out" | grep -qF 'already enabled' && echo 1 || echo 0)" \
+	'a no-op run says so'
+ok "$(printf '%s' "$out" | grep -qF 'dms restart' && echo 0 || echo 1)" \
+	'a no-op run does not suggest a restart'
+
+# The control that makes the no-op assertions above worth anything: a run that DOES
+# change something must write and must say so. Without it, a script that silently
+# did nothing at all would pass every test above.
+python3 -c 'import json;json.dump({"attentionBadges":{"enabled":False}},open("'"$t"'","w"))'
+out=$(python3 "$DPE" attentionBadges --target "$t" 2>&1)
+ok "$(printf '%s' "$out" | grep -qF 'dms restart' && echo 1 || echo 0)" \
+	'a real change suggests a restart'
+
+# A corrupt store is DMS's file, possibly holding settings that exist nowhere else.
+# Refusing beats replacing.
+printf 'not json at all\n' >"$t"
+python3 "$DPE" attentionBadges --target "$t" >/dev/null 2>&1 && r=0 || r=1
+ok "$r" 'a corrupt store fails rather than being replaced'
+is "$(cat "$t")" 'not json at all' 'the corrupt store is left untouched'
+ok "$(find "$d" -name '.plugin_settings.*' | grep -q . && echo 0 || echo 1)" \
+	'no temp file is left behind'
+
+# --dry-run is what install.sh's own --dry-run relies on staying honest.
+rm -f "$t"
+python3 "$DPE" attentionBadges --target "$t" --dry-run >/dev/null 2>&1
+ok "$([ -f "$t" ] && echo 0 || echo 1)" '--dry-run writes nothing'
+
+# Defaulting to attentionBadges is what lets install.sh name it explicitly without the
+# two drifting apart — assert the default is the same id, not merely that one exists.
+rm -f "$t"
+python3 "$DPE" --target "$t" >/dev/null 2>&1
+is "$(python3 -c 'import json,sys;print(",".join(json.load(open(sys.argv[1]))))' "$t")" \
+	'attentionBadges' 'the default plugin id is attentionBadges'
+
+rm -rf "$d"
+
 printf '\n%d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"
 [ "$FAIL" -eq 0 ]

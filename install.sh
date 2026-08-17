@@ -554,6 +554,15 @@ if ask_yn DF_DMS "DankMaterialShell (DMS) desktop shell?"; then
 			# restart. Updates (`dms plugins update attentionBadges`) need one too.
 			info "  run 'dms restart' — a new plugin is not picked up until the shell restarts."
 		fi
+
+		# INSTALLED IS NOT ENABLED, and nothing above does this: `dms plugins install` only
+		# clones, and the CLI has no enable subcommand (browse/install/list/uninstall/update).
+		# The flag lives in plugin_settings.json — a file of its own, NOT settings.json — and
+		# defaults to false, so a machine that ran everything above still shows an empty slot
+		# where the bar entry is (measured on mkMac2014, 2026-08-17). Idempotent and merging;
+		# see scripts/dms-plugin-enable for the two source lines that decide it.
+		step "  dms: enable the attentionBadges plugin"
+		run "$DOTFILES_REPO/scripts/dms-plugin-enable" attentionBadges
 	else
 		info "  no 'dms' on PATH — skipping the attentionBadges plugin."
 	fi
