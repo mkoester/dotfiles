@@ -1,13 +1,8 @@
 # dotfiles
 
-My cross-machine shell + tool configuration, deployed with [GNU stow](https://www.gnu.org/software/stow/).
-Packages under `config-stow/<pkg>/` symlink into place; the oh-my-zsh material is linked from
-the top-level `oh-my-zsh-*` directories. Works across Arch, Debian, Fedora and macOS.
+My cross-machine shell + tool configuration, deployed with [GNU stow](https://www.gnu.org/software/stow/). Packages under `config-stow/<pkg>/` symlink into place; the oh-my-zsh material is linked from the top-level `oh-my-zsh-*` directories. Works across Arch, Debian, Fedora and macOS.
 
-**This repo is public.** Machine- and device-specific data (monitor serials, Bluetooth MACs,
-hostnames) must never be committed here — it lives in the private overlay repo and is pulled in
-via gitignored `include`s (see [kanshi](#kanshi--monitor-profiles), [niri](#niri--wayland-compositor)
-and [hypr](#hypr--hyprland-compositor-evaluation-since-2026-08-03)).
+**This repo is public.** Machine- and device-specific data (monitor serials, Bluetooth MACs, hostnames) must never be committed here — it lives in the private overlay repo and is pulled in via gitignored `include`s (see [kanshi](#kanshi--monitor-profiles), [niri](#niri--wayland-compositor) and [hypr](#hypr--hyprland-compositor-evaluation-since-2026-08-03)).
 
 ## Quick start — `./install.sh`
 
@@ -18,10 +13,7 @@ mkdir -p "$HOME/src" && git clone https://github.com/mkoester/dotfiles.git "$HOM
 cd "$HOME/src/dotfiles" && ./install.sh
 ```
 
-It detects your distro, installs the base tools, stows the config, sets up oh-my-zsh, and asks a
-few host-class questions (Wayland desktop? Niri? Quadlet host? Node? Caddy? …) to link only what
-this machine needs. Niri is its own question, so a desktop that doesn't run it (e.g. a Pi on
-labwc) is fine. It's **idempotent** — safe to re-run. Preview everything first with:
+It detects your distro, installs the base tools, stows the config, sets up oh-my-zsh, and asks a few host-class questions (Wayland desktop? Niri? Quadlet host? Node? Caddy? …) to link only what this machine needs. Niri is its own question, so a desktop that doesn't run it (e.g. a Pi on labwc) is fine. It's **idempotent** — safe to re-run. Preview everything first with:
 
 ```sh
 ./install.sh --dry-run      # print every command instead of running it
@@ -29,50 +21,23 @@ labwc) is fine. It's **idempotent** — safe to re-run. Preview everything first
 ./install.sh --yes          # non-interactive: stored answers, No for anything unanswered
 ```
 
-**Your answers are remembered.** Each question you answer is written back to
-`workstation-private/<hostname>/host.env` as `DF_<NAME>=1|0`, so the next run stops asking and
-just re-executes the matching steps. Change your mind with `--reconfigure`, which re-asks
-everything with the stored answer as the default (`[Y/n]` vs `[y/N]`) so ENTER keeps it. Values
-are updated in place — comments and any other keys in `host.env` survive, and a commented-out
-hint line (`#DF_NODE=1`) is **uncommented and set** rather than duplicated further down. Without a
-`workstation-private` clone next to this repo there is nowhere to save; the run says so and
-otherwise works normally.
+**Your answers are remembered.** Each question you answer is written back to `workstation-private/<hostname>/host.env` as `DF_<NAME>=1|0`, so the next run stops asking and just re-executes the matching steps. Change your mind with `--reconfigure`, which re-asks everything with the stored answer as the default (`[Y/n]` vs `[y/N]`) so ENTER keeps it. Values are updated in place — comments and any other keys in `host.env` survive, and a commented-out hint line (`#DF_NODE=1`) is **uncommented and set** rather than duplicated further down. Without a `workstation-private` clone next to this repo there is nowhere to save; the run says so and otherwise works normally.
 
-Keep every `DF_*` key present and uncommented in a `host.env` (`_template/host.env` shows the
-full set) — a commented-out key is not an answer, so the installer prompts for it.
+Keep every `DF_*` key present and uncommented in a `host.env` (`_template/host.env` shows the full set) — a commented-out key is not an answer, so the installer prompts for it.
 
-**Answering "no" also undoes that option.** If an earlier run linked an option's zsh snippet
-(`quadlet.zsh`, `atuin.zsh`, `fnm.zsh`/`pnpm.zsh`, `caddy.zsh`, `golang.zsh`, `ssh-wsl.zsh`,
-`gita.zsh`, `fresh.zsh`, `lesspipe.zsh`/`bat.zsh`, `auto-notify.zsh`), a later "no" removes the
-symlink again — so a host that stops being a Quadlet/Node/atuin machine really stops loading
-those aliases, instead of the question merely being skipped. Only a symlink pointing back into
-**this** clone is removed; a real file, or a link owned by another clone, is reported and left
-alone. Packages installed earlier are never uninstalled, and stowed config packages (niri,
-topgrade, kanshi, …) are not unstowed — use `stow -D` for those by hand.
+**Answering "no" also undoes that option.** If an earlier run linked an option's zsh snippet (`quadlet.zsh`, `atuin.zsh`, `fnm.zsh`/`pnpm.zsh`, `caddy.zsh`, `golang.zsh`, `ssh-wsl.zsh`, `gita.zsh`, `fresh.zsh`, `lesspipe.zsh`/`bat.zsh`, `auto-notify.zsh`), a later "no" removes the symlink again — so a host that stops being a Quadlet/Node/atuin machine really stops loading those aliases, instead of the question merely being skipped. Only a symlink pointing back into **this** clone is removed; a real file, or a link owned by another clone, is reported and left alone. Packages installed earlier are never uninstalled, and stowed config packages (niri, topgrade, kanshi, …) are not unstowed — use `stow -D` for those by hand.
 
-You can still preseed by hand: `DF_DESKTOP`/`DF_QUADLET`/`DF_NODE`/… = `1`/`0` in `host.env`
-(`./install.sh --help` lists them all). An **exported** `DF_*` beats the stored answer for that
-one run and is deliberately *not* saved — `DF_NIRI=0 ./install.sh` is a one-off override, not a
-decision. `DF_STOW_BACKUP` is never stored either: it is a per-conflict call, not a property of
-the machine. Everything below is the **manual reference** the installer automates — read it when
-a step needs doing by hand.
+You can still preseed by hand: `DF_DESKTOP`/`DF_QUADLET`/`DF_NODE`/… = `1`/`0` in `host.env` (`./install.sh --help` lists them all). An **exported** `DF_*` beats the stored answer for that one run and is deliberately *not* saved — `DF_NIRI=0 ./install.sh` is a one-off override, not a decision. `DF_STOW_BACKUP` is never stored either: it is a per-conflict call, not a property of the machine. Everything below is the **manual reference** the installer automates — read it when a step needs doing by hand.
 
-**Layout:** `install.sh` is the 8-step procedure; every helper it uses lives in **`lib.sh`**,
-which is sourced and does nothing on its own. That split exists so **`./scripts/test`** can source
-`lib.sh` and drive one function at a time against a fixture — it runs in `mktemp` dirs, touches
-neither `$HOME` nor the package manager nor the network, and is safe on any machine. Run it after
-changing anything in `lib.sh` (`-v` lists each case).
+**Layout:** `install.sh` is the 8-step procedure; every helper it uses lives in **`lib.sh`**, which is sourced and does nothing on its own. That split exists so **`./scripts/test`** can source `lib.sh` and drive one function at a time against a fixture — it runs in `mktemp` dirs, touches neither `$HOME` nor the package manager nor the network, and is safe on any machine. Run it after changing anything in `lib.sh` (`-v` lists each case).
 
 ---
 
-> **Per-distro commands.** Each install step below is given for **Arch** (`paru`), **Debian**
-> (`apt`), **Fedora** (`dnf`) and **macOS** (`brew`). Pick the one for your system. "Arch" covers
-> CachyOS/EndeavourOS/Manjaro; "Debian" covers Ubuntu/Mint; "Fedora" covers RHEL clones.
+> **Per-distro commands.** Each install step below is given for **Arch** (`paru`), **Debian** (`apt`), **Fedora** (`dnf`) and **macOS** (`brew`). Pick the one for your system. "Arch" covers CachyOS/EndeavourOS/Manjaro; "Debian" covers Ubuntu/Mint; "Fedora" covers RHEL clones.
 
 ## Fresh CachyOS install — three defaults to fix first
 
-CachyOS ships a few things differently from plain Arch, and all three bite *before* you get to
-`install.sh`. Do these first on a new machine.
+CachyOS ships a few things differently from plain Arch, and all three bite *before* you get to `install.sh`. Do these first on a new machine.
 
 **1. `sshd` is installed but not enabled.** Arch ships `openssh` without starting the daemon:
 
@@ -80,15 +45,13 @@ CachyOS ships a few things differently from plain Arch, and all three bite *befo
 sudo systemctl enable --now sshd
 ```
 
-**2. `ufw` IS enabled, default-deny incoming** — the real difference from plain Arch. Symptom:
-`ping` works, DNS resolves, and `ssh` **times out**.
+**2. `ufw` IS enabled, default-deny incoming** — the real difference from plain Arch. Symptom: `ping` works, DNS resolves, and `ssh` **times out**.
 
 ```sh
 sudo ufw allow ssh/tcp
 ```
 
-Read the exact failure before blaming the firewall — the four outcomes mean four different things,
-and only one of them is ufw:
+Read the exact failure before blaming the firewall — the four outcomes mean four different things, and only one of them is ufw:
 
 | `ssh` says | Layer | Means |
 |---|---|---|
@@ -97,33 +60,22 @@ and only one of them is ufw:
 | `No route to host` | L3 | Address resolved but nobody answered — host not on the network, or a stale DHCP lease |
 | `Name or service not known` | DNS/NSS | Never reached the network at all |
 
-For the last two, note that **`dig` bypasses NSS** — it talks DNS straight to the resolver, while
-`ssh` and `ping` go through `/etc/nsswitch.conf`. So "`dig` finds it but `ping` doesn't" is a real
-split, not a contradiction. A `.lan` answer with **TTL 0** is only as fresh as the DHCP lease
-behind it; when a machine changes OS its old lease can keep resolving to an address nobody holds.
-Check the router's lease table, which is authoritative, rather than trusting `.lan` DNS.
+For the last two, note that **`dig` bypasses NSS** — it talks DNS straight to the resolver, while `ssh` and `ping` go through `/etc/nsswitch.conf`. So "`dig` finds it but `ping` doesn't" is a real split, not a contradiction. A `.lan` answer with **TTL 0** is only as fresh as the DHCP lease behind it; when a machine changes OS its old lease can keep resolving to an address nobody holds. Check the router's lease table, which is authoritative, rather than trusting `.lan` DNS.
 
-Two traps when diagnosing this. `systemctl list-units --state=running` **hides firewall units** —
-they are `Type=oneshot` + `RemainAfterExit=yes`, so they sit in `active (exited)` and the filter
-reports nothing; ask directly instead:
+Two traps when diagnosing this. `systemctl list-units --state=running` **hides firewall units** — they are `Type=oneshot` + `RemainAfterExit=yes`, so they sit in `active (exited)` and the filter reports nothing; ask directly instead:
 
 ```sh
 systemctl is-enabled ufw firewalld iptables nftables
 ```
 
-And **IPv4 and IPv6 are separate rulesets**: a `.lan` name usually resolves to both an A and a AAAA
-record and the resolver hands out the AAAA first, so a v4-only rule leaves the symptom unchanged.
-A plain port rule like the one above covers both families; a *source-scoped* rule is per-family and
-needs one per family:
+And **IPv4 and IPv6 are separate rulesets**: a `.lan` name usually resolves to both an A and a AAAA record and the resolver hands out the AAAA first, so a v4-only rule leaves the symptom unchanged. A plain port rule like the one above covers both families; a *source-scoped* rule is per-family and needs one per family:
 
 ```sh
 sudo ufw allow from <lan-v4-cidr> to any port 22 proto tcp
 sudo ufw allow from <lan-v6-prefix>::/64 to any port 22 proto tcp
 ```
 
-If you open port 22 unscoped on a laptop that leaves the house, the hardening drop-in stops being
-optional. Get your pubkey into `~/.ssh/authorized_keys` and **verify a key login before restarting
-sshd**, or you lock yourself out of a machine you only reach over the network:
+If you open port 22 unscoped on a laptop that leaves the house, the hardening drop-in stops being optional. Get your pubkey into `~/.ssh/authorized_keys` and **verify a key login before restarting sshd**, or you lock yourself out of a machine you only reach over the network:
 
 ```sh
 sudo tee /etc/ssh/sshd_config.d/10-hardening.conf <<'EOF'
@@ -136,24 +88,15 @@ EOF
 sudo sshd -T | grep -iE 'passwordauthentication|permitrootlogin'
 ```
 
-**3. The Niri edition drops a shell config into `/etc/skel`, and it blocks `stow`.** Installing
-Niri as the desktop pulls in a complete Quickshell-based shell (Noctalia), whose `config.kdl` is
-copied into your home at user creation. `install.sh` then aborts stowing the `niri` package with
-*"cannot stow … over existing target … since neither a link nor a directory"*. `pacman -Qo` reports
-**no package owns** the file — it came from `/etc/skel`, so moving it aside is safe and nothing
-will restore it:
+**3. The Niri edition drops a shell config into `/etc/skel`, and it blocks `stow`.** Installing Niri as the desktop pulls in a complete Quickshell-based shell (Noctalia), whose `config.kdl` is copied into your home at user creation. `install.sh` then aborts stowing the `niri` package with *"cannot stow … over existing target … since neither a link nor a directory"*. `pacman -Qo` reports **no package owns** the file — it came from `/etc/skel`, so moving it aside is safe and nothing will restore it:
 
 ```sh
 mv ~/.config/niri/config.kdl ~/.config/niri/config.kdl.cachyos
 ```
 
-**Never use `stow --adopt` here.** It would pull the distro's config *into this repo*, overwriting
-the tracked skeleton and silently making the repo carry CachyOS's config. Expect the same collision
-on any other file dropped via `/etc/skel`.
+**Never use `stow --adopt` here.** It would pull the distro's config *into this repo*, overwriting the tracked skeleton and silently making the repo carry CachyOS's config. Expect the same collision on any other file dropped via `/etc/skel`.
 
-Also worth knowing before the first reboot: after switching to the tracked niri config the distro
-shell no longer starts, so the bar and launcher disappear until you enable waybar or spawn the
-shell yourself from your private overlay. That is expected, not a broken install.
+Also worth knowing before the first reboot: after switching to the tracked niri config the distro shell no longer starts, so the bar and launcher disappear until you enable waybar or spawn the shell yourself from your private overlay. That is expected, not a broken install.
 
 ### A new SSH key (any OS)
 
@@ -163,15 +106,9 @@ Same on Linux and macOS. Accept the default path (`~/.ssh/id_ed25519`):
 ssh-keygen -t ed25519 -C "mk@$(hostname -s)"
 ```
 
-**No passphrase is the convention here**, and it is load-bearing rather than laziness: the
-`gita-fetch.timer` user unit fetches from the git host on a schedule with no interactive session
-behind it, so a passphrase would mean running an agent and wiring `SSH_AUTH_SOCK` into the unit
-(the line is present but commented out for exactly this reason — see
-[the auto-fetch timer](#periodic-auto-fetch-timer-systemd-user)). Set one only if you also intend
-to solve that.
+**No passphrase is the convention here**, and it is load-bearing rather than laziness: the `gita-fetch.timer` user unit fetches from the git host on a schedule with no interactive session behind it, so a passphrase would mean running an agent and wiring `SSH_AUTH_SOCK` into the unit (the line is present but commented out for exactly this reason — see [the auto-fetch timer](#periodic-auto-fetch-timer-systemd-user)). Set one only if you also intend to solve that.
 
-Then publish it where it is needed — the second command is what you paste into the git forge's
-SSH-keys page, which the clones in the next section both need:
+Then publish it where it is needed — the second command is what you paste into the git forge's SSH-keys page, which the clones in the next section both need:
 
 ```sh
 ssh-copy-id <user>@<host>
@@ -182,13 +119,9 @@ cat ~/.ssh/id_ed25519.pub
 
 ## Clone this repository
 
-**Clone location is permanent.** `stow` symlinks point back into the clone, so wherever this
-lands is where `~/.gitconfig` and friends resolve to forever. `~/src/dotfiles` is the canonical
-spot — do this first, before installing or running stow.
+**Clone location is permanent.** `stow` symlinks point back into the clone, so wherever this lands is where `~/.gitconfig` and friends resolve to forever. `~/src/dotfiles` is the canonical spot — do this first, before installing or running stow.
 
-**One clone per machine, and this is it.** Don't keep a second copy elsewhere to work in: the
-round trip through *push → pull → stow* is exactly the drift it looks like it prevents. Editors
-and tooling should point at this path (an editor workspace can reference it without cloning it).
+**One clone per machine, and this is it.** Don't keep a second copy elsewhere to work in: the round trip through *push → pull → stow* is exactly the drift it looks like it prevents. Editors and tooling should point at this path (an editor workspace can reference it without cloning it).
 
 ```sh
 mkdir -p $HOME/src && git clone https://github.com/mkoester/dotfiles.git $HOME/src/dotfiles
@@ -200,9 +133,7 @@ or via `ssh`
 mkdir -p $HOME/src && git clone git@github.com:mkoester/dotfiles.git $HOME/src/dotfiles
 ```
 
-Sharing one clone between several users on a machine puts it in `/home/dotfiles` instead —
-see [Sharing config with several users](#sharing-config-with-several-users-on-the-same-machine)
-below, and clone there rather than here.
+Sharing one clone between several users on a machine puts it in `/home/dotfiles` instead — see [Sharing config with several users](#sharing-config-with-several-users-on-the-same-machine) below, and clone there rather than here.
 
 Everything from here on assumes you are in the repo root:
 
@@ -217,17 +148,13 @@ Use `paru`, like every other Arch step:
 ```sh
 paru -S --needed stow
 ```
-**Direct `pacman` is only for the one machine state where `paru` does not exist yet** — a fresh
-box where it hasn't been installed. `install.sh` handles this automatically (it falls back only
-if `have paru` fails), and in practice the fallback never fires: the very next step exits unless
-paru is present, and CachyOS ships it. If you are on such a box, bootstrap it first:
+**Direct `pacman` is only for the one machine state where `paru` does not exist yet** — a fresh box where it hasn't been installed. `install.sh` handles this automatically (it falls back only if `have paru` fails), and in practice the fallback never fires: the very next step exits unless paru is present, and CachyOS ships it. If you are on such a box, bootstrap it first:
 ```sh
 sudo pacman -S --needed paru   # the ONLY thing pacman ever installs
 paru -S --needed stow
 ```
 ### Debian
-Bootstrap `nala` first (see [below](#nala-debianubuntu--the-default-not-optional)) — every
-later Debian step goes through it, exactly as Arch's go through `paru`:
+Bootstrap `nala` first (see [below](#nala-debianubuntu--the-default-not-optional)) — every later Debian step goes through it, exactly as Arch's go through `paru`:
 ```sh
 sudo apt install -y nala   # the ONLY bare-apt call
 sudo nala install -y stow
@@ -253,15 +180,9 @@ stow -t $HOME/.var/app/com.visualstudio.code/config vscode && \
 cd ..
 ```
 
-**Add `--ignore='\.claude'` to any manual `stow` command in this README if you run Claude Code
-in this repo.** Claude Code leaves an empty `.claude/.cc-writes/` in every directory it writes
-to, and git never reports it (empty directories are not tracked) — but stow works on the
-filesystem and happily symlinks it into the target, e.g. `~/.config/xkb/.claude` → the repo.
-`install.sh` passes the flag on every package for exactly this reason. Note the pattern carries
-**no `^…$` anchors**: stow anchors it itself, and `'^\.claude$'` silently matches nothing.
+**Add `--ignore='\.claude'` to any manual `stow` command in this README if you run Claude Code in this repo.** Claude Code leaves an empty `.claude/.cc-writes/` in every directory it writes to, and git never reports it (empty directories are not tracked) — but stow works on the filesystem and happily symlinks it into the target, e.g. `~/.config/xkb/.claude` → the repo. `install.sh` passes the flag on every package for exactly this reason. Note the pattern carries **no `^…$` anchors**: stow anchors it itself, and `'^\.claude$'` silently matches nothing.
 
-If a target already exists as a **real file** (a hand-written `~/.gitconfig`, say), stow refuses
-and aborts *every* operation in that run — including the packages that would have succeeded:
+If a target already exists as a **real file** (a hand-written `~/.gitconfig`, say), stow refuses and aborts *every* operation in that run — including the packages that would have succeeded:
 
 ```
 cannot stow .gitconfig over existing target .gitconfig
@@ -269,25 +190,13 @@ cannot stow .gitconfig over existing target .gitconfig
 All operations aborted.
 ```
 
-Reconcile the two versions by hand first, then delete the local file and re-run. `stow --adopt`
-does the opposite of what the name suggests — it pulls the local file's *content* into the repo,
-overwriting what is tracked.
+Reconcile the two versions by hand first, then delete the local file and re-run. `stow --adopt` does the opposite of what the name suggests — it pulls the local file's *content* into the repo, overwriting what is tracked.
 
-`install.sh` handles this for you: it simulates each package first (`stow --no`), and on a
-conflict lists the offending targets — with `ls -ld`, so a symlink already owned by another
-clone is recognizable — and asks whether to move them aside as `<file>.pre-stow-backup`.
-Declining skips **only that package**; the rest of the run continues, which is the whole point
-(stow's own abort is per-package, but `set -e` used to make it kill the installer). Preseed the
-answer with `DF_STOW_BACKUP=1` for an unattended `--yes` run; unset or `0` means "touch nothing,
-skip the package".
+`install.sh` handles this for you: it simulates each package first (`stow --no`), and on a conflict lists the offending targets — with `ls -ld`, so a symlink already owned by another clone is recognizable — and asks whether to move them aside as `<file>.pre-stow-backup`. Declining skips **only that package**; the rest of the run continues, which is the whole point (stow's own abort is per-package, but `set -e` used to make it kill the installer). Preseed the answer with `DF_STOW_BACKUP=1` for an unattended `--yes` run; unset or `0` means "touch nothing, skip the package".
 
-The `git` package carries both `.gitconfig` and `.gitignore_global` (wired up via
-`core.excludesFile`), so a machine that stowed it before the global ignore existed needs
-`stow -t $HOME git` re-run once to pick up the new symlink.
+The `git` package carries both `.gitconfig` and `.gitignore_global` (wired up via `core.excludesFile`), so a machine that stowed it before the global ignore existed needs `stow -t $HOME git` re-run once to pick up the new symlink.
 
-The global ignore is deliberately limited to OS and editor scratch — things no repo of mine
-should have to know about. Build output, dependencies and caches stay in each project's own
-`.gitignore`, where a rule that hides a file is visible to whoever hits it.
+The global ignore is deliberately limited to OS and editor scratch — things no repo of mine should have to know about. Build output, dependencies and caches stay in each project's own `.gitignore`, where a rule that hides a file is visible to whoever hits it.
 
 ## zsh
 
@@ -303,9 +212,7 @@ paru -S --needed zsh zoxide tmux git git-delta curl wget eza sqlite fzf
 ```sh
 sudo nala install -y zsh zoxide tmux git git-delta gitk curl wget eza fzf
 ```
-`git-delta` is in apt since Debian 13 "trixie" (0.18.x). `eza` needs Debian 13+ / Ubuntu 24.04+;
-`zoxide` needs Debian 12+ / Ubuntu 22.04+ — on older releases install these from the upstream
-releases (delta ships a `.deb`) instead of the distro package.
+`git-delta` is in apt since Debian 13 "trixie" (0.18.x). `eza` needs Debian 13+ / Ubuntu 24.04+; `zoxide` needs Debian 12+ / Ubuntu 22.04+ — on older releases install these from the upstream releases (delta ships a `.deb`) instead of the distro package.
 ### Fedora
 ```sh
 sudo dnf install -y zsh zoxide tmux git git-delta gitk curl wget eza sqlite fzf
@@ -317,8 +224,7 @@ brew install zsh zoxide tmux git curl wget eza fzf
 
 ### paru (Arch only)
 
-The `update-os` / `s` aliases are `paru` wrappers, so it is **not** optional on Arch. Install it
-before the packages, since everything below goes through it. CachyOS ships it in its own repo:
+The `update-os` / `s` aliases are `paru` wrappers, so it is **not** optional on Arch. Install it before the packages, since everything below goes through it. CachyOS ships it in its own repo:
 
 ```sh
 sudo pacman -S --needed paru
@@ -332,21 +238,18 @@ git clone https://aur.archlinux.org/paru.git $HOME/src/paru && \
 cd $HOME/src/paru && makepkg -si
 ```
 
-**Never call paru with `sudo`** — it escalates on its own and refuses AUR installs when run as
-root (`can't install AUR package as root`).
+**Never call paru with `sudo`** — it escalates on its own and refuses AUR installs when run as root (`can't install AUR package as root`).
 
 ### nala (Debian/Ubuntu — the default, not optional)
 
-`nala` is the fleet's apt front-end on **all** apt-based hosts. `install.sh` bootstraps it in
-step 1 with the single bare-`apt` call, then routes every later install through it:
+`nala` is the fleet's apt front-end on **all** apt-based hosts. `install.sh` bootstraps it in step 1 with the single bare-`apt` call, then routes every later install through it:
 
 ```sh
 sudo apt install -y nala   # the ONLY bare-apt call
 sudo nala install git-delta
 ```
 
-Bare `apt` remains only as a fallback for a distro that doesn't package nala. On Ubuntu 22.04 LTS
-you may have to [install nala manually](https://gitlab.com/volian/nala/-/wikis/Installation).
+Bare `apt` remains only as a fallback for a distro that doesn't package nala. On Ubuntu 22.04 LTS you may have to [install nala manually](https://gitlab.com/volian/nala/-/wikis/Installation).
 
 ### Set zsh as the default shell
 
@@ -356,8 +259,7 @@ you may have to [install nala manually](https://gitlab.com/volian/nala/-/wikis/I
 
 - `sudo usermod -s $(which zsh) $(whoami)` — **Linux only** (shadow-utils; macOS has no `usermod`)
 
-`chsh` only accepts shells listed in `/etc/shells`. Distro zsh packages add themselves; a
-Homebrew zsh on macOS does **not**, so add it once first:
+`chsh` only accepts shells listed in `/etc/shells`. Distro zsh packages add themselves; a Homebrew zsh on macOS does **not**, so add it once first:
 
 ```sh
 echo $(which zsh) | sudo tee -a /etc/shells
@@ -373,17 +275,13 @@ sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/too
 
 ### Machine / user specific settings
 
-The repo is already cloned to `$HOME/src/dotfiles` at the [top of this guide](#clone-this-repository) —
-there is only ever one clone. The steps below assume you are in its root
-(`cd ${DOTFILES_REPO:-$HOME/src/dotfiles}`).
+The repo is already cloned to `$HOME/src/dotfiles` at the [top of this guide](#clone-this-repository) — there is only ever one clone. The steps below assume you are in its root (`cd ${DOTFILES_REPO:-$HOME/src/dotfiles}`).
 
 #### Sharing config with several users on the same machine
 
-**Linux only** — `groupadd` / `usermod` are shadow-utils and do not exist on macOS, which needs
-`dscl` / `sysadminctl` instead. (Kept manual — the installer does not automate this.)
+**Linux only** — `groupadd` / `usermod` are shadow-utils and do not exist on macOS, which needs `dscl` / `sysadminctl` instead. (Kept manual — the installer does not automate this.)
 
-This is the one case where the clone does *not* live in `$HOME/src/dotfiles`; skip the clone at
-the top of the guide and use `/home/dotfiles` throughout.
+This is the one case where the clone does *not* live in `$HOME/src/dotfiles`; skip the clone at the top of the guide and use `/home/dotfiles` throughout.
 
 ```sh
 CURRENT_USER_NAME=`whoami` && \
@@ -428,9 +326,7 @@ ln -sf `pwd`/.zshrc-update-os-dnf.zsh $HOME/.zshrc-update-os.zsh
 ln -sf `pwd`/.zshrc-update-os-brew.zsh $HOME/.zshrc-update-os.zsh
 ```
 
-The brew variant's `update-os` calls `brew cu -y -a`, which needs the
-[`buo/cask-upgrade`](https://github.com/buo/homebrew-cask-upgrade) tap installed once:
-`brew tap buo/cask-upgrade`.
+The brew variant's `update-os` calls `brew cu -y -a`, which needs the [`buo/cask-upgrade`](https://github.com/buo/homebrew-cask-upgrade) tap installed once: `brew tap buo/cask-upgrade`.
 
 ### Theme
 
@@ -440,16 +336,14 @@ The brew variant's `update-os` calls `brew cu -y -a`, which needs the
 git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k
 ```
 
-**Font** — Meslo Nerd Font, required for p10k's glyphs and `eza --icons`. `install.sh` does this
-automatically (step 4); the manual equivalent:
+**Font** — Meslo Nerd Font, required for p10k's glyphs and `eza --icons`. `install.sh` does this automatically (step 4); the manual equivalent:
 
 ```sh
 paru -S --needed ttf-meslo-nerd            # Arch
 brew install --cask font-meslo-lg-nerd-font  # macOS
 ```
 
-On Debian/Fedora there's no clean package — download p10k's MesloLGS NF into the **system** font
-dir so every user gets it (this is what `install.sh` runs):
+On Debian/Fedora there's no clean package — download p10k's MesloLGS NF into the **system** font dir so every user gets it (this is what `install.sh` runs):
 
 ```sh
 base='https://github.com/romkatv/powerlevel10k-media/raw/master'
@@ -484,8 +378,7 @@ mkdir -p $HOME/.oh-my-zsh-plugins-optional && ln -sf `pwd`/oh-my-zsh-plugins-opt
 mkdir -p $HOME/.oh-my-zsh-custom && ln -sf `pwd`/oh-my-zsh-custom/auto-notify.zsh $HOME/.oh-my-zsh-custom/
 ```
 
-The `AUTO_NOTIFY_IGNORE` list in `auto-notify.zsh` references `btop` and `tldr`; install those
-too if you use them (both optional, in every distro's repos as `btop` / `tldr`).
+The `AUTO_NOTIFY_IGNORE` list in `auto-notify.zsh` references `btop` and `tldr`; install those too if you use them (both optional, in every distro's repos as `btop` / `tldr`).
 
 ### Set up oh-my-zsh
 
@@ -502,26 +395,16 @@ ln -sf `pwd`/.p10k.zsh $HOME/
 
 Two things this block gets right, both learned the hard way:
 
-- The `mkdir -p` is load-bearing. `.oh-my-zsh-config` used to be created only by the optional
-  multi-user section, so skipping that made the first `ln` fail — and since the whole block is
-  one `&&` chain, `.zshrc` and `.p10k.zsh` were then never linked at all.
-- The `ln -sf` (not `ln -s`) makes it **re-runnable**. Plain `ln -s` fails with "File exists" on
-  a second run, but the `rm` earlier in the chain has *already deleted* the `.zshrc` symlink by
-  then — so the abort left you with no `.zshrc` whatsoever. `-f` replaces instead of failing.
+- The `mkdir -p` is load-bearing. `.oh-my-zsh-config` used to be created only by the optional multi-user section, so skipping that made the first `ln` fail — and since the whole block is one `&&` chain, `.zshrc` and `.p10k.zsh` were then never linked at all.
+- The `ln -sf` (not `ln -s`) makes it **re-runnable**. Plain `ln -s` fails with "File exists" on a second run, but the `rm` earlier in the chain has *already deleted* the `.zshrc` symlink by then — so the abort left you with no `.zshrc` whatsoever. `-f` replaces instead of failing.
 
-A real (non-symlink) `.zshrc` is moved to `.zshrc-manual-backup` first, so a fresh oh-my-zsh
-install never loses its generated file.
+A real (non-symlink) `.zshrc` is moved to `.zshrc-manual-backup` first, so a fresh oh-my-zsh install never loses its generated file.
 
 ### Why there are separate config / custom directories
 
-oh-my-zsh reads most of its knobs (`ZSH_DISABLE_COMPFIX`, `zstyle ':omz:update'`, per-plugin
-settings) **while it loads**, and applies your `plugins=(…)` list at that same moment. A setting
-made *after* `source $ZSH/oh-my-zsh.sh` is simply too late — compinit has already run, the
-plugins are already loaded. But aliases, functions and `PATH` are the opposite: they want to load
-**last**, so they win over anything oh-my-zsh or a plugin defined.
+oh-my-zsh reads most of its knobs (`ZSH_DISABLE_COMPFIX`, `zstyle ':omz:update'`, per-plugin settings) **while it loads**, and applies your `plugins=(…)` list at that same moment. A setting made *after* `source $ZSH/oh-my-zsh.sh` is simply too late — compinit has already run, the plugins are already loaded. But aliases, functions and `PATH` are the opposite: they want to load **last**, so they win over anything oh-my-zsh or a plugin defined.
 
-One directory can't be both "before" and "after" oh-my-zsh, so `.zshrc` sources three, at three
-points around that single `source` line:
+One directory can't be both "before" and "after" oh-my-zsh, so `.zshrc` sources three, at three points around that single `source` line:
 
 | linked into | sourced | for |
 |---|---|---|
@@ -529,19 +412,13 @@ points around that single `source` line:
 | `~/.oh-my-zsh-plugins-optional/` | after `plugins=(…)`, still before oh-my-zsh | appending to the `plugins` array |
 | `~/.oh-my-zsh-custom/` | **after** oh-my-zsh | aliases, functions, `PATH` — things that must override |
 
-All three are `[ -d ]`-guarded, so a directory you never create is simply skipped. The split is
-load-order, not taste: it is why `config` and `custom` can't be merged (they sit on opposite
-sides of that `source` line), while `config` and `plugins-optional` *could* (both are "before").
+All three are `[ -d ]`-guarded, so a directory you never create is simply skipped. The split is load-order, not taste: it is why `config` and `custom` can't be merged (they sit on opposite sides of that `source` line), while `config` and `plugins-optional` *could* (both are "before").
 
-**The repo mirrors the targets one-to-one.** A file's repo directory *is* its link target —
-`oh-my-zsh-config/foo.zsh` links into `~/.oh-my-zsh-config/`, and so on. So the repo layout tells
-you when each file loads; the catalog's "link into" column just restates the path.
+**The repo mirrors the targets one-to-one.** A file's repo directory *is* its link target — `oh-my-zsh-config/foo.zsh` links into `~/.oh-my-zsh-config/`, and so on. So the repo layout tells you when each file loads; the catalog's "link into" column just restates the path.
 
 ### Catalog
 
-Nothing links itself. Each file needs its own `ln -sf`, and only on the machines it applies to —
-which is why a fresh machine does not automatically match an old one. `install.sh` automates
-this via its host-class questions; to link one by hand the shape is always:
+Nothing links itself. Each file needs its own `ln -sf`, and only on the machines it applies to — which is why a fresh machine does not automatically match an old one. `install.sh` automates this via its host-class questions; to link one by hand the shape is always:
 
 ```sh
 cd ${DOTFILES_REPO:-$HOME/src/dotfiles} && \
@@ -583,18 +460,13 @@ paru -S --needed fnm pnpm    # Arch
 brew install fnm pnpm        # macOS
 ```
 
-On Debian/Fedora there is no distro package — install [fnm](https://github.com/Schniz/fnm#installation)
-and [pnpm](https://pnpm.io/installation) from upstream.
+On Debian/Fedora there is no distro package — install [fnm](https://github.com/Schniz/fnm#installation) and [pnpm](https://pnpm.io/installation) from upstream.
 
 ## dev machines (gh + glab)
 
-The two git-forge CLIs: [`gh`](https://cli.github.com) for GitHub and
-[`glab`](https://gitlab.com/gitlab-org/cli) for GitLab. `install.sh`'s **"Dev machine?"**
-question (`DF_DEV`) installs both and links `forge.zsh`.
+The two git-forge CLIs: [`gh`](https://cli.github.com) for GitHub and [`glab`](https://gitlab.com/gitlab-org/cli) for GitLab. `install.sh`'s **"Dev machine?"** question (`DF_DEV`) installs both and links `forge.zsh`.
 
-Its own question rather than part of `DF_NODE`: *writes JavaScript* and *files issues / creates
-repos* are different machine classes — the NAS is the standing counter-example (Node yes, forge
-CLIs no).
+Its own question rather than part of `DF_NODE`: *writes JavaScript* and *files issues / creates repos* are different machine classes — the NAS is the standing counter-example (Node yes, forge CLIs no).
 
 ```sh
 paru -S github-cli glab          # brew: gh glab
@@ -605,29 +477,15 @@ glab config set telemetry false -g          # defaults to ON and phones gitlab.c
 
 Notes worth knowing before debugging an auth problem:
 
-- **`GITLAB_HOST` is set from the private repo**, not from here — this repo is public and the
-  self-hosted GitLab's hostname is not. It lives in `workstation-private/shared/shell.env`,
-  which `host-env.zsh` sources into every interactive shell (and `install.sh` sources for its
-  own run, so both see the same value).
-- **It is load-bearing.** glab's built-in default host is `gitlab.com` (`glab config get host`),
-  and glab reads the host from the git remote **only when run inside a repo**. Every out-of-repo
-  call — `glab repo create`, `glab api`, `glab issue list -R …` — goes to gitlab.com without it,
-  which fails looking like an auth problem rather than a wrong-host problem.
-- **`api` scope is enough.** `write_repository` is not needed because git runs over SSH; that
-  scope is only for HTTPS git.
-- **Tokens go to the OS keyring**, not a config file. Nothing on disk holds a credential, so a
-  non-interactive context (timer, hook, script) has none unless given one another way.
-- Completions are **cached** under `$ZSH_CACHE_DIR/completions` rather than `eval`'d per shell
-  (~40 ms each), and regenerate when the cached file is older than the binary — so a package
-  upgrade refreshes them without intervention.
+- **`GITLAB_HOST` is set from the private repo**, not from here — this repo is public and the self-hosted GitLab's hostname is not. It lives in `workstation-private/shared/shell.env`, which `host-env.zsh` sources into every interactive shell (and `install.sh` sources for its own run, so both see the same value).
+- **It is load-bearing.** glab's built-in default host is `gitlab.com` (`glab config get host`), and glab reads the host from the git remote **only when run inside a repo**. Every out-of-repo call — `glab repo create`, `glab api`, `glab issue list -R …` — goes to gitlab.com without it, which fails looking like an auth problem rather than a wrong-host problem.
+- **`api` scope is enough.** `write_repository` is not needed because git runs over SSH; that scope is only for HTTPS git.
+- **Tokens go to the OS keyring**, not a config file. Nothing on disk holds a credential, so a non-interactive context (timer, hook, script) has none unless given one another way.
+- Completions are **cached** under `$ZSH_CACHE_DIR/completions` rather than `eval`'d per shell (~40 ms each), and regenerate when the cached file is older than the binary — so a package upgrade refreshes them without intervention.
 
 ## topgrade — update everything
 
-[topgrade](https://github.com/topgrade-rs/topgrade) is a one-shot "update everything" umbrella —
-a **superset** of the `update-os` / `s` paru aliases. Where `update-os` is a paru wrapper (system
-packages only, the fast daily pass), topgrade also sweeps the globals paru never sees: pnpm global
-packages, rustup, cargo, flatpak, and so on. Its `system` step just calls paru, so running one or
-the other never double-works; keep both.
+[topgrade](https://github.com/topgrade-rs/topgrade) is a one-shot "update everything" umbrella — a **superset** of the `update-os` / `s` paru aliases. Where `update-os` is a paru wrapper (system packages only, the fast daily pass), topgrade also sweeps the globals paru never sees: pnpm global packages, rustup, cargo, flatpak, and so on. Its `system` step just calls paru, so running one or the other never double-works; keep both.
 
 The `config-stow/topgrade/` package carries `topgrade.toml`, symlinked to `~/.config`:
 
@@ -638,10 +496,7 @@ cd ${DOTFILES_REPO:-$HOME/src/dotfiles}/config-stow && stow -t $HOME/.config top
 
 Then `topgrade` (all steps), `topgrade --dry-run` (preview), or `topgrade only pnpm` (one step).
 
-Note on pnpm: topgrade's built-in `pnpm` step runs `pnpm update -g` — **global packages only**. It
-does *not* bump the pnpm **binary** (the `corepack use pnpm@X` nag). On an Arch box pnpm is the
-pacman package, so the `system` step (paru) upgrades it and the nag clears itself. Only if pnpm is
-corepack-managed do you need the commented `[commands]` self-bump line in `topgrade.toml`.
+Note on pnpm: topgrade's built-in `pnpm` step runs `pnpm update -g` — **global packages only**. It does *not* bump the pnpm **binary** (the `corepack use pnpm@X` nag). On an Arch box pnpm is the pacman package, so the `system` step (paru) upgrades it and the nag clears itself. Only if pnpm is corepack-managed do you need the commented `[commands]` self-bump line in `topgrade.toml`.
 
 ## Caddy hosts
 
@@ -680,21 +535,17 @@ sudo dnf install p7zip p7zip-plugins unrar cabextract bat # Fedora (unrar needs 
 brew install p7zip unrar cabextract bat             # macOS
 ```
 
-Debian ships the binary as `batcat` (the name `bat` collides with another package), which is what
-`oh-my-zsh-custom/bat.zsh` exists for — symlink it **on Debian only**:
+Debian ships the binary as `batcat` (the name `bat` collides with another package), which is what `oh-my-zsh-custom/bat.zsh` exists for — symlink it **on Debian only**:
 
 ```sh
 mkdir -p $HOME/.oh-my-zsh-custom && ln -sf `pwd`/oh-my-zsh-custom/bat.zsh $HOME/.oh-my-zsh-custom/
 ```
 
-Recent Fedora dropped `p7zip`/`p7zip-plugins` in favour of a `7zip` package — if the dnf line
-errors on "No match", that is why.
+Recent Fedora dropped `p7zip`/`p7zip-plugins` in favour of a `7zip` package — if the dnf line errors on "No match", that is why.
 
 ## fresh — terminal editor
 
-[fresh](https://github.com/sinelaw/fresh) is a Rust terminal IDE with the UX of a GUI editor:
-standard keybindings (`Ctrl+S`/`Ctrl+F`/`Ctrl+Z`), mouse support, a command palette, LSP, and
-multi-GB file handling. GPL-2.0. **The package is `fresh-editor`, the binary is `fresh`.**
+[fresh](https://github.com/sinelaw/fresh) is a Rust terminal IDE with the UX of a GUI editor: standard keybindings (`Ctrl+S`/`Ctrl+F`/`Ctrl+Z`), mouse support, a command palette, LSP, and multi-GB file handling. GPL-2.0. **The package is `fresh-editor`, the binary is `fresh`.**
 
 ```sh
 paru -S --needed fresh-editor-bin      # Arch, prebuilt (fresh-editor builds from source)
@@ -702,8 +553,7 @@ brew install fresh-editor              # macOS
 cargo install --locked fresh-editor    # anywhere with a Rust toolchain
 ```
 
-Debian `.deb` and Fedora `.rpm` packages are on the
-[releases page](https://github.com/sinelaw/fresh/releases), plus a Flatpak and an AppImage.
+Debian `.deb` and Fedora `.rpm` packages are on the [releases page](https://github.com/sinelaw/fresh/releases), plus a Flatpak and an AppImage.
 
 Shell integration:
 
@@ -713,17 +563,11 @@ mkdir -p $HOME/.oh-my-zsh-custom && \
 ln -sf `pwd`/oh-my-zsh-custom/fresh.zsh $HOME/.oh-my-zsh-custom/
 ```
 
-That sets `EDITOR`/`VISUAL` and re-points the `nano` alias at fresh. It overrides `.zshrc`'s own
-`alias nano='nano -c'` because `~/.oh-my-zsh-custom` is sourced *last* — so link it only where
-fresh is actually installed, or `nano` becomes a broken alias.
+That sets `EDITOR`/`VISUAL` and re-points the `nano` alias at fresh. It overrides `.zshrc`'s own `alias nano='nano -c'` because `~/.oh-my-zsh-custom` is sourced *last* — so link it only where fresh is actually installed, or `nano` becomes a broken alias.
 
 ## gita — multi-repo git overview + auto-fetch
 
-[gita](https://github.com/nosarthur/gita) shows the status of all git repos across every
-`~/Projects/workspace_*` on one screen. The `oh-my-zsh-custom/gita.zsh` helpers (auto-sourced)
-add `gitad`/`gitaw`/`gitar` (the `gitaw` live view uses `watch`, part of procps and usually
-already present); the `config-stow/gita/` package puts `gitaw-panel` + `gita-legend` in
-`~/.local/bin`; the `systemd-user` stow package runs a periodic `gita fetch` timer.
+[gita](https://github.com/nosarthur/gita) shows the status of all git repos across every `~/Projects/workspace_*` on one screen. The `oh-my-zsh-custom/gita.zsh` helpers (auto-sourced) add `gitad`/`gitaw`/`gitar` (the `gitaw` live view uses `watch`, part of procps and usually already present); the `config-stow/gita/` package puts `gitaw-panel` + `gita-legend` in `~/.local/bin`; the `systemd-user` stow package runs a periodic `gita fetch` timer.
 
 Install via pipx (Arch names it `python-pipx`, everyone else `pipx`):
 
@@ -745,30 +589,21 @@ mkdir -p $HOME/.local/bin
 cd ${DOTFILES_REPO:-$HOME/src/dotfiles}/config-stow && stow --ignore='\.claude' -t $HOME gita && cd ..
 ```
 
-The symlink is what makes the helpers "auto-sourced" — `.zshrc` sources every `*.zsh` it finds
-under `~/.oh-my-zsh-custom/`, but nothing puts the file there for you. Open a new shell (or
-`exec zsh`) to pick them up.
+The symlink is what makes the helpers "auto-sourced" — `.zshrc` sources every `*.zsh` it finds under `~/.oh-my-zsh-custom/`, but nothing puts the file there for you. Open a new shell (or `exec zsh`) to pick them up.
 
-Register everything with `gitar` — `~/src`, the okf vault, every workspace, and whatever else
-sits in `~/Projects`:
+Register everything with `gitar` — `~/src`, the okf vault, every workspace, and whatever else sits in `~/Projects`:
 
 ```sh
 gitar
 ```
 
-It issues **one path per `gita add`** (the multi-path form of `-a` crashes, upstream
-`auto_group` bug). The okf vault is handled explicitly because it lives at `~/Projects/okf`,
-outside the `workspace_*` glob, so it would otherwise be missed on every fresh machine. See
-[Rebuilding the groups](#rebuilding-the-groups) for the resulting order and for what gitar
-removes before it adds.
+It issues **one path per `gita add`** (the multi-path form of `-a` crashes, upstream `auto_group` bug). The okf vault is handled explicitly because it lives at `~/Projects/okf`, outside the `workspace_*` glob, so it would otherwise be missed on every fresh machine. See [Rebuilding the groups](#rebuilding-the-groups) for the resulting order and for what gitar removes before it adds.
 
-Day-to-day: `gitad` (repos with changes), `gitaw` (live-refreshing, grouped by workspace via
-`gita ll -g`), `gita ll` (all).
+Day-to-day: `gitad` (repos with changes), `gitaw` (live-refreshing, grouped by workspace via `gita ll -g`), `gita ll` (all).
 
 ### The `gitaw` panel
 
-`gitaw` renders each frame with `~/.local/bin/gitaw-panel` — a real script, not a zsh function,
-because `watch` runs its command through `sh -c` and would never see a function:
+`gitaw` renders each frame with `~/.local/bin/gitaw-panel` — a real script, not a zsh function, because `watch` runs its command through `sh -c` and would never see a function:
 
 ```
 ── claude ────────────────────────── as of 14:23 (6h ago) ──
@@ -783,10 +618,7 @@ workspace_homelab:
    dotfiles   main   [?]   install.sh: … (11 minutes ago)
 ```
 
-The symbol legend comes from `gita-legend`, so anything else that renders a gita listing can
-reuse it instead of keeping its own copy (my fzf repo-picker puts it in the footer) — one
-definition, two renderings, no drift. It lives in this repo precisely because this is the one
-cloned on every machine.
+The symbol legend comes from `gita-legend`, so anything else that renders a gita listing can reuse it instead of keeping its own copy (my fzf repo-picker puts it in the footer) — one definition, two renderings, no drift. It lives in this repo precisely because this is the one cloned on every machine.
 
 **Where the Claude figures come from.** Two caches, newest wins:
 
@@ -795,52 +627,28 @@ cloned on every machine.
 | `~/.claude.json` → `cachedUsageUtilization` | Claude Code, **only when you run `/usage`** |
 | `$XDG_CACHE_HOME/gitaw/usage.json` | this panel |
 
-Claude Code's copy is not kept current by ordinary use: a session making dozens of API calls left
-it **7 h stale**, and only `/usage` moved it. So when the newest copy is older than **5 min** (the
-same throttle Claude Code applies to its own writes), the panel fetches
-`GET https://api.anthropic.com/api/oauth/usage` — the endpoint `/usage` itself calls — using the
-OAuth token from `~/.claude/.credentials.json`. The response is shaped identically to the cached
-object, so the renderer cannot tell the two apart.
+Claude Code's copy is not kept current by ordinary use: a session making dozens of API calls left it **7 h stale**, and only `/usage` moved it. So when the newest copy is older than **5 min** (the same throttle Claude Code applies to its own writes), the panel fetches `GET https://api.anthropic.com/api/oauth/usage` — the endpoint `/usage` itself calls — using the OAuth token from `~/.claude/.credentials.json`. The response is shaped identically to the cached object, so the renderer cannot tell the two apart.
 
-It **never writes anything Claude Code owns**, and it **cannot renew the token** — that is Claude
-Code's job, so after a long stretch without running Claude the token expires and fetching stops.
-That is a fallback, not a failure: an expired token, a missing network, an unwritable cache dir or
-a changed payload all fall back to whatever cached value exists, with the rule still printing the
-true age. Worst case is exactly the read-only behaviour this had before. A failed attempt is
-stamped (`lastTryMs`) so a run of failures cannot turn a one-second refresh loop into a request
-flood; an expired token is detected locally and costs no round-trip at all.
+It **never writes anything Claude Code owns**, and it **cannot renew the token** — that is Claude Code's job, so after a long stretch without running Claude the token expires and fetching stops. That is a fallback, not a failure: an expired token, a missing network, an unwritable cache dir or a changed payload all fall back to whatever cached value exists, with the rule still printing the true age. Worst case is exactly the read-only behaviour this had before. A failed attempt is stamped (`lastTryMs`) so a run of failures cannot turn a one-second refresh loop into a request flood; an expired token is detected locally and costs no round-trip at all.
 
-`as of HH:MM (Nm ago)` in the rule is therefore the honest answer either way — if it starts
-climbing past a few minutes, fetching is failing and the numbers are Claude Code's last `/usage`.
-Once a window's reset time has passed its percentage describes a window that no longer exists, so
-the row is dimmed and labelled `figure is stale` rather than showing a reassuring-looking number.
+`as of HH:MM (Nm ago)` in the rule is therefore the honest answer either way — if it starts climbing past a few minutes, fetching is failing and the numbers are Claude Code's last `/usage`. Once a window's reset time has passed its percentage describes a window that no longer exists, so the row is dimmed and labelled `figure is stale` rather than showing a reassuring-looking number.
 
-Every part degrades on its own: without `python3`, without any cached figures, or without
-`gita-legend`, that block is simply omitted and the repo list still renders.
+Every part degrades on its own: without `python3`, without any cached figures, or without `gita-legend`, that block is simply omitted and the repo list still renders.
 
 ### Rebuilding the groups
 
-`gita add` is **add-only**: it skips repos already in `~/.config/gita/repos.csv` ("No new repos
-found!"), and a repo's group is assigned only as a side effect of *adding* it. So an add-only
-`gitar` could neither re-group a registered repo nor forget one whose directory is gone — on an
-established machine it was a pure no-op.
+`gita add` is **add-only**: it skips repos already in `~/.config/gita/repos.csv` ("No new repos found!"), and a repo's group is assigned only as a side effect of *adding* it. So an add-only `gitar` could neither re-group a registered repo nor forget one whose directory is gone — on an established machine it was a pure no-op.
 
-`gitar` therefore **unregisters first, then re-adds**. It is safe to re-run at any time and is
-the single command for "make gita match the disk":
+`gitar` therefore **unregisters first, then re-adds**. It is safe to re-run at any time and is the single command for "make gita match the disk":
 
 ```sh
 gitar
 gita group ll   # verify: one row per group
 ```
 
-Only repos whose path is under `~/src` or `~/Projects` are dropped. **Anything registered
-outside those two roots keeps its registration, its group and its position** — which is the
-whole reason this is not `gita clear`, and it is why `gita clear` should not be reached for.
-(Per-repo flags/colors are lost for the repos gitar touches, exactly as with `gita clear`; none
-are set here.)
+Only repos whose path is under `~/src` or `~/Projects` are dropped. **Anything registered outside those two roots keeps its registration, its group and its position** — which is the whole reason this is not `gita clear`, and it is why `gita clear` should not be reached for. (Per-repo flags/colors are lost for the repos gitar touches, exactly as with `gita clear`; none are set here.)
 
-Groups come out in the order they are added, and that order *is* the order `gita ll -g` and
-`gitaw` print:
+Groups come out in the order they are added, and that order *is* the order `gita ll -g` and `gitaw` print:
 
 | # | group | source |
 |---|---|---|
@@ -851,48 +659,27 @@ Groups come out in the order they are added, and that order *is* the order `gita
 
 Add order carries two meanings at once:
 
-- **Group order is file order, and gita has no reorder command** — so the only lever is the
-  order of the `gita add` calls. okf goes first because nothing collides with its name, which
-  buys its position for free and keeps gitar a plain sequence of adds with no fix-up pass.
-- **The first repo to claim a basename keeps it** (later ones are disambiguated by prefixing the
-  parent). This used to be the *reason* `~/src` sat below the workspaces: `~/src` and
-  `workspace_homelab` both held `dotfiles` and `workstation-private`, and adding the workspaces
-  first kept the short names for the clones being edited. **Since 2026-08-08 there is one clone of
-  each, in `~/src`**, so nothing collides and they take the short names. The order is unchanged —
-  it now fixes display position only.
+- **Group order is file order, and gita has no reorder command** — so the only lever is the order of the `gita add` calls. okf goes first because nothing collides with its name, which buys its position for free and keeps gitar a plain sequence of adds with no fix-up pass.
+- **The first repo to claim a basename keeps it** (later ones are disambiguated by prefixing the parent). This used to be the *reason* `~/src` sat below the workspaces: `~/src` and `workspace_homelab` both held `dotfiles` and `workstation-private`, and adding the workspaces first kept the short names for the clones being edited. **Since 2026-08-08 there is one clone of each, in `~/src`**, so nothing collides and they take the short names. The order is unchanged — it now fixes display position only.
 
-Also worth knowing: **a repo whose directory has been deleted is dropped silently.** gita
-validates paths on read, so such a ghost sits in `repos.csv` but is absent from the registry
-gita acts on — `gita rm` even refuses it by name. gitar skips those explicitly, and the rewrite
-that follows drops their lines anyway.
+Also worth knowing: **a repo whose directory has been deleted is dropped silently.** gita validates paths on read, so such a ghost sits in `repos.csv` but is absent from the registry gita acts on — `gita rm` even refuses it by name. gitar skips those explicitly, and the rewrite that follows drops their lines anyway.
 
-Re-running is safe but not byte-stable: `gita add -a` walks the filesystem in `glob` order, so
-member order *within* a group and line order in `repos.csv` shuffle between runs. Group order,
-group membership and every repo name are stable.
+Re-running is safe but not byte-stable: `gita add -a` walks the filesystem in `glob` order, so member order *within* a group and line order in `repos.csv` shuffle between runs. Group order, group membership and every repo name are stable.
 
-Non-repo directories in `~/Projects` are named and skipped rather than handed to gita, which
-would only say "Nothing to add".
+Non-repo directories in `~/Projects` are named and skipped rather than handed to gita, which would only say "Nothing to add".
 
 `gita clear` also drops per-repo flags and colors — we set none, so this is lossless.
 
-Why it matters: `gita add -a` **appends** a group row rather than merging into an existing one,
-so registering a repo into a workspace that already has a group leaves *two* rows with the same
-name in `groups.csv`. The parse is last-row-wins, so the group silently shrinks to whatever was
-added last, and `gita ll -g` quietly stops showing the rest while plain `gita ll` looks fine
-(hit 2026-07-16: `workspace_homelab` collapsed to just `Workstation-Documentation`).
+Why it matters: `gita add -a` **appends** a group row rather than merging into an existing one, so registering a repo into a workspace that already has a group leaves *two* rows with the same name in `groups.csv`. The parse is last-row-wins, so the group silently shrinks to whatever was added last, and `gita ll -g` quietly stops showing the rest while plain `gita ll` looks fine (hit 2026-07-16: `workspace_homelab` collapsed to just `Workstation-Documentation`).
 
 Two related quirks, both expected — not breakage:
 
-- `gita add -a <dir>` registers `<dir>` **itself** when it's a repo, so each thin workspace repo
-  shows up inside its own group next to its members. `gita group rmrepo` can remove it, but the
-  repo then vanishes from `gita ll -g` entirely and the next rebuild re-adds it anyway.
-- Two repos resolving to the same name are disambiguated by parent dir (`workspace_home/workspace_home`).
-  Treat that as a **red flag** — it usually means a stray duplicate clone, not a naming clash.
+- `gita add -a <dir>` registers `<dir>` **itself** when it's a repo, so each thin workspace repo shows up inside its own group next to its members. `gita group rmrepo` can remove it, but the repo then vanishes from `gita ll -g` entirely and the next rebuild re-adds it anyway.
+- Two repos resolving to the same name are disambiguated by parent dir (`workspace_home/workspace_home`). Treat that as a **red flag** — it usually means a stray duplicate clone, not a naming clash.
 
 ### Periodic auto-fetch timer (systemd user)
 
-Fetches all registered repos every 5 min so `gita ll`'s ahead/behind counts stay fresh — fetch
-only, never pull.
+Fetches all registered repos every 5 min so `gita ll`'s ahead/behind counts stay fresh — fetch only, never pull.
 
 ```sh
 cd config-stow && \
@@ -903,16 +690,7 @@ systemctl --user daemon-reload && \
 systemctl --user enable --now gita-fetch.timer
 ```
 
-> **`--no-folding` is required, not optional.** This package now contains a drop-in
-> directory (`systemd/user/waybar.service.d/`, see [waybar](#waybar--supervised-restart)).
-> Plain `stow` "folds" a directory that doesn't yet exist on the target into a **single
-> symlink** (`~/.config/systemd/user/waybar.service.d` → the package dir) — and **systemd
-> does not traverse a symlinked `.d` drop-in directory**, so the override is silently
-> ignored (`systemctl --user show waybar.service -p DropInPaths` comes back empty and
-> `Restart` stays at the shipped `on-failure`). `--no-folding` makes stow create a **real**
-> directory and symlink `override.conf` *inside* it, which systemd does read. If you already
-> stowed without it, re-do the package: `stow -D -t $HOME/.config systemd-user && stow
-> --no-folding -t $HOME/.config systemd-user`, then `systemctl --user daemon-reload`.
+> **`--no-folding` is required, not optional.** This package now contains a drop-in directory (`systemd/user/waybar.service.d/`, see [waybar](#waybar--supervised-restart)). Plain `stow` "folds" a directory that doesn't yet exist on the target into a **single symlink** (`~/.config/systemd/user/waybar.service.d` → the package dir) — and **systemd does not traverse a symlinked `.d` drop-in directory**, so the override is silently ignored (`systemctl --user show waybar.service -p DropInPaths` comes back empty and `Restart` stays at the shipped `on-failure`). `--no-folding` makes stow create a **real** directory and symlink `override.conf` *inside* it, which systemd does read. If you already stowed without it, re-do the package: `stow -D -t $HOME/.config systemd-user && stow --no-folding -t $HOME/.config systemd-user`, then `systemctl --user daemon-reload`.
 
 Verify, and check for SSH-auth failures on private remotes:
 
@@ -921,17 +699,11 @@ systemctl --user list-timers gita-fetch.timer
 journalctl --user -u gita-fetch.service -n 30 --no-pager
 ```
 
-A user timer does not inherit your login ssh-agent. If the log shows `Permission denied` on SSH
-remotes, set `SSH_AUTH_SOCK` in `config-stow/systemd-user/systemd/user/gita-fetch.service` (match
-`echo $SSH_AUTH_SOCK`), then `systemctl --user daemon-reload && systemctl --user restart
-gita-fetch.timer`. HTTPS remotes fetch regardless.
+A user timer does not inherit your login ssh-agent. If the log shows `Permission denied` on SSH remotes, set `SSH_AUTH_SOCK` in `config-stow/systemd-user/systemd/user/gita-fetch.service` (match `echo $SSH_AUTH_SOCK`), then `systemctl --user daemon-reload && systemctl --user restart gita-fetch.timer`. HTTPS remotes fetch regardless.
 
 ## atuin — shell history sync
 
-[atuin](https://atuin.sh) replaces the shell history with a synced, searchable database, backed
-by my self-hosted [quadlet-atuin](https://github.com/mkoester/quadlet-atuin) server. `atuin.zsh`
-runs `atuin init zsh` (guarded by a `command -v` check, so linking it on a machine without atuin
-is harmless).
+[atuin](https://atuin.sh) replaces the shell history with a synced, searchable database, backed by my self-hosted [quadlet-atuin](https://github.com/mkoester/quadlet-atuin) server. `atuin.zsh` runs `atuin init zsh` (guarded by a `command -v` check, so linking it on a machine without atuin is harmless).
 
 Install atuin:
 
@@ -942,17 +714,7 @@ sudo nala install -y atuin   # Debian 13+ (trixie) — packaged, on the system P
 curl --proto '=https' --tlsv1.2 -LsSf https://setup.atuin.sh | sh -s -- --no-modify-path  # Fedora / older / anywhere
 ```
 
-> **Why `--no-modify-path`, and the version caveat.** The upstream installer drops atuin in
-> `~/.atuin/bin` and appends a PATH line to `~/.zshrc` — which is a **symlink into this repo**, so
-> without `--no-modify-path` it silently edits the *tracked* `.zshrc`; `atuin.zsh` adds
-> `~/.atuin/bin` to PATH instead. On Debian, `apt`'s atuin lags upstream (e.g. 18.6.1 vs 18.13.x) —
-> **fine for a fresh install** (it syncs across the version gap; the newer migrations back
-> kv/daemon features the old client doesn't use), so the package is used there. What is *not* fine
-> is **downgrading a client after a newer one has run on the same box**: the newer binary migrates
-> the local DB and the older one then can't open it (`migration … was previously applied but is
-> missing`). That's a *local* DB downgrade, not a server break — fix by running the current client,
-> and **do not delete `records.db`** (the sync source of truth) except on a throwaway box with no
-> sync configured.
+> **Why `--no-modify-path`, and the version caveat.** The upstream installer drops atuin in `~/.atuin/bin` and appends a PATH line to `~/.zshrc` — which is a **symlink into this repo**, so without `--no-modify-path` it silently edits the *tracked* `.zshrc`; `atuin.zsh` adds `~/.atuin/bin` to PATH instead. On Debian, `apt`'s atuin lags upstream (e.g. 18.6.1 vs 18.13.x) — **fine for a fresh install** (it syncs across the version gap; the newer migrations back kv/daemon features the old client doesn't use), so the package is used there. What is *not* fine is **downgrading a client after a newer one has run on the same box**: the newer binary migrates the local DB and the older one then can't open it (`migration … was previously applied but is missing`). That's a *local* DB downgrade, not a server break — fix by running the current client, and **do not delete `records.db`** (the sync source of truth) except on a throwaway box with no sync configured.
 
 Link the shell integration:
 
@@ -960,11 +722,7 @@ Link the shell integration:
 mkdir -p $HOME/.oh-my-zsh-custom && ln -sf `pwd`/oh-my-zsh-custom/atuin.zsh $HOME/.oh-my-zsh-custom/
 ```
 
-**The server address is private**, so the client `config.toml` (which holds `sync_address`) is
-**not** tracked in this public repo — it lives in `workstation-private/shared/atuin/config.toml`
-and the installer symlinks it to `~/.config/atuin/config.toml`. Set `sync_address` there to your
-real domain. (A TOML config can't be split like the kanshi/niri skeletons, and the address must
-stay out of public git, so the whole file is private.)
+**The server address is private**, so the client `config.toml` (which holds `sync_address`) is **not** tracked in this public repo — it lives in `workstation-private/shared/atuin/config.toml` and the installer symlinks it to `~/.config/atuin/config.toml`. Set `sync_address` there to your real domain. (A TOML config can't be split like the kanshi/niri skeletons, and the address must stay out of public git, so the whole file is private.)
 
 Then, **once per machine** (secret — never in a repo):
 
@@ -974,22 +732,13 @@ atuin import auto                     # seed from the existing shell history
 atuin sync
 ```
 
-`atuin sync` runs automatically after commands (`auto_sync`); the daemon is off by default, so
-sync happens in-shell. If you later enable the atuin daemon, keep `sync_address` in `config.toml`
-(the daemon doesn't read the shell environment).
+`atuin sync` runs automatically after commands (`auto_sync`); the daemon is off by default, so sync happens in-shell. If you later enable the atuin daemon, keep `sync_address` in `config.toml` (the daemon doesn't read the shell environment).
 
 ## quadlet hosts (server-side)
 
-`oh-my-zsh-custom/quadlet.zsh` wraps the repetitive commands for managing rootless-Podman
-[quadlet](https://github.com/mkoester?tab=repositories&q=quadlet) services, each of which runs as
-a dedicated user. It collapses the invariant
-`sudo -u <svc> XDG_RUNTIME_DIR=/run/user/$(id -u <svc>) systemctl --user …` prefix into
-`qctl`/`qreload`/`qlog`/`qexec`/`qplog`/`qupdate`/`qvalidate`/`qsh`.
+`oh-my-zsh-custom/quadlet.zsh` wraps the repetitive commands for managing rootless-Podman [quadlet](https://github.com/mkoester?tab=repositories&q=quadlet) services, each of which runs as a dedicated user. It collapses the invariant `sudo -u <svc> XDG_RUNTIME_DIR=/run/user/$(id -u <svc>) systemctl --user …` prefix into `qctl`/`qreload`/`qlog`/`qexec`/`qplog`/`qupdate`/`qvalidate`/`qsh`.
 
-**Server-side only** — link it on the quadlet *host*, never on the workstation; the functions run
-privileged commands against local service users. The installer's "Quadlet host?" question does
-this. Its source of truth is the `quadlet-my-guidelines` Operations section — keep the two in
-sync. To link by hand:
+**Server-side only** — link it on the quadlet *host*, never on the workstation; the functions run privileged commands against local service users. The installer's "Quadlet host?" question does this. Its source of truth is the `quadlet-my-guidelines` Operations section — keep the two in sync. To link by hand:
 
 ```sh
 mkdir -p $HOME/.oh-my-zsh-custom && ln -sf `pwd`/oh-my-zsh-custom/quadlet.zsh $HOME/.oh-my-zsh-custom/
@@ -997,8 +746,7 @@ mkdir -p $HOME/.oh-my-zsh-custom && ln -sf `pwd`/oh-my-zsh-custom/quadlet.zsh $H
 
 ## kanshi — monitor profiles
 
-The `arandr` + `autorandr` replacement for Wayland: named output profiles, switched from a
-keybind with `kanshictl switch <profile>`, and auto-applied on hotplug.
+The `arandr` + `autorandr` replacement for Wayland: named output profiles, switched from a keybind with `kanshictl switch <profile>`, and auto-applied on hotplug.
 
 ```sh
 paru -S --needed kanshi      # Arch
@@ -1008,21 +756,14 @@ paru -S --needed kanshi      # Arch
 cd config-stow && stow -t $HOME/.config kanshi && cd ..
 ```
 
-**Machine-specific profiles go in `config.d/` — not in this repo.** The tracked
-`config-stow/kanshi/kanshi/config` is a generic skeleton using connector names only. Real
-per-machine profiles go in `config.d/`, which is gitignored and pulled in by the skeleton's
-`include ~/.config/kanshi/config.d/*`:
+**Machine-specific profiles go in `config.d/` — not in this repo.** The tracked `config-stow/kanshi/kanshi/config` is a generic skeleton using connector names only. Real per-machine profiles go in `config.d/`, which is gitignored and pulled in by the skeleton's `include ~/.config/kanshi/config.d/*`:
 
 ```sh
 niri msg outputs                             # real names, modes, make/model/serial
 $EDITOR ~/.config/kanshi/config.d/local.conf # same syntax; same-named profile wins
 ```
 
-Keep `"Make Model Serial"` matching for `config.d/` only. It's the robust form — connector names
-are non-deterministic with multiple GPUs or thunderbolt docks — but serials are hardware
-identifiers and must not land in a public repo. These per-machine profiles live in the private
-overlay repo; `install.sh` symlinks them in from there. Because stow links the whole `kanshi`
-directory, files dropped in `config.d/` appear in `~/.config/kanshi/config.d/` automatically.
+Keep `"Make Model Serial"` matching for `config.d/` only. It's the robust form — connector names are non-deterministic with multiple GPUs or thunderbolt docks — but serials are hardware identifiers and must not land in a public repo. These per-machine profiles live in the private overlay repo; `install.sh` symlinks them in from there. Because stow links the whole `kanshi` directory, files dropped in `config.d/` appear in `~/.config/kanshi/config.d/` automatically.
 
 Enable it:
 
@@ -1030,19 +771,13 @@ Enable it:
 systemctl --user enable --now kanshi.service
 ```
 
-If the package ships no unit (`pacman -Ql kanshi | grep systemd`), fall back to
-`spawn-at-startup "kanshi"` in the Niri config. `kanshictl status` shows the live profile;
-`kanshictl reload` re-reads the config.
+If the package ships no unit (`pacman -Ql kanshi | grep systemd`), fall back to `spawn-at-startup "kanshi"` in the Niri config. `kanshictl status` shows the live profile; `kanshictl reload` re-reads the config.
 
-**Do not also install `nwg-displays`.** It writes `~/.config/niri/monitor.kdl`, and the resulting
-Niri config reload discards every transient change kanshi applied.
+**Do not also install `nwg-displays`.** It writes `~/.config/niri/monitor.kdl`, and the resulting Niri config reload discards every transient change kanshi applied.
 
 ## keyboard layout — Caps-Lock → umlauts (xkb)
 
-The `config-stow/xkb/` package carries custom keymaps that repurpose **Caps-Lock as a Level-3
-modifier** for the German umlauts (Caps + `A`/`O`/`U`/`S` → ä/ö/ü/ß). Two base variants, both
-generic and free of hardware identifiers, so they're tracked for **all machines** and stowed on any
-`DF_DESKTOP` machine — the files just need to be on disk; a machine picks one (or none) in niri:
+The `config-stow/xkb/` package carries custom keymaps that repurpose **Caps-Lock as a Level-3 modifier** for the German umlauts (Caps + `A`/`O`/`U`/`S` → ä/ö/ü/ß). Two base variants, both generic and free of hardware identifiers, so they're tracked for **all machines** and stowed on any `DF_DESKTOP` machine — the files just need to be on disk; a machine picks one (or none) in niri:
 
 ```sh
 cd config-stow && stow -t $HOME xkb && cd ..
@@ -1051,26 +786,19 @@ cd config-stow && stow -t $HOME xkb && cd ..
 
 - `keymap-us.xkb` — `us(altgr-intl)` base + the umlaut remaps.
 - `keymap-gb.xkb` — `gb` base + the same remaps.
-- `symbols/custom` — an alternative `Mode_switch` variant on the XKB search path
-  (`setxkbmap -I ~/.config/xkb custom`); kept for reference, not used by the niri path.
+- `symbols/custom` — an alternative `Mode_switch` variant on the XKB search path (`setxkbmap -I ~/.config/xkb custom`); kept for reference, not used by the niri path.
 
-**Which variant — or none — is a per-machine choice, made in that machine's private `local.kdl`**
-(alongside its real `output` blocks and Bluetooth binds), because it depends on the machine's
-*physical* keyboard:
+**Which variant — or none — is a per-machine choice, made in that machine's private `local.kdl`** (alongside its real `output` blocks and Bluetooth binds), because it depends on the machine's *physical* keyboard:
 
 ```kdl
 input { keyboard { xkb { file "~/.config/xkb/keymap-us.xkb" } } }   // US board → keymap-us
 ```
 
-The remaps are position-based (`A`/`O`/`U`/`S`), so the umlauts work on any QWERTY board, but the
-**base** decides the punctuation: use `keymap-us.xkb` on a US keyboard, `keymap-gb.xkb` on a GB one
-(otherwise `@ " # ~ \ | £` won't match the keycaps). A machine with a **native German keyboard needs
-neither** — just omit the block. Both keymaps are validated with `xkbcomp` (compile clean).
+The remaps are position-based (`A`/`O`/`U`/`S`), so the umlauts work on any QWERTY board, but the **base** decides the punctuation: use `keymap-us.xkb` on a US keyboard, `keymap-gb.xkb` on a GB one (otherwise `@ " # ~ \ | £` won't match the keycaps). A machine with a **native German keyboard needs neither** — just omit the block. Both keymaps are validated with `xkbcomp` (compile clean).
 
 ## niri — Wayland compositor
 
-The `config-stow/niri/` package tracks a **public skeleton** Niri config plus the helper script.
-niri itself (and waybar, below) are assumed installed on a desktop machine:
+The `config-stow/niri/` package tracks a **public skeleton** Niri config plus the helper script. niri itself (and waybar, below) are assumed installed on a desktop machine:
 
 ```sh
 paru -S --needed niri waybar   # Arch (elsewhere: per each project's own install docs)
@@ -1083,22 +811,14 @@ cd config-stow && stow -t $HOME niri && cd ..
 
 This links:
 
-- `~/.config/niri/config.kdl` — the tracked skeleton: generic keybinds, the kanshi switch binds
-  (`Mod+Shift+D` docked / `Mod+Shift+S` solo), and the Firefox-placement bind (`Mod+Shift+O`).
-  It **omits** `spawn-sh-at-startup "waybar"` on purpose — waybar runs under its supervised unit
-  (see [waybar](#waybar--supervised-restart)), so spawning it here too would give you two bars.
-- `~/.local/bin/place-firefox-windows.sh` — re-homes restored single-profile Firefox windows onto
-  workspaces by title (an i3-`assign` equivalent; see the Workstation-Documentation rationale).
+- `~/.config/niri/config.kdl` — the tracked skeleton: generic keybinds, the kanshi switch binds (`Mod+Shift+D` docked / `Mod+Shift+S` solo), and the Firefox-placement bind (`Mod+Shift+O`). It **omits** `spawn-sh-at-startup "waybar"` on purpose — waybar runs under its supervised unit (see [waybar](#waybar--supervised-restart)), so spawning it here too would give you two bars.
+- `~/.local/bin/place-firefox-windows.sh` — re-homes restored single-profile Firefox windows onto workspaces by title (an i3-`assign` equivalent; see the Workstation-Documentation rationale).
 
-**Machine- and device-specific overrides go in `~/.config/niri/local.kdl`**, `include`d
-(optionally) by the skeleton so it wins: real `output` blocks, a custom xkb keymap path, and
-Bluetooth quick-connect binds (which carry hardware MACs). It's gitignored here and supplied
-per-machine by the private overlay repo — same pattern as kanshi's `config.d/`.
+**Machine- and device-specific overrides go in `~/.config/niri/local.kdl`**, `include`d (optionally) by the skeleton so it wins: real `output` blocks, a custom xkb keymap path, and Bluetooth quick-connect binds (which carry hardware MACs). It's gitignored here and supplied per-machine by the private overlay repo — same pattern as kanshi's `config.d/`.
 
 ### ydotool (input injection)
 
-For Wayland input injection (Stream Deck / macros), the `systemd-user` package ships a
-`ydotoold.service`. It needs a udev rule for `/dev/uinput` (root, so **not** stow-managed):
+For Wayland input injection (Stream Deck / macros), the `systemd-user` package ships a `ydotoold.service`. It needs a udev rule for `/dev/uinput` (root, so **not** stow-managed):
 
 ```sh
 echo 'KERNEL=="uinput", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput"' | \
@@ -1109,12 +829,7 @@ systemctl --user enable --now ydotoold.service
 
 ## hypr — Hyprland compositor (evaluation, since 2026-08-03)
 
-The `config-stow/hypr/` package tracks a **public skeleton** Hyprland config, in the same
-skeleton + private-overlay shape as niri above. It exists because niri cannot produce the i3
-workspace layout (numbered workspaces first, named ones after) — see
-Workstation-Documentation `desktop/niri-workspaces.md` and `desktop/wm-comparison.md`.
-It is a **separate install question from `DF_NIRI`**, so a machine can carry both configs and
-choose the session at the greeter; nothing about the niri setup is disturbed.
+The `config-stow/hypr/` package tracks a **public skeleton** Hyprland config, in the same skeleton + private-overlay shape as niri above. It exists because niri cannot produce the i3 workspace layout (numbered workspaces first, named ones after) — see Workstation-Documentation `desktop/niri-workspaces.md` and `desktop/wm-comparison.md`. It is a **separate install question from `DF_NIRI`**, so a machine can carry both configs and choose the session at the greeter; nothing about the niri setup is disturbed.
 
 ```sh
 paru -S --needed hyprland xdg-desktop-portal-hyprland   # Arch
@@ -1125,16 +840,9 @@ mkdir -p $HOME/.config/hypr && \
 cd config-stow && stow -t $HOME hypr && cd ..
 ```
 
-This links `~/.config/hypr/hyprland.lua` — binds deliberately mirroring the niri skeleton
-(`Mod+Return` terminal, `Mod+Q` close, `Mod+<n>` workspaces, `Mod+Ctrl+<n>` move, the kanshi
-switch binds), plus the two things the move is *for*: a **`persistent` named workspace** that
-does not steal a low index, and **`layout = "scrolling"` on a single workspace** so scrolling
-can be tried without committing the whole desktop to it.
+This links `~/.config/hypr/hyprland.lua` — binds deliberately mirroring the niri skeleton (`Mod+Return` terminal, `Mod+Q` close, `Mod+<n>` workspaces, `Mod+Ctrl+<n>` move, the kanshi switch binds), plus the two things the move is *for*: a **`persistent` named workspace** that does not steal a low index, and **`layout = "scrolling"` on a single workspace** so scrolling can be tried without committing the whole desktop to it.
 
-**The config language is Lua, not hyprlang.** hyprlang is deprecated since Hyprland 0.55;
-0.56.1 still falls back to a legacy parser when no `.lua` exists, but that branch is already
-deleted upstream. Anything you copy from a tutorial written in `hyprland.conf` syntax needs
-translating.
+**The config language is Lua, not hyprlang.** hyprlang is deprecated since Hyprland 0.55; 0.56.1 still falls back to a legacy parser when no `.lua` exists, but that branch is already deleted upstream. Anything you copy from a tutorial written in `hyprland.conf` syntax needs translating.
 
 **Validate before logging in** — it runs offline, no session required:
 
@@ -1142,30 +850,17 @@ translating.
 Hyprland --verify-config -c ~/.config/hypr/hyprland.lua
 ```
 
-It catches syntax errors, unknown config keys, type errors and calls to API functions that do
-not exist. It does **not** catch well-typed wrong values — an out-of-range number, a bogus enum,
-a layout name that doesn't exist and a rule referencing an undeclared workspace all pass as
-`config ok` (measured 2026-08-03). See `desktop/wm-comparison.md`.
+It catches syntax errors, unknown config keys, type errors and calls to API functions that do not exist. It does **not** catch well-typed wrong values — an out-of-range number, a bogus enum, a layout name that doesn't exist and a rule referencing an undeclared workspace all pass as `config ok` (measured 2026-08-03). See `desktop/wm-comparison.md`.
 
-**Machine-specific overrides go in `~/.config/hypr/local.lua`**, `require`d last by the skeleton
-so it wins: the real monitor block, the xkb keymap path, per-machine binds. (The shell is *not*
-one of them — DMS is spawned by the common skeleton, see below.) Supplied
-per-machine by the private overlay repo and symlinked in by `install.sh`. A machine without one
-still boots — the require is wrapped in `pcall`, and a missing overlay only logs a line.
+**Machine-specific overrides go in `~/.config/hypr/local.lua`**, `require`d last by the skeleton so it wins: the real monitor block, the xkb keymap path, per-machine binds. (The shell is *not* one of them — DMS is spawned by the common skeleton, see below.) Supplied per-machine by the private overlay repo and symlinked in by `install.sh`. A machine without one still boots — the require is wrapped in `pcall`, and a missing overlay only logs a line.
 
 ## dms — DankMaterialShell
 
-The Quickshell-based desktop shell: bar, launcher, notifications, settings GUI, **and a polkit
-agent** (which is why nothing else spawns one — only one agent may register per subject).
+The Quickshell-based desktop shell: bar, launcher, notifications, settings GUI, **and a polkit agent** (which is why nothing else spawns one — only one agent may register per subject).
 
-**Its own install question, `DF_DMS`, not part of `DF_HYPR`.** DMS ships a niri flavour as well
-as a Hyprland one, so "which shell" and "which compositor" are separate axes: a niri machine can
-adopt DMS without Hyprland, and a Hyprland machine can skip it.
+**Its own install question, `DF_DMS`, not part of `DF_HYPR`.** DMS ships a niri flavour as well as a Hyprland one, so "which shell" and "which compositor" are separate axes: a niri machine can adopt DMS without Hyprland, and a Hyprland machine can skip it.
 
-Packaging is the reason the question has to come *after* the compositor questions. `dms-shell`
-lives in **`extra`, not the AUR**, and depends on a virtual `dms-shell-compositor` provided by
-two 0-byte metapackages — so installing the base alone does not resolve, and exactly one variant
-must come with it. Both may be installed side by side on a machine carrying both sessions:
+Packaging is the reason the question has to come *after* the compositor questions. `dms-shell` lives in **`extra`, not the AUR**, and depends on a virtual `dms-shell-compositor` provided by two 0-byte metapackages — so installing the base alone does not resolve, and exactly one variant must come with it. Both may be installed side by side on a machine carrying both sessions:
 
 ```sh
 paru -S --needed dms-shell-hyprland     # pulls dms-shell + hyprland
@@ -1174,12 +869,7 @@ paru -S --needed dms-shell-hyprland     # pulls dms-shell + hyprland
 paru -S --needed dms-shell-niri         # pulls dms-shell + niri
 ```
 
-**Nothing here is stowed.** The ownership rule for this setup is *tracked = hand-written,
-untracked = GUI-written*: `hyprland.lua` is common and public, `local.lua` is per-machine and
-private, and `~/.config/hypr/dms/*.lua` is machine-local and **untracked**, written by
-`dms setup` and by the DMS Settings GUI (Shortcuts / Displays / Theme / Window Rules). Nothing
-DMS writes is a symlink into a repo, so it can never dirty a tracked file or silently replace a
-stow link. `install.sh` only creates the directory.
+**Nothing here is stowed.** The ownership rule for this setup is *tracked = hand-written, untracked = GUI-written*: `hyprland.lua` is common and public, `local.lua` is per-machine and private, and `~/.config/hypr/dms/*.lua` is machine-local and **untracked**, written by `dms setup` and by the DMS Settings GUI (Shortcuts / Displays / Theme / Window Rules). Nothing DMS writes is a symlink into a repo, so it can never dirty a tracked file or silently replace a stow link. `install.sh` only creates the directory.
 
 Deploy the fragments yourself, in a **TTY** — they prompt for compositor and terminal:
 
@@ -1190,18 +880,11 @@ dms setup binds && dms setup colors && dms setup layout && dms setup cursor
 dms setup windowrules && dms setup outputs
 ```
 
-**Never run plain `dms setup`** — it wants to write `hyprland.lua` itself, which here is the
-tracked stow symlink. Only the per-fragment subcommands are safe; they touch nothing but
-`~/.config/hypr/dms/`. `dms setup alttab` exists too but is **niri-only**.
+**Never run plain `dms setup`** — it wants to write `hyprland.lua` itself, which here is the tracked stow symlink. Only the per-fragment subcommands are safe; they touch nothing but `~/.config/hypr/dms/`. `dms setup alttab` exists too but is **niri-only**.
 
-`dms setup outputs` is included even though monitors are per-machine: `local.lua` loads later
-and wins, so pinning a monitor there still beats the fragment, while the DMS Displays page can
-still configure outputs `local.lua` does not pin (an external screen, say).
+`dms setup outputs` is included even though monitors are per-machine: `local.lua` loads later and wins, so pinning a monitor there still beats the fragment, while the DMS Displays page can still configure outputs `local.lua` does not pin (an external screen, say).
 
-DMS is started from the compositor (`hl.on("hyprland.start", …)`), **not** via the shipped
-`dms.service` systemd unit: that unit is `WantedBy`/`Requisite` `graphical-session.target`, and
-plain Hyprland without uwsm never reaches that target — only `niri-session` does. Spawning it
-from the compositor works on both.
+DMS is started from the compositor (`hl.on("hyprland.start", …)`), **not** via the shipped `dms.service` systemd unit: that unit is `WantedBy`/`Requisite` `graphical-session.target`, and plain Hyprland without uwsm never reaches that target — only `niri-session` does. Spawning it from the compositor works on both.
 
 ## hyprlock — screen lock (with fingerprint), driven by swayidle
 
@@ -1210,42 +893,20 @@ paru -S --needed hyprlock swayidle    # Arch
 cd config-stow && stow -t $HOME hyprlock && cd ..
 ```
 
-**Why hyprlock and not swaylock** (switched 2026-07-30): hyprlock authenticates the fingerprint
-reader **itself**, over fprintd's D-Bus API (`net.reactivated.Fprint`), rather than through PAM.
-It claims the reader as soon as the lock appears, so unlocking is *just touch the sensor*.
-swaylock can't do that — its PAM conversation only begins on the first keystroke
-([swaylock#61](https://github.com/swaywm/swaylock/issues/61); an `--early-pam` flag was proposed
-and never implemented), so the flow there was the awkward "press Enter on an empty field, **then**
-swipe". Password auth still works normally via the `/etc/pam.d/hyprlock` the package ships.
+**Why hyprlock and not swaylock** (switched 2026-07-30): hyprlock authenticates the fingerprint reader **itself**, over fprintd's D-Bus API (`net.reactivated.Fprint`), rather than through PAM. It claims the reader as soon as the lock appears, so unlocking is *just touch the sensor*. swaylock can't do that — its PAM conversation only begins on the first keystroke ([swaylock#61](https://github.com/swaywm/swaylock/issues/61); an `--early-pam` flag was proposed and never implemented), so the flow there was the awkward "press Enter on an empty field, **then** swipe". Password auth still works normally via the `/etc/pam.d/hyprlock` the package ships.
 
-**It is not Hyprland-only.** It locks through `ext-session-lock-v1`, which niri implements, and
-carries no hyprland-specific protocol; the `hypr*` dependencies are plain libraries.
+**It is not Hyprland-only.** It locks through `ext-session-lock-v1`, which niri implements, and carries no hyprland-specific protocol; the `hypr*` dependencies are plain libraries.
 
-Verified end-to-end on `mkMac2014` (2026-07-30): hyprlock logs `Running on niri`, binds
-`ext_session_lock_manager_v1`, and reaches `fprint: claimed device` / `started verifying` **before
-any keypress** — a failed swipe auto-retries (`retry_delay`) with no input. Two log lines that
-look alarming and are not:
+Verified end-to-end on `mkMac2014` (2026-07-30): hyprlock logs `Running on niri`, binds `ext_session_lock_manager_v1`, and reaches `fprint: claimed device` / `started verifying` **before any keypress** — a failed swipe auto-retries (`retry_delay`) with no input. Two log lines that look alarming and are not:
 
-- **`ERR ]: auth: pam_authenticate failed for hyprlock` after a *successful* fingerprint unlock.**
-  hyprlock runs the password PAM conversation and the fprintd verification in parallel; when the
-  finger wins, the pending PAM attempt is torn down and reports failure. It appears *after*
-  `Unlocking session`. Harmless.
-- **`Gathered all screencopy frames` appears even with a solid `color` set.** hyprlock binds
-  `zwlr_screencopy` and gathers frames at startup regardless, so the line does *not* mean the
-  background is a screenshot — with `color` and no `path`, the lock screen is ✅ black. It was
-  briefly misread as proof of the opposite, and the "fix" — adding `path =` (empty) — **made
-  hyprlock reject the config and stop locking entirely**. Don't re-add it.
+- **`ERR ]: auth: pam_authenticate failed for hyprlock` after a *successful* fingerprint unlock.** hyprlock runs the password PAM conversation and the fprintd verification in parallel; when the finger wins, the pending PAM attempt is torn down and reports failure. It appears *after* `Unlocking session`. Harmless.
+- **`Gathered all screencopy frames` appears even with a solid `color` set.** hyprlock binds `zwlr_screencopy` and gathers frames at startup regardless, so the line does *not* mean the background is a screenshot — with `color` and no `path`, the lock screen is ✅ black. It was briefly misread as proof of the opposite, and the "fix" — adding `path =` (empty) — **made hyprlock reject the config and stop locking entirely**. Don't re-add it.
 
 Three things to know before relying on it:
 
-- **A missing `~/.config/hypr/hyprlock.conf` makes hyprlock EXIT instead of lock.** For the
-  component guarding an unlocked session that is a security failure, so the config is stowed as
-  its own package and `install.sh` only stows it where the binary exists. Re-test by hand
-  (`hyprlock`, with an SSH session or TTY as the escape hatch) after editing it.
-- **Don't switch to hypridle.** niri doesn't implement `hyprland-lock-notify-v1`
-  ([niri#3459](https://github.com/niri-wm/niri/discussions/3459)) — the fleet stays on swayidle.
-- **Debian keeps swaylock.** hyprlock isn't packaged for Debian/arm64, which is why the Pi 500
-  is the one machine still on swaylock (and still needs the empty-Enter workaround).
+- **A missing `~/.config/hypr/hyprlock.conf` makes hyprlock EXIT instead of lock.** For the component guarding an unlocked session that is a security failure, so the config is stowed as its own package and `install.sh` only stows it where the binary exists. Re-test by hand (`hyprlock`, with an SSH session or TTY as the escape hatch) after editing it.
+- **Don't switch to hypridle.** niri doesn't implement `hyprland-lock-notify-v1` ([niri#3459](https://github.com/niri-wm/niri/discussions/3459)) — the fleet stays on swayidle.
+- **Debian keeps swaylock.** hyprlock isn't packaged for Debian/arm64, which is why the Pi 500 is the one machine still on swaylock (and still needs the empty-Enter workaround).
 
 Idle policy lives in the `systemd-user` package — **enable exactly one** per machine:
 
@@ -1254,9 +915,7 @@ systemctl --user enable --now swayidle-laptop.service    # laptops: dim 120s, lo
 systemctl --user enable --now swayidle-desktop.service   # desktops: dim 600s, lock 1800s, DPMS 3600s
 ```
 
-Note the `before-sleep` line backgrounds hyprlock with a 1 s guard. hyprlock has no `-f` flag, and
-swayidle waits for the before-sleep command to *return* while holding the sleep inhibitor — a bare
-`hyprlock` would block suspend until you unlocked.
+Note the `before-sleep` line backgrounds hyprlock with a 1 s guard. hyprlock has no `-f` flag, and swayidle waits for the before-sleep command to *return* while holding the sleep inhibitor — a bare `hyprlock` would block suspend until you unlocked.
 
 ## terminals — ghostty (default), kitty, alacritty
 
@@ -1272,43 +931,25 @@ cd config-stow && stow -t $HOME terminals && cd ..
 | **kitty** | `~/.config/kitty/kitty.conf` | fallback |
 | **alacritty** | `~/.config/alacritty/alacritty.toml` | previous default, kept working |
 
-**Why one package and not three**, against this repo's usual one-package-per-tool habit: these
-are alternatives of the same thing, kept deliberately consistent (MesloLGS Nerd Font, Nord
-palette, the same clipboard keys) so that a fallback is actually usable when reached. Their
-configs live in three separate directories, so stow folds them with no conflict. **A fallback you
-have to configure before you can use it is not a fallback.**
+**Why one package and not three**, against this repo's usual one-package-per-tool habit: these are alternatives of the same thing, kept deliberately consistent (MesloLGS Nerd Font, Nord palette, the same clipboard keys) so that a fallback is actually usable when reached. Their configs live in three separate directories, so stow folds them with no conflict. **A fallback you have to configure before you can use it is not a fallback.**
 
-Tracked only since 2026-08-10. Before that all three were hand-made on `mkDell` and synced
-nowhere, so every other machine got a terminal with none of the keybinds and none of the font —
-the same silent-divergence failure that got herdr's `config.toml` tracked.
+Tracked only since 2026-08-10. Before that all three were hand-made on `mkDell` and synced nowhere, so every other machine got a terminal with none of the keybinds and none of the font — the same silent-divergence failure that got herdr's `config.toml` tracked.
 
-**Expect a stow conflict on `mkDell` and any machine with hand-made configs.** That is
-`DF_STOW_BACKUP`'s job (moves them aside as `*.pre-stow-backup`); diff the backup afterwards in
-case it carried a local tweak.
+**Expect a stow conflict on `mkDell` and any machine with hand-made configs.** That is `DF_STOW_BACKUP`'s job (moves them aside as `*.pre-stow-backup`); diff the backup afterwards in case it carried a local tweak.
 
 ### Font — use the full name
 
-`MesloLGS Nerd Font`, from `ttf-meslo-nerd`. **Not `MesloLGS NF`**, the abbreviation
-powerlevel10k's own docs use: it does not resolve here and silently falls back to Noto Sans. A
-wrong font name never errors, so check any change with `fc-match "<name>"` and confirm the family
-it echoes back is the one you asked for.
+`MesloLGS Nerd Font`, from `ttf-meslo-nerd`. **Not `MesloLGS NF`**, the abbreviation powerlevel10k's own docs use: it does not resolve here and silently falls back to Noto Sans. A wrong font name never errors, so check any change with `fc-match "<name>"` and confirm the family it echoes back is the one you asked for.
 
 ### Clipboard keys
 
 Configured in ghostty and kitty (not alacritty, which cannot do the first one):
 
-- **Ctrl+C** copies when there is a selection, otherwise falls through to the application.
-  ghostty: `keybind = performable:ctrl+c=copy_to_clipboard` — a keybind *prefix*, not an action,
-  so it is invisible to `ghostty +list-actions`. kitty: `map ctrl+c copy_or_noop`.
-- **Ctrl+V** pastes, **unconditionally** — no conditional form exists in any terminal, because
-  paste can always be performed. Costs vim's blockwise-visual; `Ctrl+Q` still gives you
-  `quoted-insert` in zsh and bash.
-- **Middle-click** pastes inside mouse-grabbing TUIs (herdr) in **kitty only**, via
-  `mouse_map middle release grabbed,ungrabbed paste_from_selection`. In ghostty and alacritty use
-  **shift+middle-click**.
+- **Ctrl+C** copies when there is a selection, otherwise falls through to the application. ghostty: `keybind = performable:ctrl+c=copy_to_clipboard` — a keybind *prefix*, not an action, so it is invisible to `ghostty +list-actions`. kitty: `map ctrl+c copy_or_noop`.
+- **Ctrl+V** pastes, **unconditionally** — no conditional form exists in any terminal, because paste can always be performed. Costs vim's blockwise-visual; `Ctrl+Q` still gives you `quoted-insert` in zsh and bash.
+- **Middle-click** pastes inside mouse-grabbing TUIs (herdr) in **kitty only**, via `mouse_map middle release grabbed,ungrabbed paste_from_selection`. In ghostty and alacritty use **shift+middle-click**.
 
-Full comparison incl. the window-class trap that forced the `mk.*` class renames:
-`Workstation-Documentation/desktop/terminal-emulator-comparison.md`.
+Full comparison incl. the window-class trap that forced the `mk.*` class renames: `Workstation-Documentation/desktop/terminal-emulator-comparison.md`.
 
 ## flatpak + Flathub — under `DF_DESKTOP`
 
@@ -1318,32 +959,19 @@ Every `DF_DESKTOP` machine installs `flatpak` and registers the official Flathub
 sudo flatpak remote-add --if-not-exists --system flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 ```
 
-Not a preference — several desktop apps on this fleet have **no distro package in their current
-version**. ZapZap (the WhatsApp client) ships 7.4 on Flathub against 7.2 in the AUR, and Threema
-Desktop 2.0 comes from Threema AG's own flatpak repo, which cannot be added at all until flatpak
-itself works.
+Not a preference — several desktop apps on this fleet have **no distro package in their current version**. ZapZap (the WhatsApp client) ships 7.4 on Flathub against 7.2 in the AUR, and Threema Desktop 2.0 comes from Threema AG's own flatpak repo, which cannot be added at all until flatpak itself works.
 
 Three decisions worth not re-litigating:
 
-- **System remote, not `--user`.** Vendor install instructions are bare `flatpak install --from …`
-  lines that resolve against the *system* installation — Threema's documented command is exactly
-  that. A `--user` remote leaves those failing with a "no remote" error that reads like a broken
-  URL rather than a wrong scope.
-- **`--if-not-exists`** is what makes a re-run a no-op instead of an error, so this is safe on
-  every subsequent `install.sh` run.
+- **System remote, not `--user`.** Vendor install instructions are bare `flatpak install --from …` lines that resolve against the *system* installation — Threema's documented command is exactly that. A `--user` remote leaves those failing with a "no remote" error that reads like a broken URL rather than a wrong scope.
+- **`--if-not-exists`** is what makes a re-run a no-op instead of an error, so this is safe on every subsequent `install.sh` run.
 - **Not on `brew`.** macOS has no flatpak; the branch is skipped rather than guessed at.
 
-The `have flatpak` guard around the remote-add is deliberately **not** redundant with the
-`pm_install` above it: under `--dry-run` nothing is installed, so without the `DRYRUN` arm the
-preview would silently omit the step. Verified with the control — `DF_DESKTOP=0 ./install.sh
---dry-run --yes` prints no flatpak line at all, which is what proves the gating is real rather
-than the grep merely finding the string.
+The `have flatpak` guard around the remote-add is deliberately **not** redundant with the `pm_install` above it: under `--dry-run` nothing is installed, so without the `DRYRUN` arm the preview would silently omit the step. Verified with the control — `DF_DESKTOP=0 ./install.sh --dry-run --yes` prints no flatpak line at all, which is what proves the gating is real rather than the grep merely finding the string.
 
 ## messengers — Signal, Telegram, WhatsApp, Threema (`DF_MESSENGERS`)
 
-Its own host-class question, **not** part of `DF_DESKTOP`. A desktop machine is not automatically
-a machine that wants four Electron/WebEngine apps — the Pi 500 is the standing counter-example,
-exactly like `mknas1` is for `DF_DEV` ("writes JavaScript" ≠ "files issues").
+Its own host-class question, **not** part of `DF_DESKTOP`. A desktop machine is not automatically a machine that wants four Electron/WebEngine apps — the Pi 500 is the standing counter-example, exactly like `mknas1` is for `DF_DEV` ("writes JavaScript" ≠ "files issues").
 
 | App | Source on Arch | Why |
 |---|---|---|
@@ -1354,18 +982,9 @@ exactly like `mknas1` is for `DF_DEV` ("writes JavaScript" ≠ "files issues").
 
 Three things worth not re-deriving:
 
-- **ZapZap comes from Flathub even on Arch**, against this repo's prefer-the-distro-package habit:
-  Flathub carried 7.4 against the AUR's 7.2 as of 2026-08-11, and the AUR build has a single
-  maintainer. Avoid `wasistlos` entirely — still in the AUR, **archived upstream** since Oct 2024.
-- **Threema Desktop 2.0, not the Flathub `ch.threema.threema-web-desktop`.** The latter is the old
-  Threema-Web-in-Electron, now in maintenance mode, and needs the phone online and reachable.
-  Desktop 2.0 is multi-device (works with the phone off), open source, and installed with the
-  `--from <flatpakref>` form — which adds Threema's own remote as a side effect, so no separate
-  `remote-add` step is needed. It is labelled beta and limited to two linked computers.
-- **On apt/dnf all four come from Flathub.** `telegram-desktop` is packaged there but
-  `signal-desktop` is not (Signal ships its own apt repo), and a guessed package name fails as
-  "not found" rather than as "add the vendor repo" — the same reasoning as ghostty under
-  `DF_DESKTOP`.
+- **ZapZap comes from Flathub even on Arch**, against this repo's prefer-the-distro-package habit: Flathub carried 7.4 against the AUR's 7.2 as of 2026-08-11, and the AUR build has a single maintainer. Avoid `wasistlos` entirely — still in the AUR, **archived upstream** since Oct 2024.
+- **Threema Desktop 2.0, not the Flathub `ch.threema.threema-web-desktop`.** The latter is the old Threema-Web-in-Electron, now in maintenance mode, and needs the phone online and reachable. Desktop 2.0 is multi-device (works with the phone off), open source, and installed with the `--from <flatpakref>` form — which adds Threema's own remote as a side effect, so no separate `remote-add` step is needed. It is labelled beta and limited to two linked computers.
+- **On apt/dnf all four come from Flathub.** `telegram-desktop` is packaged there but `signal-desktop` is not (Signal ships its own apt repo), and a guessed package name fails as "not found" rather than as "add the vendor repo" — the same reasoning as ghostty under `DF_DESKTOP`.
 
 ### macOS (`brew`) is a genuinely different branch, not a translation
 
@@ -1384,37 +1003,23 @@ brew install --cask signal telegram whatsapp
 
 Two traps:
 
-- **`telegram` and `telegram-desktop` are both casks.** On macOS you want `telegram`; picking the
-  familiar Linux name silently gets you the Qt build instead of the native one.
-- **The `threema` cask is 1.2.50** — the same legacy Threema-Web-in-Electron rejected above.
-  `threema-desktop` and `threema-beta` do not exist (checked). Threema Desktop 2.0 ships as a DMG
-  in separate Intel and Apple Silicon builds, so `install.sh` prints the URL and the right build
-  for `uname -m` rather than hardcoding a vendor download that would break silently. Installing
-  the cask would also put that machine on a *different* Threema from the rest of the fleet.
+- **`telegram` and `telegram-desktop` are both casks.** On macOS you want `telegram`; picking the familiar Linux name silently gets you the Qt build instead of the native one.
+- **The `threema` cask is 1.2.50** — the same legacy Threema-Web-in-Electron rejected above. `threema-desktop` and `threema-beta` do not exist (checked). Threema Desktop 2.0 ships as a DMG in separate Intel and Apple Silicon builds, so `install.sh` prints the URL and the right build for `uname -m` rather than hardcoding a vendor download that would break silently. Installing the cask would also put that machine on a *different* Threema from the rest of the fleet.
 
-On Hyprland the four are pinned to a `chat` workspace and arranged as a 2×2 grid by
-`SUPER+ALT+M` — see the `hypr` section.
+On Hyprland the four are pinned to a `chat` workspace and arranged as a 2×2 grid by `SUPER+ALT+M` — see the `hypr` section.
 
 ## waybar — supervised restart
 
-Waybar crashes around output add/remove (hotplug, docking, `kanshictl switch`, monitor blanking) —
-an upstream GTK bug ([Waybar #3400](https://github.com/Alexays/Waybar/issues/3400)). Niri's
-`spawn-sh-at-startup "waybar"` doesn't supervise it, so a crash means the bar stays gone. The fix
-is the unit waybar already ships, plus a drop-in.
+Waybar crashes around output add/remove (hotplug, docking, `kanshictl switch`, monitor blanking) — an upstream GTK bug ([Waybar #3400](https://github.com/Alexays/Waybar/issues/3400)). Niri's `spawn-sh-at-startup "waybar"` doesn't supervise it, so a crash means the bar stays gone. The fix is the unit waybar already ships, plus a drop-in.
 
-The drop-in rides along in the **`systemd-user`** package (stow it per the gita-fetch section
-above — **with `--no-folding`**, or systemd silently ignores the drop-in; see the note there),
-and upgrades `/usr/lib/systemd/user/waybar.service` to `Restart=always` with the start
-rate limit disabled — otherwise a burst of crashes during one docking event trips the limit and
-the bar stays dead regardless.
+The drop-in rides along in the **`systemd-user`** package (stow it per the gita-fetch section above — **with `--no-folding`**, or systemd silently ignores the drop-in; see the note there), and upgrades `/usr/lib/systemd/user/waybar.service` to `Restart=always` with the start rate limit disabled — otherwise a burst of crashes during one docking event trips the limit and the bar stays dead regardless.
 
 ```sh
 systemctl --user daemon-reload && \
 systemctl --user enable --now waybar.service
 ```
 
-Then **ensure `spawn-sh-at-startup "waybar"` is absent** from `~/.config/niri/config.kdl` (the
-tracked skeleton already omits it) — otherwise the unit and Niri each start a bar and you get two.
+Then **ensure `spawn-sh-at-startup "waybar"` is absent** from `~/.config/niri/config.kdl` (the tracked skeleton already omits it) — otherwise the unit and Niri each start a bar and you get two.
 
 Verify the drop-in took effect, and watch for crashes:
 
@@ -1423,10 +1028,6 @@ systemctl --user show waybar.service -p DropInPaths -p Restart -p StartLimitInte
 journalctl --user -u waybar.service -f
 ```
 
-Expect `Restart=always`, `StartLimitIntervalUSec=0`, and `DropInPaths=` listing the
-`override.conf`. An **empty `DropInPaths`** with `Restart=on-failure` is the folding trap
-above — the drop-in dir got stowed as a symlink; re-stow with `--no-folding`.
+Expect `Restart=always`, `StartLimitIntervalUSec=0`, and `DropInPaths=` listing the `override.conf`. An **empty `DropInPaths`** with `Restart=on-failure` is the folding trap above — the drop-in dir got stowed as a symlink; re-stow with `--no-folding`.
 
-This also restores logging: the old `~/.config/waybar/waybar.sh` / `scripts/waybar-restart.sh`
-piped waybar's output to `/dev/null`, which is why crashes left no journal trace. Under the unit,
-`systemctl --user restart waybar` replaces both scripts.
+This also restores logging: the old `~/.config/waybar/waybar.sh` / `scripts/waybar-restart.sh` piped waybar's output to `/dev/null`, which is why crashes left no journal trace. Under the unit, `systemctl --user restart waybar` replaces both scripts.
