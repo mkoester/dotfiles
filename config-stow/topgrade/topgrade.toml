@@ -8,9 +8,7 @@
 [misc]
 cleanup = false             # topgrade's built-in cleanup is REPLACED by the [commands]
                             # block at the bottom — see the reasoning there.
-disable = ["git_repos",     # gita-fetch.timer already fetches tracked repos;
-                            # don't let topgrade auto-pull across worktrees
-           "hyprpm"]        # `hyprpm update` needs cmake (not installed) and there are
+disable = ["hyprpm"]        # `hyprpm update` needs cmake (not installed) and there are
                             # NO Hyprland plugins on this box (~/.local/share/hyprpm
                             # does not exist), so the step could only ever fail.
                             # Re-enable + `paru -S cmake` if a plugin is ever installed
@@ -22,6 +20,54 @@ sudo_loop = true            # keep sudo credentials warm for the whole run (no m
 
 [linux]
 arch_package_manager = "paru"   # explicit; otherwise autodetected
+
+# ── the git pulls the retired `sys_upgrade` alias used to do ────────────────
+# `sys_upgrade` was `update-os && update-dotfiles && <5 × git -C … pull> && omz update`.
+# Everything in it now lives here (2026-08-19):
+#   paru -Syu   -> the `system` step (was already covered)
+#   omz update  -> the `shell` step, which runs ~/.oh-my-zsh/tools/upgrade.sh
+#                  (verified: `topgrade --only shell --dry-run`)
+#   the git pulls -> this section, which is why `git_repos` is no longer disabled.
+#
+# THE `shell` STEP DOES NOT UPDATE ZSH_CUSTOM PLUGINS — this is the whole reason
+# the section exists, and nothing says so. `run_oh_my_zsh` (src/steps/zsh.rs at
+# v17.9.0) walks $ZSH_CUSTOM collecting plugin/theme repos into a LOCAL `RepoStep`
+# that it then drops without ever pulling; only `tools/upgrade.sh` runs, and that
+# script contains no reference to custom/plugins/themes at all (grepped, on disk).
+# So without the globs below, autosuggestions / syntax-highlighting /
+# you-should-use / auto-notify / powerlevel10k would silently stop updating.
+#
+# `pull_predefined = false` keeps the original objection to this step answered:
+# gita-fetch.timer already fetches tracked repos, and topgrade's predefined list
+# picks up ~/.zshrc's repo, ~/.vim, ~/.tmux, ~/.config/{fish,i3,sway,openbox,bspwm},
+# ~/.doom.d and ~/.dotfiles on its own. With it off, this step pulls EXACTLY the
+# paths listed below and nothing else, on every machine.
+# Honest measurement (mkDell, 2026-08-19): flipping it to `true` here changes the
+# resulting set by NOTHING — none of those paths exist on this box except ~/.zshrc,
+# which resolves into ~/src/dotfiles and is listed anyway. So it is insurance for
+# the rest of the fleet and for later, not something observably doing work today.
+#
+# Globs rather than the five explicit paths, matching what the old alias did with
+# its `[ -d … ]` guard around auto-notify: the plugin set differs per machine, and
+# a newly installed plugin should not need a config edit. Two consequences:
+#   * a path that matches nothing prints "did not contain any git repositories"
+#     — a warning, not a failure, and the step still runs;
+#   * a glob entry that is NOT a repo resolves to its ENCLOSING repo, because
+#     get_repo_root runs `git rev-parse --show-toplevel` inside it. oh-my-zsh
+#     ships custom/plugins/example and custom/themes/example.zsh-theme, so
+#     ~/.oh-my-zsh itself lands in the set and gets pulled here in addition to
+#     the `shell` step's upgrade.sh. Redundant, not harmful — the second pull is
+#     a no-op; the only cost is that omz's own changelog output may be empty.
+#     Narrowing the glob to */.git or */.git/HEAD does NOT avoid it (both tested:
+#     rev-parse inside a .git dir fails, so those match nothing at all).
+[git]
+pull_predefined = false
+arguments = "--rebase --autostash"   # --autostash so a dirty dotfiles tree does not fail the step
+repos = [
+    "~/src/dotfiles",
+    "~/.oh-my-zsh/custom/plugins/*",
+    "~/.oh-my-zsh/custom/themes/*",
+]
 
 [firmware]
 upgrade = true              # actually apply fwupd firmware updates (default: only check)

@@ -431,7 +431,7 @@ ln -sf `pwd`/oh-my-zsh-custom/pnpm.zsh $HOME/.oh-my-zsh-custom/
 | `oh-my-zsh-config/you-should-use.zsh` | `.oh-my-zsh-config` | you-should-use settings | always — part of [set up oh-my-zsh](#set-up-oh-my-zsh) |
 | `oh-my-zsh-config/ssh-wsl.zsh` | `.oh-my-zsh-config` | routes `ssh`/`ssh-add` through the Windows `.exe`s | WSL only |
 | `oh-my-zsh-config/zsh-disable-compfix.zsh` | `.oh-my-zsh-config` | `ZSH_DISABLE_COMPFIX` — skips the insecure-directory check | shared/group-writable clone |
-| `oh-my-zsh-config/omz-no_automatic_updates.zsh` | `.oh-my-zsh-config` | disables oh-my-zsh self-update | everywhere `sys_upgrade` drives updates |
+| `oh-my-zsh-config/omz-no_automatic_updates.zsh` | `.oh-my-zsh-config` | disables oh-my-zsh self-update | everywhere — topgrade's `shell` step drives omz updates |
 | `oh-my-zsh-config/shared-dotfiles.zsh` | `.oh-my-zsh-config` | `create_new_user_with_shared_config()` | shared multi-user machines |
 | `oh-my-zsh-plugins-optional/auto-notify.zsh` | `.oh-my-zsh-plugins-optional` | adds `auto-notify` to `plugins` | desktops |
 | `oh-my-zsh-plugins-optional/golang.zsh` | `.oh-my-zsh-plugins-optional` | adds the omz `golang` plugin | Go machines |
@@ -495,6 +495,10 @@ cd ${DOTFILES_REPO:-$HOME/src/dotfiles}/config-stow && stow -t $HOME/.config top
 ```
 
 Then `topgrade` (all steps), `topgrade --dry-run` (preview), or `topgrade only pnpm` (one step).
+
+**It replaced the `sys_upgrade` alias on 2026-08-19.** That alias chained `update-os && update-dotfiles && <5 × git pull in $ZSH_CUSTOM> && omz update`; every part of it is now a topgrade step — `system` (paru), `shell` (`~/.oh-my-zsh/tools/upgrade.sh`), and a scoped `git_repos` step. The five `update-omz-*` aliases went with it; `update-dotfiles` stayed, since it is useful on its own.
+
+The `git_repos` step is deliberately **scoped**, not general: `pull_predefined = false` plus an explicit `repos` list means it pulls the dotfiles repo and everything under `~/.oh-my-zsh/custom/{plugins,themes}/` — and nothing else, so it never competes with `gita-fetch.timer` over project repos. Those plugin globs are load-bearing and easy to think redundant: topgrade's oh-my-zsh step collects the `$ZSH_CUSTOM` repos and then **never pulls them**, and `tools/upgrade.sh` does not touch them either, so without the globs the plugins would silently stop updating.
 
 Note on pnpm: topgrade's built-in `pnpm` step runs `pnpm update -g` — **global packages only**. It does *not* bump the pnpm **binary** (the `corepack use pnpm@X` nag). On an Arch box pnpm is the pacman package, so the `system` step (paru) upgrades it and the nag clears itself. Only if pnpm is corepack-managed do you need the commented `[commands]` self-bump line in `topgrade.toml`.
 

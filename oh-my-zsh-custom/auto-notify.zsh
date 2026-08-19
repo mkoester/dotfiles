@@ -9,7 +9,8 @@
 #      So "claude" also covers "claude --resume", and "paru" covers "paru -Syu".
 #   2. Only the LAST segment of a PIPELINE is tested (the string is split on "|").
 #      `make | tee log` is judged as "tee log". Note it splits on "|" ONLY — a `&&` chain is
-#      judged by its FIRST command, which is why the sys_upgrade alias below cannot be listed.
+#      judged by its FIRST command (which is why the retired sys_upgrade alias, a `&&` chain
+#      starting with `date`, could never have been listed below).
 #   3. Tested AFTER ALIAS EXPANSION. This is the one that silently defeats an entry:
 #      listing "s" does nothing, because `s` expands to `paru -Ss` before the hook sees it.
 #      Functions and real binaries are NOT expanded, so `gitaw` (function), `herdr`, `claude`
@@ -52,12 +53,13 @@ AUTO_NOTIFY_IGNORE+=(
     "atuin"
 
     # ── DELIBERATELY NOT LISTED: package management / system upkeep ───────────────
-    # paru, topgrade, fresh and the sys_upgrade alias are left NOISY on purpose (MK, 2026-08-10).
+    # paru, topgrade and fresh are left NOISY on purpose (MK, 2026-08-10).
     # They are interactive, so they fit the pattern of everything above — but a long upgrade is
     # exactly the case where you wander off and want to be told it finished. Do not "fix" this
     # by adding them; the omission is the decision.
-    # (Convenient side effect: `sys_upgrade` could not have been silenced from here anyway —
-    # it expands to a `&&` chain starting with `date`, and rule 2 splits on "|" only.)
+    # (`sys_upgrade` was listed here as a fourth until it was retired into topgrade on
+    # 2026-08-19. It could not have been silenced from here anyway — it expanded to a `&&`
+    # chain starting with `date`, and rule 2 splits on "|" only.)
 
     # ── Session / lock ────────────────────────────────────────────────────────────
     # hyprlock otherwise fires a notification every single time the screen is unlocked, since

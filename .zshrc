@@ -150,12 +150,11 @@ alias lr="eza -l --git-repos --no-user --no-time --no-filesize"
 alias j="z"
 alias nano="nano -c"
 alias update-dotfiles="echo -n 'Updating dotfiles repo: ' && git -C ${DOTFILES_REPO:-$HOME/src/dotfiles}/ pull"
-alias update-omz-p10k="echo -n 'Updating powerlevel10k: ' && git -C ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k pull"
-alias update-omz-autosuggestions="echo -n 'Updating omz-autosuggestions: ' && git -C ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-autosuggestions pull"
-alias update-omz-syntax-highlighting="echo -n 'Updating zsh-syntax-highlighting: ' && git -C ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting pull"
-alias update-omz-you-should-use="echo -n 'Updating omz-you-should-use: ' && git -C ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/you-should-use pull"
-alias update-omz-auto-notify="if [ -d ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/auto-notify ] ; then echo -n 'Updating omz-auto-notify: ' && git -C ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/auto-notify pull; fi"
-alias sys_upgrade="date && uptime && update-os && update-dotfiles && update-omz-autosuggestions && update-omz-syntax-highlighting && update-omz-you-should-use && update-omz-auto-notify && update-omz-p10k && omz update"
+# `sys_upgrade` and the five `update-omz-*` aliases were retired 2026-08-19 — topgrade does all
+# of it now: `system` = paru -Syu, `shell` = omz update, and the [git] section of
+# config-stow/topgrade/topgrade.toml pulls the dotfiles repo plus every $ZSH_CUSTOM plugin/theme.
+# So it is `update-os` for the fast daily pass and `topgrade` for the full one. `update-dotfiles`
+# stays because it is also useful on its own, without a whole upgrade run.
 
 # Keep $path unique. zsh ties the `path` array to $PATH, and the -U attribute makes it discard a
 # duplicate on assignment, keeping the FIRST occurrence — so every prepend below becomes
