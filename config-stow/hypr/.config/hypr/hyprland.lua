@@ -135,6 +135,26 @@ hl.config({
     },
 })
 
+-- HOW TO DEBUG A HANDLER IN THIS FILE (learned the hard way 2026-08-19, cost four empty probes).
+-- Lua `print` works and is emitted at DEBUG level tagged `[Lua]`, but reaching it needs BOTH:
+--
+--   1. `hl.config({ debug = { disable_logs = false } })` — without it nothing is written to the
+--      log file. There is no `debug` block here normally, so this is off by default.
+--   2. Reading the LOG FILE, not `hyprctl rollinglog`:
+--        grep 'BW[D]EBUG' "$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/hyprland.log"
+--      `rollinglog` is an in-memory buffer that does NOT carry `[Lua]` prints. It happily shows
+--      other DEBUG lines, so it looks live while silently dropping exactly what you added.
+--
+-- Two traps that made this expensive. `--verify-config` DOES print — it logs to stdout before
+-- disabling stdout logs — so a print verified there proves nothing about a running session. And
+-- grepping rollinglog for your own marker matches the TERMINAL WINDOW'S TITLE, because Hyprland
+-- logs every title change and your title is the command you just typed: bracket one character
+-- (`BW[D]EBUG`) so the pattern cannot match itself.
+--
+-- Also settled: `hyprctl reload` DOES re-execute this file (a top-level print appeared once per
+-- reload), and handlers registered with `hl.on` do NOT accumulate across reloads the way keybinds
+-- do — one popup produced exactly one `match` line per title change after three reloads.
+
 -- Generic monitor fallback. Real blocks (connector, mode, scale) are machine-specific and
 -- belong in local.lua, which is required last and therefore wins.
 hl.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto" })
@@ -795,6 +815,89 @@ hl.on("window.title", function(w)
     local sel = "address:" .. w.address
     hl.dispatch(hl.dsp.window.float({ action = "enable", window = sel }))
     hl.dispatch(hl.dsp.window.fullscreen_state({ internal = 0, client = 0, action = "set", window = sel }))
+end)
+
+-- Decline maximize requests from Firefox. This is the second half of the Bitwarden popup fix
+-- below, and it addresses a DIFFERENT symptom than the float does — worth keeping straight.
+--
+-- MEASURED 2026-08-19 by polling `hyprctl -j clients` through a popup's whole lifetime. The
+-- window floats correctly and then Firefox asserts maximize ON the floating window before
+-- dropping it again, all on ONE address, never leaving the floating state:
+--
+--   floating=true  fs=0 fsClient=0  485x576   at 956,234   <- our float lands, correct size
+--   floating=true  fs=1 fsClient=1  1596x952  at 2,46      <- Firefox asks to be maximized
+--   floating=true  fs=1 fsClient=1  1596x956  at 2,42
+--   floating=true  fs=0 fsClient=0  485x576   at 956,234   <- releases it by itself
+--
+-- Read from the screen that looks like "it becomes a full-width tiled window and then floats
+-- again", which is why this was nearly diagnosed as the scrolling layout re-adopting the window
+-- or as a second float dispatch. It is neither: `floating` is true on every sample and the address
+-- never changes. 1596x952 is the full logical screen, the same figure measured for the Thunderbird
+-- dialog further down.
+--
+-- The `window.title` handler below CANNOT fix this — the maximize arrives after the last title
+-- change, so the handler never fires again. `suppress_event` is the answer because it is a STATIC
+-- rule that needs no discriminator: it declines the request rather than undoing it afterwards.
+--
+-- SCOPED TO FIREFOX DELIBERATELY. Hyprland's shipped example config (/usr/share/hypr/hyprland.lua)
+-- uses `match = { class = ".*" }` for this with the comment "Ignore maximize requests from all
+-- apps. You'll probably like this." — widening it is likely right and would probably also retire
+-- the `fullscreen_state` dispatch in the Thunderbird handler below, which exists to undo exactly
+-- this. Left narrow because that dispatch is measured working today and this session's ask was
+-- about Bitwarden; widen it as its own deliberate change, with the Thunderbird dialog re-measured.
+hl.window_rule({ match = { class = "firefox" }, suppress_event = "maximize" })
+
+-- Float the Bitwarden extension popup (the window a passkey login pops out into).
+--
+-- SECOND worked example of the static-rule limitation, and the reason it is a handler rather than
+-- a `hl.window_rule` is measured, not inherited from the Thunderbird case above.
+-- `hyprctl -j clients` with the popup open (2026-08-19, mkMac2014, six firefox windows):
+--
+--   title                                                       initialTitle       floating
+--   Bookmarks+ — Mozilla Firefox                                Mozilla Firefox    false
+--   Dokumente - Paperless-ngx — Mozilla Firefox                 Mozilla Firefox    false
+--   Anmeldung | Bundesagentur für Arbeit — Mozilla Firefox      Mozilla Firefox    false
+--   Extension: (Bitwarden Password Manager) - Bitwarden — Moz…  Mozilla Firefox    false
+--
+-- Every firefox window maps as `Mozilla Firefox` and acquires its real title afterwards, so at
+-- match time the popup is indistinguishable from an ordinary browser window — a `title` rule can
+-- only ever match all of them or none. `xdgTag` and `xdgDescription`, the other fields a rule
+-- could plausibly key on, are the empty string on all six, so there is no discriminator at open.
+--
+-- ONE DISPATCH, NOT TWO — the difference from Thunderbird above, and it is deliberate. That dialog
+-- arrives maximized (`fullscreen = 1`, `fullscreenClient = 1`) and needs the `fullscreen_state`
+-- call to become useful. This popup does not: measured `fullscreen = 0`, `fullscreenClient = 0`,
+-- 784x944, i.e. an ordinary tiled window in the scrolling tape. Adding the second dispatch here
+-- would be carrying over an unmeasured fix for a state this window is not in.
+--
+-- UNMEASURED, deliberately left alone: what size the window takes once floated. Hyprland may keep
+-- the 784x944 it currently has or fall back to its own float default. If it comes up wrong, the fix
+-- is a `hl.dsp.window.resize` in the same handler — NOT a `size` window rule, which cannot select
+-- this window for the reason above.
+--
+-- Firefox only. Floorp is a Firefox fork and very likely produces the same `Extension: (…)` title
+-- under class `floorp`, and Brave almost certainly does not — but neither was measured, and a
+-- guessed class fails silently here (the popup opens, nothing floats). Add them by reading a live
+-- window with the popup open, not from this comment.
+hl.on("window.title", function(w)
+    if w == nil or w.class ~= "firefox" then return end
+    if w.title == nil or not w.title:find("Extension: (Bitwarden", 1, true) then return end
+    -- window.title fires on every title change in every firefox window, so bail once this one is
+    -- already in the target state. Unlike the Thunderbird handler, `floating` alone is the whole
+    -- condition — there is no maximize to clear.
+    --
+    -- MEASURED 2026-08-19 (instrumented with prints, see the debugging note near the top): one
+    -- popup fires this handler TWICE, because the title arrives in two steps —
+    --
+    --   Extension: (Bitwarden Password Manager) - — Mozilla Firefox            floating=false
+    --   Extension: (Bitwarden Password Manager) - Bitwarden — Mozilla Firefox  floating=true
+    --
+    -- so the guard does its job: dispatch on the first, early-return on the second. `floating` is
+    -- fresh in the event payload, not stale. Note the first title is INCOMPLETE — the app name has
+    -- not filled in yet — which is why the match literal stops at `Extension: (Bitwarden`. A match
+    -- on `- Bitwarden —` would miss the first event and float a frame later than necessary.
+    if w.floating then return end
+    hl.dispatch(hl.dsp.window.float({ action = "enable", window = "address:" .. w.address }))
 end)
 
 -- Post-restore Firefox placement, the in-config replacement for
