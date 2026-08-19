@@ -1,0 +1,242 @@
+#!/usr/bin/env python3
+"""Report what a pasted DMS settings.json would change in the shared baseline.
+
+    dms-settings-lift <paste.json>        (or `-` to read stdin)
+
+REPORT-ONLY BY DESIGN — it writes nothing, anywhere. The GUI cannot save
+settings.json (dms-settings-deploy writes it 0444), so the loop is: tweak in the
+GUI, use the Settings modal's copy button, paste, and lift the real changes back
+into workstation-private/shared/dms/. Applying is one `jq` line, which this
+prints; deciding WHICH keys may be applied is the part worth automating, because
+all three ways of getting it wrong fail silently:
+
+  1. A key that lives in laptop.json, or barConfigs itself, cannot be lifted from
+     an arbitrary machine. laptop.json repeats barConfigs WHOLE (the merge is
+     shallow on purpose — see dms-settings-deploy), so editing only base.json
+     leaves the overlay's copy stale with no error anywhere. Those changes need
+     the full recipe in shared/dms/README.md, run on a desktop.
+
+  2. Some keys are state the GUI writes as a CONSEQUENCE of a change rather than
+     as the change. greeterSyncPending/greeterSyncBaseline are the confirmed pair:
+     SettingsData.qml:1686 stores the pre-change value so the greeter tab can
+     offer push-or-revert, and clearGreeterSyncPending() wipes both once you act.
+     Committed to the baseline they would put a permanent sync-pending pill on
+     every machine with the greeter installed, holding a stale revert target,
+     resurrected by every deploy.
+
+  3. Diffing the paste against base.json rather than against the DEPLOYED file
+     mixes "what the GUI changed" together with "what the overlay contributes"
+     and "how far behind this machine is". Those are three different questions
+     and this prints them separately.
+
+Exit status is 0 whenever the report was produced (including "nothing to lift");
+1 only when it could not run. The report, not the status, is the answer.
+"""
+
+import argparse
+import json
+import os
+import re
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+DOTFILES = os.path.dirname(HERE)
+PRIVATE = os.path.join(os.path.dirname(DOTFILES), "workstation-private")
+SHARED = os.path.join(PRIVATE, "shared", "dms")
+DEPLOYED = os.path.expanduser("~/.config/DankMaterialShell/settings.json")
+
+# Confirmed by reading the shipped QML, not by the naming heuristic below.
+TRANSIENT = {"greeterSyncPending", "greeterSyncBaseline"}
+
+# Keys that LOOK like state rather than settings. A heuristic, deliberately
+# anchored: notificationHistoryEnabled and notificationHistoryMaxCount are real
+# settings, so an unanchored "History" match would drop them. Suspects are
+# reported, never silently applied — and never silently skipped either.
+SUSPECT = re.compile(r"(Pending|Baseline|History)$|^last[A-Z]")
+
+IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def load(path):
+    if path == "-":
+        return json.load(sys.stdin)
+    with open(path, encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def merge(base, *overlays):
+    """Shallow, matching dms-settings-deploy. Kept as its own copy rather than
+    imported: the filename has a dash, and five lines duplicated beside a
+    comment saying so beats a sys.path hack around it."""
+    merged = dict(base)
+    for overlay in overlays:
+        merged.update(overlay)
+    return merged
+
+
+def has_battery():
+    power = "/sys/class/power_supply"
+    if not os.path.isdir(power):
+        return False
+    return any(e.startswith("BAT") for e in os.listdir(power))
+
+
+def differing(left, right):
+    """Keys whose values differ, plus keys only one side has."""
+    changed, added, removed = [], [], []
+    for key in right:
+        if key not in left:
+            added.append(key)
+        elif left[key] != right[key]:
+            changed.append(key)
+    for key in left:
+        if key not in right:
+            removed.append(key)
+    return sorted(changed), sorted(added), sorted(removed)
+
+
+def jq_assign(key, value):
+    path = f".{key}" if IDENT.match(key) else f'.["{key}"]'
+    return f"{path}={json.dumps(value, separators=(',', ':'))}"
+
+
+def show(title, keys, before, after, indent="  "):
+    print(f"\n{title}")
+    for key in keys:
+        old = json.dumps(before[key]) if key in before else "(absent)"
+        new = json.dumps(after[key]) if key in after else "(absent)"
+        if len(old) > 60:
+            old = old[:57] + "..."
+        if len(new) > 60:
+            new = new[:57] + "..."
+        print(f"{indent}{key}: {old} -> {new}")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("paste", help="the pasted settings.json ('-' for stdin)")
+    parser.add_argument("--shared", default=SHARED,
+                        help="dir holding base.json/laptop.json (default: %(default)s)")
+    parser.add_argument("--deployed", default=DEPLOYED,
+                        help="the live file to compare against (default: %(default)s)")
+    parser.add_argument("--class", dest="klass", choices=["auto", "desktop", "laptop"],
+                        default="auto", help="override hardware detection")
+    args = parser.parse_args()
+
+    base_path = os.path.join(args.shared, "base.json")
+    laptop_path = os.path.join(args.shared, "laptop.json")
+    if not os.path.exists(base_path):
+        print(f"no baseline at {base_path} — is workstation-private cloned beside dotfiles?",
+              file=sys.stderr)
+        return 1
+
+    klass = args.klass
+    if klass == "auto":
+        klass = "laptop" if has_battery() else "desktop"
+
+    try:
+        base = load(base_path)
+        paste = load(args.paste)
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"cannot read input: {exc}", file=sys.stderr)
+        return 1
+
+    overlay = {}
+    if klass == "laptop":
+        if not os.path.exists(laptop_path):
+            print(f"missing {laptop_path}", file=sys.stderr)
+            return 1
+        overlay = load(laptop_path)
+    expected = merge(base, overlay) if overlay else merge(base)
+
+    print(f"class: {klass}, {len(paste)} keys pasted, "
+          f"baseline merges to {len(expected)}")
+
+    # Question 1: is this machine even carrying the current baseline? If not, the
+    # paste-vs-deployed diff below is drift and GUI changes mixed together, and
+    # nothing further can be trusted.
+    if os.path.exists(args.deployed):
+        try:
+            live = load(args.deployed)
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"! cannot read {args.deployed}: {exc}")
+            live = None
+        if live is not None:
+            drift, d_add, d_rm = differing(live, expected)
+            if drift or d_add or d_rm:
+                print(f"\n! THIS MACHINE IS BEHIND THE BASELINE "
+                      f"({len(drift) + len(d_add) + len(d_rm)} keys differ).")
+                print("  Re-deploy and restart before trusting anything below —")
+                print("  the changes reported are drift and GUI edits mixed together:")
+                print("    scripts/dms-settings-deploy && dms restart")
+            else:
+                print("machine is on the current baseline (deployed == base+overlay)")
+    else:
+        print(f"! no deployed file at {args.deployed} — comparing against the repo only")
+
+    # Question 2: what does the paste change, relative to what the repo says this
+    # machine should have?
+    changed, added, removed = differing(expected, paste)
+
+    if added:
+        show("NEW KEYS — a DMS upgrade added these; check configVersion before lifting:",
+             added, expected, paste)
+    if removed:
+        show("MISSING KEYS — present in the baseline, absent from the paste:",
+             removed, expected, paste)
+
+    if not changed:
+        print("\nnothing to lift: every shared key already matches the baseline.")
+        return 0
+
+    # barConfigs is special on EVERY class, not only where the overlay carries it:
+    # laptop.json repeats it whole, so lifting it into base.json on a desktop
+    # leaves the overlay's copy stale just as surely. Both cases need the two-step
+    # recipe, which regenerates the overlay from the new base.
+    overlay_keys = [k for k in changed if k in overlay or k == "barConfigs"]
+    rest = [k for k in changed if k not in overlay_keys]
+    transient = [k for k in rest if k in TRANSIENT]
+    suspect = [k for k in rest if k not in TRANSIENT and SUSPECT.search(k)]
+    liftable = [k for k in rest if k not in TRANSIENT and k not in suspect]
+
+    if overlay_keys:
+        show("STOP — these keys cannot be lifted by editing base.json alone:",
+             overlay_keys, expected, paste)
+        print("  laptop.json repeats barConfigs whole and carries the six timeouts, so a")
+        print("  base-only edit leaves the overlay's copy stale, silently and fleet-wide.")
+        print("  Use the two-step refresh recipe in shared/dms/README.md, on a desktop.")
+
+    if transient:
+        show("EXCLUDED — transient state, not settings (see this script's docstring):",
+             transient, expected, paste)
+
+    if suspect:
+        show("REVIEW — these look like state rather than settings:", suspect, expected, paste)
+        print("  Excluded from the command below. If one is a real setting, append:")
+        print("    " + " | ".join(jq_assign(k, paste[k]) for k in suspect))
+
+    if liftable and overlay_keys:
+        # Deliberately no command here. A printed jq line is the thing that gets
+        # copy-pasted, and running it would apply half the paste and drop the rest
+        # with nothing recording that it happened.
+        show(f"ALSO CHANGED — {len(liftable)} key(s) that would go to base.json:",
+             liftable, expected, paste)
+        print("  No command printed: settle the STOP list above first, then re-run.")
+    elif liftable:
+        show(f"LIFT — {len(liftable)} key(s) for base.json:", liftable, expected, paste)
+        program = " | ".join(jq_assign(k, paste[k]) for k in liftable)
+        if "'" in program:
+            print("\n  ! a value contains a single quote — quote the jq program by hand.")
+        print("\n  cd " + args.shared)
+        print(f"  jq '{program}' base.json > base.new.json && mv base.new.json base.json")
+        print("\n  Then confirm the merge reproduces the paste, modulo what was excluded:")
+        print(f"    {sys.argv[0]} {args.paste}")
+    elif not overlay_keys:
+        print("\nnothing to lift into base.json.")
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

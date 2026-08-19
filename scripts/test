@@ -538,5 +538,117 @@ is "$(python3 -c 'import json,sys;print(",".join(json.load(open(sys.argv[1]))))'
 
 rm -rf "$d"
 
+# ── dms-settings-lift ────────────────────────────────────────────────────────
+section "dms-settings-lift"
+DSL="$REPO/scripts/dms-settings-lift"
+
+d=$(work)
+mkdir -p "$d/shared"
+# A miniature of the real pair: base.json holds everything, laptop.json overrides
+# one timeout and repeats barConfigs whole (which is exactly what goes stale).
+cat >"$d/shared/base.json" <<-'JSON'
+	{
+	  "clockFormat": "auto",
+	  "cornerRadius": 12,
+	  "batteryLockTimeout": 0,
+	  "notificationHistoryEnabled": true,
+	  "greeterSyncPending": false,
+	  "greeterSyncBaseline": {},
+	  "barConfigs": [ { "id": "default", "spacing": 4, "rightWidgets": ["clock"] } ]
+	}
+JSON
+cat >"$d/shared/laptop.json" <<-'JSON'
+	{
+	  "batteryLockTimeout": 120,
+	  "barConfigs": [ { "id": "default", "spacing": 4, "rightWidgets": ["battery", "clock"] } ]
+	}
+JSON
+# The paste: what the GUI would hand back after two ordinary tweaks, plus the
+# greeter state DMS writes as a consequence of one of them.
+cat >"$d/paste.json" <<-'JSON'
+	{
+	  "clockFormat": "24h",
+	  "cornerRadius": 16,
+	  "batteryLockTimeout": 120,
+	  "notificationHistoryEnabled": true,
+	  "greeterSyncPending": true,
+	  "greeterSyncBaseline": { "clockFormat": "auto" },
+	  "barConfigs": [ { "id": "default", "spacing": 4, "rightWidgets": ["battery", "clock"] } ]
+	}
+JSON
+cp "$d/shared/base.json" "$d/base.orig.json"   # one case below applies the printed jq
+lift() { python3 "$DSL" "$1" --shared "$d/shared" --deployed "$d/absent.json" "${@:2}" 2>&1; }
+
+out=$(lift "$d/paste.json")
+ok "$(printf '%s' "$out" | grep -q '^LIFT — 2 key' && echo 1 || echo 0)" \
+	'the two real changes are offered for base.json'
+ok "$(printf '%s' "$out" | grep -qE '^  (clockFormat|cornerRadius):' && echo 1 || echo 0)" \
+	'…and are named with their before/after values'
+
+# The point of the whole script: transient state must not reach the baseline, and
+# must not reach the printed command either.
+ok "$(printf '%s' "$out" | grep -q 'EXCLUDED' && echo 1 || echo 0)" \
+	'greeter sync state is reported as excluded'
+ok "$(printf '%s' "$out" | grep "jq '" | grep -q 'greeterSync' && echo 0 || echo 1)" \
+	'…and appears in no jq assignment'
+
+# The strongest assertion available: run the command it printed and confirm the
+# result merges back into the paste. A report whose command does not do what the
+# report claims is the failure this catches, and nothing else here would.
+prog=$(printf '%s' "$out" | sed -n "s/^  jq '\(.*\)' base.json.*/\1/p")
+ok "$([ -n "$prog" ] && echo 1 || echo 0)" 'a jq program is printed'
+jq "$prog" "$d/shared/base.json" >"$d/shared/base.new" && mv "$d/shared/base.new" "$d/shared/base.json"
+is "$(jq -S -s '.[0] * .[1] | del(.greeterSyncPending, .greeterSyncBaseline)' \
+		"$d/shared/base.json" "$d/shared/laptop.json" | md5sum)" \
+	"$(jq -S 'del(.greeterSyncPending, .greeterSyncBaseline)' "$d/paste.json" | md5sum)" \
+	'running the printed command makes base+laptop reproduce the paste'
+out=$(lift "$d/paste.json")
+ok "$(printf '%s' "$out" | grep -q 'nothing to lift' && echo 1 || echo 0)" \
+	'a second run has nothing left to lift (idempotent)'
+
+# The control that can fail: a barConfigs change must NOT produce a command, on
+# either class. Lifting it into base.json alone leaves laptop.json's copy stale,
+# which is silent and fleet-wide — see the script's docstring.
+jq '.barConfigs[0].spacing=8' "$d/paste.json" >"$d/bar.json"
+out=$(lift "$d/bar.json")
+ok "$(printf '%s' "$out" | grep -q '^STOP' && echo 1 || echo 0)" \
+	'a barConfigs change is refused'
+ok "$(printf '%s' "$out" | grep -q "jq '" && echo 0 || echo 1)" \
+	'…and no command is printed to copy-paste'
+out=$(lift "$d/bar.json" --class desktop)
+ok "$(printf '%s' "$out" | grep -q '^STOP' && echo 1 || echo 0)" \
+	'…on the desktop class too, where the overlay is not even loaded'
+
+# An overlay key is the other half of the same guard.
+jq '.batteryLockTimeout=600' "$d/paste.json" >"$d/bat.json"
+out=$(lift "$d/bat.json")
+ok "$(printf '%s' "$out" | grep -q '^STOP' && echo 1 || echo 0)" \
+	'a laptop-overlay timeout is refused'
+
+# The suspect heuristic is anchored on purpose: notificationHistoryEnabled and
+# notificationHistoryMaxCount are real settings, so an unanchored "History" match
+# would silently drop them. This is the case that proves the anchor works.
+cp "$d/base.orig.json" "$d/shared/base.json"   # the lift case above mutated it
+jq '.notificationHistoryEnabled=false' "$d/paste.json" >"$d/hist.json"
+out=$(lift "$d/hist.json")
+ok "$(printf '%s' "$out" | grep -q '^LIFT — 3 key' && echo 1 || echo 0)" \
+	'notificationHistoryEnabled is not mistaken for state'
+ok "$(printf '%s' "$out" | grep -q 'notificationHistoryEnabled=false' && echo 1 || echo 0)" \
+	'…and is lifted normally'
+
+# A key the baseline does not have at all is a DMS upgrade, not a tweak.
+jq '.brandNewKey="x"' "$d/paste.json" >"$d/new.json"
+out=$(lift "$d/new.json")
+ok "$(printf '%s' "$out" | grep -q 'NEW KEYS' && echo 1 || echo 0)" \
+	'a key absent from the baseline is flagged as new'
+
+# Report-only means report-only: nothing it is pointed at may change.
+before=$(md5sum <"$d/paste.json")
+lift "$d/paste.json" >/dev/null
+is "$(md5sum <"$d/paste.json")" "$before" 'the paste is never modified'
+ok "$([ ! -e "$d/absent.json" ] && echo 1 || echo 0)" 'no deployed file is created'
+
+rm -rf "$d"
+
 printf '\n%d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"
 [ "$FAIL" -eq 0 ]
