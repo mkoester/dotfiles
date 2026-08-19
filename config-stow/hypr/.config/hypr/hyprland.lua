@@ -643,6 +643,12 @@ hl.workspace_rule({ workspace = tostring(ws_chat), default_name = "chat", persis
 -- (desktop/niri-window-placement.md). The Hyprland answer is an event handler; see below.
 hl.window_rule({ match = { class = "firefox", title = "^Picture-in-Picture$" }, float = true })
 
+-- Windows XP Solitaire under Wine. Class measured off a live window (2026-08-19, mkDell):
+-- `sol.exe`, and initialClass matches it, so a class-matched rule fires reliably at open.
+-- Floating because the game draws a fixed-size card table; tiled onto a scrolling column it
+-- just pads itself with green felt.
+hl.window_rule({ match = { class = "sol.exe" }, float = true })
+
 -- NO Thunderbird float rule here, deliberately — a title-matched one CANNOT work for that app.
 -- `{ class = "org.mozilla.Thunderbird", title = "Alias" }, float = true` stood here from the
 -- original skeleton until 2026-08-11 and had never once fired. See the `window.title` handler
