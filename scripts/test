@@ -821,5 +821,15 @@ section "public repo hygiene"
 leaked=$(git -C "$REPO" grep -nE 'mkde\.m[e]|\b10\.1[0]\.[0-9]+\.|g[l]\.mk' -- . 2>/dev/null | wc -l)
 is "$leaked" "0" 'no private hostnames or home-LAN addresses in the tracked tree'
 
+# COMMIT MESSAGES TOO. The tracked-tree check above searches blobs, so it is
+# structurally incapable of seeing a message -- which is how the 2026-08-20 scrub
+# shipped twice: the first history rewrite used --replace-text, cleaning file
+# contents while leaving two messages naming the endpoint, and `git grep` could
+# never have found them. That cost a second force-push and a second hard reset on
+# a second machine. Scan every message on every ref.
+msgleak=$(git -C "$REPO" log --all --format='%B' 2>/dev/null \
+	| grep -acE 'mkde\.m[e]|\b10\.1[0]\.[0-9]+\.' || true)
+is "$msgleak" "0" 'no private identifiers in any commit message'
+
 printf '\n%d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"
 [ "$FAIL" -eq 0 ]
