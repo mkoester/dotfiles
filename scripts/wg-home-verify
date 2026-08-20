@@ -120,7 +120,11 @@ if [ "$WHERE" != foreign ]; then
 	skip "IPv4 egress identity (returns the home WAN IP either way from here)"
 	skip "IPv6 egress is blocked (no meaningful IPv6 path to test from here)"
 else
-	expected=$(getent ahostsv4 "$ENDPOINT" 2>/dev/null | awk 'NR==1{print $1}')
+	# BOUNDED. With the tunnel up, 192.0.2.1 is the exclusive resolver and is only
+	# reachable THROUGH the tunnel, so an unbounded lookup here blocks forever and the
+	# script looks hung with no output (observed on mkMac2014, 2026-08-20). Every
+	# network call below is bounded for the same reason.
+	expected=$(timeout 5 getent ahostsv4 "$ENDPOINT" 2>/dev/null | awk 'NR==1{print $1}')
 	actual=$(curl -4 -s --max-time 10 ifconfig.me 2>/dev/null)
 	if [ -z "$expected" ]; then
 		skip "IPv4 egress identity — could not resolve $ENDPOINT to compare against"
@@ -130,12 +134,22 @@ else
 		fail "IPv4 egress is $actual, expected $expected ($ENDPOINT) — traffic is NOT tunnelled"
 	fi
 
-	# The guard works when this FAILS. A returned address is the leak.
-	v6=$(curl -6 -s --max-time 8 ifconfig.me 2>/dev/null)
-	if [ -z "$v6" ]; then
-		pass "IPv6 egress is blocked (curl -6 returned nothing)"
+	# Re-check the tunnel BEFORE judging IPv6. Steps 2-4 ran minutes ago; if the tunnel
+	# has dropped since, the guard correctly removes the blackhole and IPv6 starts
+	# working again — which is right, and would be reported here as a leak. A false
+	# accusation is worse than no answer, so establish the precondition first.
+	if ! ip link show "$TUNNEL" >/dev/null 2>&1; then
+		skip "IPv6 egress — $TUNNEL went down during the run; re-run with it up"
+	elif ! ip -6 route show default 2>/dev/null | grep -q '^blackhole'; then
+		skip "IPv6 egress — the blackhole route disappeared mid-run; nothing to conclude"
 	else
-		fail "IPv6 LEAKED: curl -6 returned $v6 — that address is outside the tunnel"
+		# The guard works when this FAILS. A returned address is the leak.
+		v6=$(curl -6 -s --max-time 8 ifconfig.me 2>/dev/null)
+		if [ -z "$v6" ]; then
+			pass "IPv6 egress is blocked (curl -6 returned nothing)"
+		else
+			fail "IPv6 LEAKED: curl -6 returned $v6 — that address is outside the tunnel"
+		fi
 	fi
 fi
 

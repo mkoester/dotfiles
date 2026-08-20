@@ -765,6 +765,19 @@ out=$(where "$d/tunonly.txt")
 ok "$(printf '%s' "$out" | grep -q 'cannot determine' && echo 1 || echo 0)" \
 	'the tunnel address alone does not count as a foreign network'
 
+# Every network call must be BOUNDED. getent has no built-in timeout, and with the
+# tunnel up the resolver is only reachable through the tunnel — so one unbounded
+# lookup makes the whole script hang silently with no output, which is exactly what
+# it did on mkMac2014 (2026-08-20). A lint assertion rather than a behavioural one,
+# because the hang cannot be reproduced without a live tunnel.
+# The reporting helpers are excluded because their message strings mention the very
+# commands being looked for -- without this the lint flags its own error text.
+unbounded=$(grep -vE '^[[:space:]]*#' "$VERIFY" \
+	| grep -vE '^[[:space:]]*(pass|fail|skip|note|echo|printf) ' \
+	| grep -E '\b(getent|curl|dig|nslookup|host)\b' \
+	| grep -cvE 'timeout |--max-time' || true)
+is "$unbounded" "0" 'every network call in wg-home-verify is bounded by a timeout'
+
 rm -rf "$d"
 
 printf '\n%d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"
