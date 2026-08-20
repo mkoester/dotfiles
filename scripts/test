@@ -577,7 +577,19 @@ cat >"$d/paste.json" <<-'JSON'
 	}
 JSON
 cp "$d/shared/base.json" "$d/base.orig.json"   # one case below applies the printed jq
-lift() { python3 "$DSL" "$1" --shared "$d/shared" --deployed "$d/absent.json" "${@:2}" 2>&1; }
+# --class is PINNED, not left to auto-detection. The fixture's laptop.json carries
+# batteryLockTimeout and barConfigs, so which keys are liftable depends entirely on
+# the class — and with `auto` that means on whether the machine running the suite
+# happens to have a battery. Written on a laptop, this block passed there and failed
+# with six confusing errors on a desktop (mkDell, 2026-08-20), none of which named
+# the class as the cause. A later case overrides it with an explicit `--class desktop`;
+# argparse takes the last occurrence, so "${@:2}" still wins.
+lift() { python3 "$DSL" "$1" --shared "$d/shared" --deployed "$d/absent.json" --class laptop "${@:2}" 2>&1; }
+
+# Assert the pin took, so a future change to the helper fails HERE with an obvious
+# message rather than as a scatter of unrelated-looking assertion failures below.
+ok "$(lift "$d/paste.json" | grep -q '^class: laptop,' && echo 1 || echo 0)" \
+	'the fixture runs as the laptop class regardless of the host machine'
 
 out=$(lift "$d/paste.json")
 ok "$(printf '%s' "$out" | grep -q '^LIFT — 2 key' && echo 1 || echo 0)" \
