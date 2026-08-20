@@ -710,5 +710,62 @@ is "$(wc -c <"$d/ip.log")" "0" 'no arguments does nothing'
 
 rm -rf "$d"
 
+# ── wg-home-verify: where-am-I detection ──────────────────────────────────────
+# This runs ON the tunnel machine and cannot be exercised here (the sandbox's own
+# net namespace shows only lo), so the location logic is driven with fixtures via a
+# stubbed `ip`. The asymmetry is the point: calling a home LAN "foreign" runs the
+# egress checks where they CANNOT FAIL and reports a false pass, so anything not
+# positively foreign must be treated as home.
+d="$(mktemp -d "${TMPDIR:?TMPDIR must be set}/wgverify.XXXXXX")"
+VERIFY="$REPO/scripts/wg-home-verify"
+mkdir -p "$d/bin"
+cat >"$d/bin/ip" <<'STUB'
+#!/usr/bin/env bash
+# Only `-4 -o addr show` is answered; everything else fails, so the script stops
+# after the location note, which is all these cases assert on.
+[ "$*" = "-4 -o addr show" ] || exit 1
+cat "$ADDR_FIXTURE"
+STUB
+chmod u+x "$d/bin/ip"
+
+# Captured into a variable, then grepped -- the idiom the rest of this suite uses.
+# Piping the function straight into `grep -q` reports no match even when the text is
+# plainly there: -q exits on the first hit, and the SIGPIPE that sends back through
+# the function's own trailing `head` loses the result. That reads exactly like a
+# detection bug in the script under test, which is what it was mistaken for.
+where() {
+	ADDR_FIXTURE="$1" PATH="$d/bin:$PATH" "$VERIFY" 2>/dev/null | head -5
+}
+
+printf '%s\n' \
+	'1: lo    inet 127.0.0.1/8 scope host lo' \
+	'2: wlan0    inet 192.0.2.43/24 brd 192.0.2.255 scope global wlan0' >"$d/home.txt"
+out=$(where "$d/home.txt")
+ok "$(printf '%s' "$out" | grep -q 'HOME LAN' && echo 1 || echo 0)" \
+	'an address in the home subnet is detected as home'
+
+printf '%s\n' \
+	'1: lo    inet 127.0.0.1/8 scope host lo' \
+	'2: wlan0    inet 192.168.43.12/24 brd 192.168.43.255 scope global wlan0' >"$d/away.txt"
+out=$(where "$d/away.txt")
+ok "$(printf '%s' "$out" | grep -q 'foreign network' && echo 1 || echo 0)" \
+	'a hotspot address is detected as foreign'
+
+printf '%s\n' '1: lo    inet 127.0.0.1/8 scope host lo' >"$d/lo.txt"
+out=$(where "$d/lo.txt")
+ok "$(printf '%s' "$out" | grep -q 'cannot determine' && echo 1 || echo 0)" \
+	'loopback only is unknown, not foreign'
+
+# The edge case that would otherwise read as "foreign": up, but with nothing except
+# the tunnel address. The tunnel must not count as evidence of being away.
+printf '%s\n' \
+	'1: lo    inet 127.0.0.1/8 scope host lo' \
+	'3: wg-home    inet 198.51.100.5/32 scope global wg-home' >"$d/tunonly.txt"
+out=$(where "$d/tunonly.txt")
+ok "$(printf '%s' "$out" | grep -q 'cannot determine' && echo 1 || echo 0)" \
+	'the tunnel address alone does not count as a foreign network'
+
+rm -rf "$d"
+
 printf '\n%d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"
 [ "$FAIL" -eq 0 ]
