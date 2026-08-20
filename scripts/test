@@ -784,6 +784,31 @@ is "$unbounded" "0" 'every network call in wg-home-verify is bounded by a timeou
 
 rm -rf "$d"
 
+# The private values must be readable WITHOUT an interactive shell. host-env.zsh
+# exports them only into interactive shells, so `ssh <host> 'wg-home-verify'` --
+# non-interactive, sources no rc file -- got nothing and the script refused to run
+# (mkMac2014, 2026-08-20). It now reads the file itself, resolving
+# workstation-private as this repo's sibling. Exercised in a fake tree so the real
+# clone's presence cannot mask a regression.
+f="$(mktemp -d "${TMPDIR:?TMPDIR must be set}/faketree.XXXXXX")"
+mkdir -p "$f/dotfiles/scripts"
+cp "$REPO/scripts/wg-home-verify" "$f/dotfiles/scripts/"
+
+out=$(env -u WG_HOME_ENDPOINT -u WG_HOME_LAN_PREFIX "$f/dotfiles/scripts/wg-home-verify" 2>&1)
+ok "$(printf '%s' "$out" | grep -q 'must be set' && echo 1 || echo 0)" \
+	'no sibling clone and no environment is a clear refusal, not a bad guess'
+
+mkdir -p "$f/workstation-private/shared"
+printf 'export WG_HOME_ENDPOINT=endpoint.example\nexport WG_HOME_LAN_PREFIX=192.0.2.\n' \
+	>"$f/workstation-private/shared/shell.env"
+out=$(env -u WG_HOME_ENDPOINT -u WG_HOME_LAN_PREFIX "$f/dotfiles/scripts/wg-home-verify" 2>&1)
+# grep -qv would be wrong here: it succeeds when ANY line fails to match, so it
+# passes even on the error output. Assert the absence of the refusal instead.
+ok "$(printf '%s' "$out" | grep -q 'must be set' && echo 0 || echo 1)" \
+	'the sibling shell.env is read with no interactive shell involved'
+
+rm -rf "$f"
+
 # ── the repo is PUBLIC ────────────────────────────────────────────────────────
 # Private identifiers reached the tracked tree on 2026-08-20 -- a DynDNS name that
 # resolves to the home WAN IP, plus the home subnet -- and were pushed before anyone

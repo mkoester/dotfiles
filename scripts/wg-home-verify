@@ -17,8 +17,22 @@
 set -uo pipefail
 
 # This repo is PUBLIC, so the endpoint and the home subnet are NOT hardcoded here.
-# They come from workstation-private/shared/shell.env, which oh-my-zsh-custom/
-# host-env.zsh sources into every interactive shell.
+# They live in workstation-private/shared/shell.env.
+#
+# host-env.zsh exports them into every INTERACTIVE shell, which covers running this
+# by hand — but `ssh <host> \'wg-home-verify\'` is NOT interactive and sources no
+# rc file at all, so the environment alone is not a dependable source (it failed
+# exactly that way on mkMac2014, 2026-08-20). Read the file directly when the
+# variables are absent, resolving workstation-private as this repo\'s sibling, the
+# same way install.sh and host-env.zsh do. The environment still wins when set, so
+# a caller can override without editing anything.
+if [ -z "${WG_HOME_ENDPOINT:-}" ] || [ -z "${WG_HOME_LAN_PREFIX:-}" ]; then
+	_self=$(readlink -f "$0")
+	_shared="$(dirname "$(dirname "$(dirname "$_self")")")/workstation-private/shared/shell.env"
+	# shellcheck disable=SC1090
+	[ -r "$_shared" ] && . "$_shared"
+fi
+
 TUNNEL=wg-home
 ENDPOINT="${WG_HOME_ENDPOINT:-}"        # DynDNS name; its A record IS the home WAN
                                         # IPv4, so it needs no second constant
@@ -27,7 +41,8 @@ PASS=0; FAIL=0; SKIP=0
 
 if [ -z "$ENDPOINT" ] || [ -z "$HOME_LAN" ]; then
 	echo "WG_HOME_ENDPOINT and WG_HOME_LAN_PREFIX must be set." >&2
-	echo "They live in workstation-private/shared/shell.env; open a new shell after adding them." >&2
+	echo "Expected in workstation-private/shared/shell.env, resolved as the sibling of" >&2
+	echo "this repo — is that clone present and pulled?" >&2
 	exit 1
 fi
 
