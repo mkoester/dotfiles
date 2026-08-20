@@ -733,8 +733,12 @@ chmod u+x "$d/bin/ip"
 # plainly there: -q exits on the first hit, and the SIGPIPE that sends back through
 # the function's own trailing `head` loses the result. That reads exactly like a
 # detection bug in the script under test, which is what it was mistaken for.
+# TEST-NET-1/2 (RFC 5737), never the real home subnet: this repo is PUBLIC. The
+# script takes both values from the environment for the same reason, so the test
+# supplies documentation ranges and asserts against those.
 where() {
-	ADDR_FIXTURE="$1" PATH="$d/bin:$PATH" "$VERIFY" 2>/dev/null | head -5
+	ADDR_FIXTURE="$1" WG_HOME_ENDPOINT=endpoint.example \
+		WG_HOME_LAN_PREFIX=192.0.2. PATH="$d/bin:$PATH" "$VERIFY" 2>/dev/null | head -5
 }
 
 printf '%s\n' \
@@ -746,7 +750,7 @@ ok "$(printf '%s' "$out" | grep -q 'HOME LAN' && echo 1 || echo 0)" \
 
 printf '%s\n' \
 	'1: lo    inet 127.0.0.1/8 scope host lo' \
-	'2: wlan0    inet 192.168.43.12/24 brd 192.168.43.255 scope global wlan0' >"$d/away.txt"
+	'2: wlan0    inet 198.51.100.12/24 brd 198.51.100.255 scope global wlan0' >"$d/away.txt"
 out=$(where "$d/away.txt")
 ok "$(printf '%s' "$out" | grep -q 'foreign network' && echo 1 || echo 0)" \
 	'a hotspot address is detected as foreign'
@@ -779,6 +783,18 @@ unbounded=$(grep -vE '^[[:space:]]*#' "$VERIFY" \
 is "$unbounded" "0" 'every network call in wg-home-verify is bounded by a timeout'
 
 rm -rf "$d"
+
+# ── the repo is PUBLIC ────────────────────────────────────────────────────────
+# Private identifiers reached the tracked tree on 2026-08-20 -- a DynDNS name that
+# resolves to the home WAN IP, plus the home subnet -- and were pushed before anyone
+# noticed. Nothing about a passing test suite or a clean diff showed it. This is the
+# cheap check that would have.
+section "public repo hygiene"
+# Each pattern brackets one character so the expression does not match ITSELF in
+# this file -- otherwise the guard reports its own source and needs an exclusion,
+# which would blind it to the fixtures it is meant to police.
+leaked=$(git -C "$REPO" grep -nE 'mkde\.m[e]|\b10\.1[0]\.[0-9]+\.|g[l]\.mk' -- . 2>/dev/null | wc -l)
+is "$leaked" "0" 'no private hostnames or home-LAN addresses in the tracked tree'
 
 printf '\n%d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"
 [ "$FAIL" -eq 0 ]

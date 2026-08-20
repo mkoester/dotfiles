@@ -4,7 +4,7 @@
 # MACHINE THAT RUNS THE TUNNEL. Read-only: it changes nothing.
 #
 # Run it tethered to a phone hotspot, not at home. Half these checks are
-# STRUCTURALLY INCAPABLE of failing on the home LAN, because 192.0.2.0/24 is a
+# STRUCTURALLY INCAPABLE of failing on the home LAN, because the home subnet is a
 # connected route that beats the tunnel (NetworkManager's suppress_prefixlength 0),
 # and `curl -4 ifconfig.me` returns the home WAN IP whether the tunnel is up or
 # down. Three results were misread that way on 2026-08-20 before anyone tethered.
@@ -16,11 +16,20 @@
 
 set -uo pipefail
 
+# This repo is PUBLIC, so the endpoint and the home subnet are NOT hardcoded here.
+# They come from workstation-private/shared/shell.env, which oh-my-zsh-custom/
+# host-env.zsh sources into every interactive shell.
 TUNNEL=wg-home
-ENDPOINT=endpoint.example          # DynDNS A record == the home WAN IPv4, so it is the
-                            # expected value of `curl -4` and needs no hardcoding
-HOME_LAN=192.0.2.
+ENDPOINT="${WG_HOME_ENDPOINT:-}"        # DynDNS name; its A record IS the home WAN
+                                        # IPv4, so it needs no second constant
+HOME_LAN="${WG_HOME_LAN_PREFIX:-}"      # e.g. "192.0.2." — trailing dot, prefix match
 PASS=0; FAIL=0; SKIP=0
+
+if [ -z "$ENDPOINT" ] || [ -z "$HOME_LAN" ]; then
+	echo "WG_HOME_ENDPOINT and WG_HOME_LAN_PREFIX must be set." >&2
+	echo "They live in workstation-private/shared/shell.env; open a new shell after adding them." >&2
+	exit 1
+fi
 
 pass() { printf '\033[1;32m  ok  \033[0m%s\n' "$*"; PASS=$((PASS+1)); }
 fail() { printf '\033[1;31m FAIL \033[0m%s\n' "$*"; FAIL=$((FAIL+1)); }
@@ -120,7 +129,7 @@ if [ "$WHERE" != foreign ]; then
 	skip "IPv4 egress identity (returns the home WAN IP either way from here)"
 	skip "IPv6 egress is blocked (no meaningful IPv6 path to test from here)"
 else
-	# BOUNDED. With the tunnel up, 192.0.2.1 is the exclusive resolver and is only
+	# BOUNDED. With the tunnel up the home resolver is exclusive and is only
 	# reachable THROUGH the tunnel, so an unbounded lookup here blocks forever and the
 	# script looks hung with no output (observed on mkMac2014, 2026-08-20). Every
 	# network call below is bounded for the same reason.

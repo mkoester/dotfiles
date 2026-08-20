@@ -203,8 +203,24 @@ case "$PM" in
 esac
 
 # ══════════════════════════════════════════════════════════════════════════
-step "3/9  Stow base config (git, vscode)"
+step "3/9  Stow base config (git, ssh, vscode)"
 stow_pkg "$HOME" git
+
+# ~/.ssh must EXIST as a real directory before stowing, or stow folds the whole
+# package and makes ~/.ssh itself a symlink into this public repo -- which would
+# put every key path under a tracked tree. Same reason the kanshi step below
+# mkdirs first. 0700 only on creation: never chmod a directory that already
+# exists, since the user may have chosen its mode deliberately.
+[ -d "$HOME/.ssh" ] || run mkdir -p -m 700 "$HOME/.ssh"
+run mkdir -p "$HOME/.ssh/config.d"
+stow_pkg "$HOME" ssh
+# Private host entries (real hostnames, ports, users) from workstation-private --
+# the dotfiles repo is public, so they cannot live in the skeleton.
+if [ -d "$PRIVATE_REPO/shared/ssh" ] && ls "$PRIVATE_REPO/shared/ssh/"*.conf >/dev/null 2>&1; then
+	run_sh "ln -sf \"$PRIVATE_REPO/shared/ssh/\"*.conf \"$HOME/.ssh/config.d/\""
+else
+	info "  no shared ssh entries yet — put host blocks in workstation-private/shared/ssh/*.conf"
+fi
 run mkdir -p "$HOME/.config/Code/User"
 stow_pkg "$HOME/.config" vscode
 run mkdir -p "$HOME/.var/app/com.visualstudio.code/config/Code/User"

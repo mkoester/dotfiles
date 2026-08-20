@@ -23,9 +23,9 @@
 #     connected LAN routes outside the tunnel too. Blocking on-link v6 would be
 #     STRICTER than the v4 path, not more consistent with it.
 #
-# SAFE FOR THE TUNNEL ITSELF. endpoint.example publishes an A record only (`use_ipv6 '0'`
-# in the Flint's ddns config), so the WireGuard endpoint is always reached over
-# IPv4 and cannot be blackholed by this.
+# SAFE FOR THE TUNNEL ITSELF. The endpoint's DynDNS name publishes an A record only
+# (`use_ipv6 '0'` in the router's ddns config), so the WireGuard endpoint is always
+# reached over IPv4 and cannot be blackholed by this.
 #
 # WHY THIS IS NOT A STOW SYMLINK. NetworkManager requires each dispatcher script
 # to be "a regular executable file owned by root … not writable by group or other"
