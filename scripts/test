@@ -261,14 +261,14 @@ if command -v stow >/dev/null 2>&1; then
 
 	stub_pm ''                     # no Noctalia installed — the case that used to be fatal
 	out="$(run_install)"; rc=$?
-	printf '%s' "$out" | grep -q '8/8  Done' && r=1 || r=0
+	printf '%s' "$out" | grep -q '9/9  Done' && r=1 || r=0
 	ok "$r" 'reaches the final step with no Noctalia installed'
 	is "$rc" '0' 'exits 0 with no Noctalia installed'
 	is "$(printf '%s' "$out" | grep -c 'Noctalia is installed')" '0' 'no Noctalia warning when none is installed'
 
 	stub_pm 'noctalia cachyos-hypr-noctalia'
 	out="$(run_install)"; rc=$?
-	printf '%s' "$out" | grep -q '8/8  Done' && r=1 || r=0
+	printf '%s' "$out" | grep -q '9/9  Done' && r=1 || r=0
 	ok "$r" 'reaches the final step with Noctalia installed'
 	is "$rc" '0' 'exits 0 with Noctalia installed'
 	is "$(printf '%s' "$out" | grep -c 'Noctalia is installed')" '1' 'warns when Noctalia is installed alongside DMS'
@@ -647,6 +647,54 @@ before=$(md5sum <"$d/paste.json")
 lift "$d/paste.json" >/dev/null
 is "$(md5sum <"$d/paste.json")" "$before" 'the paste is never modified'
 ok "$([ ! -e "$d/absent.json" ] && echo 1 || echo 0)" 'no deployed file is created'
+
+rm -rf "$d"
+
+# ── wg-home IPv6 leak guard (NetworkManager dispatcher) ────────────────────
+# Driven as the real script with a stubbed `ip` on PATH, since it needs root and a
+# live tunnel otherwise. The stub records its argv; the assertions are on what the
+# script ASKED the kernel to do, not on a return value.
+d="$(mktemp -d "${TMPDIR:?TMPDIR must be set}/wgguard.XXXXXX")"
+GUARD="$REPO/system/networkmanager/50-wg-home-ipv6-guard"
+mkdir -p "$d/bin"
+cat >"$d/bin/ip" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$IP_LOG"
+STUB
+chmod u+x "$d/bin/ip"
+
+guard() {
+	IP_LOG="$d/ip.log" PATH="$d/bin:$PATH" "$GUARD" "$1" "$2" >/dev/null 2>&1
+}
+
+: >"$d/ip.log"; guard wg-home up
+is "$(cat "$d/ip.log")" '-6 route replace blackhole default metric 1' \
+	'up installs the blackhole default route'
+
+: >"$d/ip.log"; guard wg-home down
+is "$(cat "$d/ip.log")" '-6 route del blackhole default metric 1' \
+	'down removes it'
+
+# The guard must ignore every other interface — a wifi up must not blackhole IPv6.
+# This is the assertion that matters most: getting it wrong kills IPv6 permanently.
+: >"$d/ip.log"; guard wlan0 up
+is "$(wc -c <"$d/ip.log")" "0" 'a non-tunnel interface is ignored on up'
+: >"$d/ip.log"; guard wlan0 down
+is "$(wc -c <"$d/ip.log")" "0" 'a non-tunnel interface is ignored on down'
+
+# Actions we do not handle must be inert on the tunnel too (dhcp4-change etc).
+: >"$d/ip.log"; guard wg-home dhcp4-change
+is "$(wc -c <"$d/ip.log")" "0" 'an unhandled action does nothing'
+
+# pre-up/pre-down are handled as well as up/down, so the leak window at activation
+# is closed and a pre-down does not leave the route behind.
+: >"$d/ip.log"; guard wg-home pre-up
+is "$(cat "$d/ip.log")" '-6 route replace blackhole default metric 1' \
+	'pre-up also installs the route'
+
+# Called with no arguments at all it must not act (dispatcher misconfiguration).
+: >"$d/ip.log"; IP_LOG="$d/ip.log" PATH="$d/bin:$PATH" "$GUARD" >/dev/null 2>&1 || true
+is "$(wc -c <"$d/ip.log")" "0" 'no arguments does nothing'
 
 rm -rf "$d"
 

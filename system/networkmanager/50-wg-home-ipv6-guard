@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+#
+# 50-wg-home-ipv6-guard — NetworkManager dispatcher hook closing the IPv6 leak
+# in the wg-home full tunnel.
+#
+# THE PROBLEM. wg_mobile on the Flint 2 is IPv4-only, so the client's
+# AllowedIPs = 0.0.0.0/0 captures nothing of IPv6: on a dual-stack network every
+# IPv6-capable destination — i.e. most large sites — is reached directly over the
+# untrusted uplink, defeating the reason for choosing a full tunnel. Measured
+# 2026-08-20 on a fraenk/Telekom hotspot: `curl -4 ifconfig.me` returned the home
+# WAN IPv4 while `curl -6 ifconfig.me` returned the carrier's own address.
+#
+# THE FIX. While wg-home is up, install a blackhole route for ::/0 at metric 1,
+# which beats the RA-provided default (metric 1024, or ~600 for wifi under NM) and
+# drops IPv6 egress. Traffic falls back to IPv4, which IS tunnelled and verified.
+#
+# WHY A BLACKHOLE ROUTE rather than sysctl net.ipv6.conf.all.disable_ipv6=1:
+#   - Reversible with no address teardown. Disabling drops every v6 address on
+#     every interface, and NM does not reliably redo SLAAC/DHCPv6 on re-enable —
+#     so the machine can end up with no IPv6 until the wifi is reconnected.
+#   - It leaves ON-LINK IPv6 alone, which exactly matches how the IPv4 full tunnel
+#     already behaves: NetworkManager's `suppress_prefixlength 0` rule keeps
+#     connected LAN routes outside the tunnel too. Blocking on-link v6 would be
+#     STRICTER than the v4 path, not more consistent with it.
+#
+# SAFE FOR THE TUNNEL ITSELF. endpoint.example publishes an A record only (`use_ipv6 '0'`
+# in the Flint's ddns config), so the WireGuard endpoint is always reached over
+# IPv4 and cannot be blackholed by this.
+#
+# WHY THIS IS NOT A STOW SYMLINK. NetworkManager requires each dispatcher script
+# to be "a regular executable file owned by root … not writable by group or other"
+# (man NetworkManager-dispatcher). A symlink into this mk-owned repo is rejected,
+# silently, so install.sh copies it to /etc/NetworkManager/dispatcher.d/ as root.
+# Consequence: editing it here does NOT update the live machine — re-run install.sh.
+#
+# It hooks NetworkManager rather than nmcli, so it fires however the tunnel is
+# brought up: nmcli, the DMS network menu, or the GNOME applet.
+#
+# Arguments: $1 = interface name, $2 = action.
+
+set -eu
+
+IFACE="${1:-}"
+ACTION="${2:-}"
+
+TUNNEL=wg-home
+METRIC=1
+
+[ "$IFACE" = "$TUNNEL" ] || exit 0
+
+case "$ACTION" in
+	pre-up|up)
+		# `replace` rather than `add` so a repeated up (reconnect, rekey, or pre-up
+		# followed by up) is a no-op instead of an RTNETLINK "File exists" failure.
+		ip -6 route replace blackhole default metric "$METRIC"
+		;;
+	pre-down|down)
+		# The route may legitimately be absent — a down with no preceding up after a
+		# reboot, or pre-down followed by down. Never fail the dispatcher over it.
+		ip -6 route del blackhole default metric "$METRIC" 2>/dev/null || true
+		;;
+esac

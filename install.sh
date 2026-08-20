@@ -116,7 +116,7 @@ if [ "$PM" = "pacman" ] && ! have paru; then
 fi
 
 # ══════════════════════════════════════════════════════════════════════════
-step "1/8  Install stow"
+step "1/9  Install stow"
 case "$PM" in
 	# paru is the fleet rule for ALL installs. The bootstrap above has already installed or
 	# demanded paru, so `have paru` is true here on every machine that gets this far — the
@@ -132,7 +132,7 @@ case "$PM" in
 esac
 
 # ══════════════════════════════════════════════════════════════════════════
-step "2/8  Base tools"
+step "2/9  Base tools"
 case "$PM" in
 	pacman) pm_install zsh zoxide tmux git git-delta curl wget eza sqlite fzf ;;
 	apt)    pm_install zsh zoxide tmux git git-delta gitk curl wget eza fzf ;;
@@ -203,7 +203,7 @@ case "$PM" in
 esac
 
 # ══════════════════════════════════════════════════════════════════════════
-step "3/8  Stow base config (git, vscode)"
+step "3/9  Stow base config (git, vscode)"
 stow_pkg "$HOME" git
 run mkdir -p "$HOME/.config/Code/User"
 stow_pkg "$HOME/.config" vscode
@@ -211,7 +211,7 @@ run mkdir -p "$HOME/.var/app/com.visualstudio.code/config/Code/User"
 stow_pkg "$HOME/.var/app/com.visualstudio.code/config" vscode
 
 # ══════════════════════════════════════════════════════════════════════════
-step "4/8  oh-my-zsh + theme + plugins"
+step "4/9  oh-my-zsh + theme + plugins"
 if [ ! -d "$HOME/.oh-my-zsh" ]; then
 	run_sh 'sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended'
 else
@@ -245,7 +245,7 @@ link_omz oh-my-zsh-custom host-env.zsh
 link_omz oh-my-zsh-custom macos.zsh
 
 # ══════════════════════════════════════════════════════════════════════════
-step "5/8  update-os alias for this distro"
+step "5/9  update-os alias for this distro"
 case "$PM" in
 	pacman) UPDATE_OS=arch ;;
 	apt)    UPDATE_OS=apt ;;
@@ -264,7 +264,7 @@ if [ "$PM" = brew ]; then
 fi
 
 # ══════════════════════════════════════════════════════════════════════════
-step "6/8  Host-class options"
+step "6/9  Host-class options"
 
 # Wayland desktop, compositor-agnostic (works under Niri, labwc, …): notifications, kanshi,
 # waybar unit, ydotool, terminals, flatpak+Flathub. Niri itself is a SEPARATE question below —
@@ -897,7 +897,39 @@ fi
 save_answers
 
 # ══════════════════════════════════════════════════════════════════════════
-step "7/8  Default shell"
+step "7/9  WireGuard IPv6 leak guard"
+# The wg-home full tunnel is IPv4-only (wg_mobile has no IPv6 address), so with
+# AllowedIPs = 0.0.0.0/0 every IPv6-capable destination still goes out over the local
+# uplink. This dispatcher hook blackholes ::/0 while the tunnel is up. Full reasoning
+# in the script's header; measured on a hotspot 2026-08-20.
+#
+# Gated on NetworkManager being present, NOT on the wg-home connection existing. That
+# is deliberate and differs from the `have herdr` gate above: the guard has to be in
+# place BEFORE the tunnel is first used, or the very first connection leaks — exactly
+# the silent failure it exists to prevent. The script is inert on a machine with no
+# wg-home interface, so installing it early costs nothing.
+#
+# Copied as root rather than stowed: NetworkManager ignores dispatcher scripts that
+# are symlinks or are not root-owned (man NetworkManager-dispatcher).
+if have nmcli; then
+	NM_DISPATCH=/etc/NetworkManager/dispatcher.d
+	NM_GUARD_SRC="$DOTFILES_REPO/system/networkmanager/50-wg-home-ipv6-guard"
+	NM_GUARD_DST="$NM_DISPATCH/50-wg-home-ipv6-guard"
+	if [ -d "$NM_DISPATCH" ]; then
+		if cmp -s "$NM_GUARD_SRC" "$NM_GUARD_DST" 2>/dev/null; then
+			info "  wg-home IPv6 guard already current"
+		else
+			run_sh "sudo install -m 0755 -o root -g root \"$NM_GUARD_SRC\" \"$NM_GUARD_DST\""
+		fi
+	else
+		warn "NetworkManager present but $NM_DISPATCH missing — IPv6 guard not installed"
+	fi
+else
+	info "no NetworkManager — skipping the wg-home IPv6 guard"
+fi
+
+# ══════════════════════════════════════════════════════════════════════════
+step "8/9  Default shell"
 ZSH_BIN="$(command -v zsh || true)"
 if [ -n "$ZSH_BIN" ] && [ "${SHELL:-}" != "$ZSH_BIN" ]; then
 	if [ "$PM" = "brew" ] && ! grep -qxF "$ZSH_BIN" /etc/shells 2>/dev/null; then
@@ -909,7 +941,7 @@ else
 fi
 
 # ══════════════════════════════════════════════════════════════════════════
-step "8/8  Done"
+step "9/9  Done"
 info "Open a new shell (or 'exec zsh') to load everything."
 # Must be an `if`, not `[ … ] && info …`: as the LAST command in the script its status becomes
 # the script's, so the `&&` form made a real (non-dry) run exit 1 after doing everything
