@@ -655,9 +655,30 @@ if ask_yn DF_DMS "DankMaterialShell (DMS) desktop shell?"; then
 		if [ -n "$noctalia_pkgs" ]; then
 			warn "Noctalia is installed alongside DMS: $noctalia_pkgs"
 			warn "  Two shells means two idle daemons, two lock clients and two polkit agents."
-			warn "  Remove it BY HAND — mark the shared packages explicit first, or -Rns takes them:"
-			warn "    sudo pacman -D --asexplicit brightnessctl grim slurp wl-clipboard qt6ct satty"
-			warn "    sudo pacman -Rns cachyos-hypr-noctalia   # then READ the list before confirming"
+			# NAME WHAT WAS FOUND, NOT A FIXED PACKAGE. This printed a hardcoded
+			# `-Rns cachyos-hypr-noctalia` until 2026-08-22, when mkDesktop turned out to carry
+			# the BARE `noctalia` AUR package and no meta package at all — so the one command the
+			# warning existed to hand over failed with `target not found`, on the machine it had
+			# just correctly diagnosed. The detection was already general (it matches five
+			# spellings); only the advice was not.
+			#
+			# The two cases need different advice, which is why they are separate branches rather
+			# than one interpolated line. A meta package is the edition's whole settings package
+			# and its dependency list carries things this setup uses, hence the --asexplicit
+			# guard. A bare `noctalia` depends on nothing but system libraries: measured on
+			# mkDesktop, `pacman -Rs --print noctalia` listed exactly one package, with
+			# dms-shell-hyprland (3), ghostty (3) and thunderbird (2) as the control proving the
+			# flag does show a cascade when there is one.
+			case "$noctalia_pkgs" in
+				*cachyos-*)
+					warn "  Remove it BY HAND — mark the shared packages explicit first, or -Rns takes them:"
+					warn "    sudo pacman -D --asexplicit brightnessctl grim slurp wl-clipboard qt6ct satty"
+					warn "    sudo pacman -Rns $noctalia_pkgs  # then READ the list before confirming" ;;
+				*)
+					warn "  Remove it BY HAND — check the cascade first, then confirm:"
+					warn "    pacman -Rs --print $noctalia_pkgs"
+					warn "    sudo pacman -Rns $noctalia_pkgs" ;;
+			esac
 			warn "  See Workstation-Documentation/hardware/intel-mac-cachyos.md (Noctalia section)."
 		fi
 	fi
