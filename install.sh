@@ -514,12 +514,41 @@ if ask_yn DF_DMS "DankMaterialShell (DMS) desktop shell?"; then
 	# nothing is stowed here — only the directory the Hyprland config require()s from.
 	if [ "$DF_HYPR_ON" = 1 ]; then
 		run mkdir -p "$HOME/.config/hypr/dms"
-		info "deploy the DMS fragments yourself, in a TTY (they prompt for compositor + terminal):"
-		info "  dms setup binds && dms setup colors && dms setup layout && dms setup cursor"
-		info "  dms setup windowrules && dms setup outputs"
-		# Plain `dms setup` writes hyprland.lua itself — which is the tracked stow symlink, so it
-		# would either fail or replace the repo's file. Only the per-fragment subcommands are safe.
-		info "NOT plain 'dms setup' — it wants to write hyprland.lua, which is a stow symlink."
+		# THE WITNESS IS binds.lua, NOT THE DIRECTORY — the mkdir above creates the directory on
+		# every run, and DMS itself regenerates `layout.lua` and `windowrules.lua` at each shell
+		# start. So a populated-looking `dms/` proves nothing: on mkDesktop (2026-08-22) it held
+		# exactly those two files while binds/colors/cursor had never been deployed. `binds.lua`
+		# comes ONLY from the interactive `dms setup binds`, which is what makes it the one file
+		# whose absence means the step was skipped.
+		#
+		# This used to be three `info` lines printed unconditionally, i.e. advice in the middle of
+		# a hundred other lines — and it was duly skipped on the mkDesktop cutover. The symptom is
+		# silent and reads as a broken desktop rather than a missing step: the skeleton's fallback
+		# bind block (hyprland.lua:571) covers close/float/fullscreen/focus/workspaces, so the
+		# machine feels *mostly* fine while spotlight and every media/brightness key do nothing.
+		if [ -f "$HOME/.config/hypr/dms/binds.lua" ]; then
+			info "  dms: bind fragment present (~/.config/hypr/dms/binds.lua)"
+		else
+			warn "DMS BIND FRAGMENT MISSING — SUPER+space (spotlight) and the media/brightness"
+			warn "  keys will NOT work until this is done. The subcommands prompt for compositor"
+			warn "  and terminal, so they need a TTY and cannot be run from this script:"
+			warn ""
+			warn "      dms setup binds"
+			warn "      dms setup colors"
+			warn "      dms setup cursor"
+			warn "      hyprctl reload"
+			warn ""
+			warn "  verify (0 means it is still missing):"
+			warn "      hyprctl -j binds | grep -ci XF86Audio"
+			# Plain `dms setup` writes hyprland.lua itself — which is the tracked stow symlink, so
+			# it would either fail or replace the repo's file. Only the per-fragment subcommands
+			# are safe; verified on three machines that they touch `dms/` only.
+			warn "  NOT plain 'dms setup' — it writes hyprland.lua, which is a stow symlink."
+			# `layout`/`windowrules` are omitted deliberately: DMS regenerates both on every start.
+			# `outputs` is omitted for a different reason — monitors are per-machine and live in
+			# workstation-private's local.lua, which loads later and wins, so deploying DMS's
+			# version only creates a second writer of the same setting.
+		fi
 	fi
 	# `dms setup alttab` is niri-only (per `dms setup --help`), so it is mentioned only here.
 	if [ "$DF_NIRI_ON" = 1 ]; then
