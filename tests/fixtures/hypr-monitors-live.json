@@ -1,0 +1,7 @@
+[
+ {"id":0,"name":"DP-1","make":"Contoso","model":"CX2701","serial":"SN-RIGHT-0003","width":2560,"height":1440,"refreshRate":59.95100,"x":6400,"y":0,"scale":1.0,"transform":0,"disabled":false},
+ {"id":1,"name":"DP-2","make":"Contoso","model":"CX2701","serial":"SN-LEFT-0001","width":2560,"height":1440,"refreshRate":59.95100,"x":0,"y":0,"scale":1.0,"transform":0,"disabled":false},
+ {"id":2,"name":"HDMI-A-1","make":"Contoso","model":"CX4001","serial":"SN-MID-0002","width":3840,"height":2160,"refreshRate":59.99700,"x":2560,"y":0,"scale":1.0,"transform":0,"disabled":false},
+ {"id":3,"name":"HDMI-A-2","make":"Acme","model":"Beamer","serial":"SN-PROJ-0009","width":1920,"height":1080,"refreshRate":60.0,"x":0,"y":0,"scale":1.5,"transform":1,"disabled":true},
+ {"id":4,"name":"eDP-1","make":"","model":"","serial":"","width":1440,"height":900,"refreshRate":60.0,"x":8960,"y":0,"scale":1.0,"transform":0,"disabled":false}
+]

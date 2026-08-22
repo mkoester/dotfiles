@@ -31,6 +31,7 @@ local mod  = "SUPER"
 --
 --     herdr      -> mk.herdr        (login autostart, bottom of this file)
 --     hyprbinds  -> mk.hyprbinds    (cheat sheet, below)
+--     monitors   -> mk.monitors     (kanshi layout picker, SUPER+P)
 --     git        -> mk.git          (gitaw, mkDell/hypr/local.lua)
 --     switcher   -> mk.switcher     (ALT+TAB MRU window switcher, below)
 --
@@ -375,13 +376,36 @@ hl.bind(mod .. " + SHIFT + ALT + M", hl.dsp.window.move({ workspace = ws_chat })
         { description = "Move window to `chat`" })
 
 -- Monitor layout (kanshi profiles; define them in the kanshi package's config.d/).
--- Note DMS binds SUPER+P to its own output profile cycling — related but a different
--- mechanism; kanshi stays the source of truth for multi-monitor arrangements here.
+--
+-- SUPER+P opens `hypr-monitors`, a popup listing every kanshi profile this machine defines
+-- (MK, 2026-08-22: "I'd rather have one shortcut and a popup menu"). It is name-agnostic —
+-- it reads the config — whereas the two binds below hardcode profile names that only exist
+-- where a machine happens to define them. Prefer the menu; D/S are kept as direct shortcuts.
+--
+-- SUPER+P IS FREE — no unbind needed. This comment used to say "DMS binds SUPER+P to its own
+-- output profile cycling"; that is FALSE, measured 2026-08-22 by extracting DMS's own bind
+-- template from the shipped binary (`strings -a $(command -v dms) | grep 'hl.bind'`), which
+-- contains no P binding at all. It mattered: binds ACCUMULATE rather than replace, so a
+-- believed-taken key invites a needless unbind, and a genuinely taken one fires both actions.
+--
+-- DMS *does* have its own display-profile system (SettingsData.displayProfiles, reachable as
+-- `dms ipc call outputs listProfiles|setProfile`, and two registry plugins front-end it). It is
+-- deliberately NOT adopted: those profiles live in settings.json, which this fleet deploys
+-- read-only and fleet-wide, so per-machine geometry could not persist there. kanshi stays the
+-- source of truth for multi-monitor arrangements.
 -- Moved off SUPER+SHIFT+D/S on 2026-08-10 to free the S pair for the named workspaces
 -- above; SUPER+ALT+D and SUPER+ALT+S were both unbound (the ALT layer holds the scrolling
 -- motions, which use C/F/comma/period/brackets/L only).
 hl.bind(mod .. " + ALT + D", hl.dsp.exec_cmd("kanshictl switch docked"), { description = "Monitors: docked" })
 hl.bind(mod .. " + ALT + S", hl.dsp.exec_cmd("kanshictl switch solo"),   { description = "Monitors: solo" })
+
+-- ABSOLUTE PATH, as with the cheat sheet and the messengers script: ~/.local/bin is on PATH
+-- only for INTERACTIVE shells, and a compositor-spawned process is not one — a bare name would
+-- fail to exec, the terminal would close instantly, and the bind would look dead with no error.
+local monitors = os.getenv("HOME") .. "/.local/bin/hypr-monitors"
+hl.bind(mod .. " + P",
+        hl.dsp.exec_cmd("ghostty --class=mk.monitors -e " .. monitors .. " --fzf"),
+        { description = "Monitors: pick a layout" })
 
 -- Keybind cheat sheet, on DMS's own cheat-sheet key. TAKEN DELIBERATELY (MK, 2026-08-10) via
 -- unbind, because ours strictly supersedes it: DMS renders its OWN static bind list and cannot
@@ -733,6 +757,11 @@ hl.window_rule({ match = { class = "mk.herdr" }, workspace = ws.herdr })
 -- here. That is still not proportional to the monitor, but it does track the font size.
 hl.window_rule({ match = { class = "mk.hyprbinds" }, float = true })
 hl.window_rule({ match = { class = "mk.hyprbinds" }, size = { 900, 1000 } })
+
+-- The monitor-layout picker, same shape as the cheat sheet: floating, on the current
+-- workspace. Small — it lists a handful of profiles, not ~150 binds.
+hl.window_rule({ match = { class = "mk.monitors" }, float = true })
+hl.window_rule({ match = { class = "mk.monitors" }, size = { 900, 420 } })
 
 -- The MRU switcher, same shape as the cheat sheet: floating, on the CURRENT workspace (no
 -- `workspace` field — it must appear where you are, and it is where you leave from). Smaller,

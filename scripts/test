@@ -410,6 +410,120 @@ fi
 # Drive it against a STUB `gita` on PATH instead: that exercises the real
 # function end to end — the fake HOME, the glob, the group choice — and records
 # the exact argv it would have issued.
+section 'hypr-monitors — kanshi layout picker'
+HM="$REPO/config-stow/hypr/.local/bin/hypr-monitors"
+if ! command -v python3 >/dev/null 2>&1; then
+	skip 'hypr-monitors' 'python3 not installed'
+else
+	hm() { python3 "$HM" --config "$REPO/tests/fixtures/hypr-monitors-kanshi.conf" "$@"; }
+	gen() { python3 "$HM" --save "$1" --dry-run \
+		--monitors-json "$REPO/tests/fixtures/hypr-monitors-live.json"; }
+
+	# READING THE CONFIG -------------------------------------------------------------------
+	# The include is expanded IN PLACE, so an included profile is parsed BEFORE the ones below
+	# it. kanshi applies the first match, so the included `docked` must win and the DP-9 one in
+	# the parent file must be invisible. This is the bug that made the real machine apply a
+	# generic 2-output profile instead of its own 3-output one.
+	is "$(hm --list | grep -c '^docked')" '1' 'a shadowed duplicate profile is dropped'
+	is "$(hm --list | grep '^docked' | grep -c 'DP-9')" '0' 'the FIRST definition of a name wins'
+
+	# The summary must read left-to-right by x, NOT in config order. The fixture lists the
+	# outputs right, left, centre precisely so an unsorted reader produces a different chain.
+	is "$(hm --list | grep '^docked' | cut -f2)" '3 screens  CX2701 -> CX4001 -> CX2701  (1 off)' \
+		'enabled outputs are summarised left to right by position'
+
+	# Disabled outputs are counted, not chained -- otherwise `solo` would read as 3 screens.
+	is "$(hm --list | grep '^solo' | cut -f2)" '1 screen  CX4001  (2 off)' \
+		'disabled outputs are counted separately'
+
+	# An unnamed profile is legal kanshi (kanshi(5)); it must not vanish or crash the reader.
+	is "$(hm --list | grep -c 'unnamed')" '1' 'an anonymous profile is listed with a placeholder name'
+
+	# Colour is opt-in for the same reason as the other two scripts: the greps above must match
+	# text, and fzf gets --ansi.
+	is "$(hm --list | grep -c $'\033')" '0' 'piped output carries no ANSI escapes'
+
+	# CAPTURING A LAYOUT -------------------------------------------------------------------
+	# Comments MUST be on their own line. kanshi rejects a trailing `#` on an output line with
+	# "unknown directive '#'", which invalidates the whole config -- and our own reader happily
+	# accepts the trailing form, so only this assertion (or kanshi itself) catches it.
+	is "$(gen demo | grep -cE '^\s*output .*#')" '0' 'no output line carries a trailing comment'
+
+	# Outputs are emitted left to right, and the disabled one goes last.
+	is "$(gen demo | grep -E '^\s*output' | head -1 | grep -c 'SN-LEFT-0001')" '1' \
+		'the leftmost output is emitted first'
+	is "$(gen demo | grep -E '^\s*output' | tail -1 | grep -c 'disable')" '1' \
+		'disabled outputs are emitted last'
+
+	# A monitor with no make/model/serial (a laptop panel often reports none) must fall back to
+	# its connector name. Building "  " from three empty fields would match NOTHING, silently.
+	is "$(gen demo | grep -c '"eDP-1" enable')" '1' 'an output with no EDID strings falls back to its connector'
+
+	# The captured profile has to be valid kanshi input. This is the only assertion that tests
+	# the real parser rather than our model of it -- it is what caught the trailing-comment bug.
+	if command -v kanshi >/dev/null 2>&1; then
+		kd="$(work)"
+		gen demo > "$kd/captured.conf"
+		# kanshi cannot reach a display in CI or in the sandbox, so "failed to connect to
+		# display" is SUCCESS here: it means parsing got all the way through. A parse error
+		# prints instead and never reaches the display stage.
+		is "$(kanshi -c "$kd/captured.conf" 2>&1 | grep -c 'failed to parse')" '0' \
+			'a captured profile parses as real kanshi config'
+		# Control: prove that check can fail, or the assertion above is worthless.
+		sed 's/^profile demo {/profile demo /' "$kd/captured.conf" > "$kd/broken.conf"
+		is "$(kanshi -c "$kd/broken.conf" 2>&1 | grep -c 'failed to parse')" '1' \
+			'...and a deliberately broken profile does NOT parse'
+		rm -rf "$kd"
+	else
+		skip 'hypr-monitors kanshi parse' 'kanshi not installed'
+	fi
+
+	# THE POPUP'S KEYS ---------------------------------------------------------------------
+	# fzf needs a tty, and kanshictl/dms need sockets the sandbox blocks — so all three are
+	# stubbed on PATH. That exercises the REAL script end to end (argument building, output
+	# parsing, branching) rather than a re-implementation of its logic here.
+	sd="$(work)"; mkdir -p "$sd/bin"
+	printf '#!/bin/sh\necho "kanshictl $*" >> "$STUB_LOG"\n' > "$sd/bin/kanshictl"
+	printf '#!/bin/sh\necho "dms $*" >> "$STUB_LOG"\n' > "$sd/bin/dms"
+	# fzf with --print-query --expect prints: query, key, selection.
+	printf '#!/bin/sh\ncat > /dev/null\nprintf "%%s\\n" "$STUB_QUERY" "$STUB_KEY" "$STUB_PICK"\n' \
+		> "$sd/bin/fzf"
+	chmod u+x "$sd/bin/kanshictl" "$sd/bin/dms" "$sd/bin/fzf"
+	pop() {  # pop <query> <key> <pick>
+		STUB_LOG="$sd/log" STUB_QUERY="$1" STUB_KEY="$2" STUB_PICK="$3" \
+		PATH="$sd/bin:$PATH" python3 "$HM" --fzf \
+			--config "$REPO/tests/fixtures/hypr-monitors-kanshi.conf" \
+			--monitors-json "$REPO/tests/fixtures/hypr-monitors-live.json" 2>&1
+	}
+
+	: > "$sd/log"; pop '' '' "$(printf 'solo\tx')" >/dev/null
+	is "$(cat "$sd/log")" 'kanshictl switch solo' 'ENTER switches to the highlighted profile'
+
+	: > "$sd/log"; pop '' ctrl-e '' >/dev/null
+	# The tab id and the `openWith` verb come from DMS's IPC handler, not from guessing — a
+	# wrong tab silently opens nothing, so assert the exact call.
+	is "$(cat "$sd/log")" 'dms ipc call settings openWith displays' \
+		'CTRL-E opens the DMS Displays page'
+
+	# Only throwaway profiles are deletable from the popup: removing a committed per-machine
+	# profile by keypress would be a surprising edit to a tracked file.
+	: > "$sd/log"; out="$(pop '' ctrl-x "$(printf 'docked\tx')")"
+	is "$(printf '%s' "$out" | grep -c 'not a temporary profile')" '1' \
+		'CTRL-X refuses a non-temporary profile'
+	is "$(cat "$sd/log")" '' '…and touches kanshi not at all'
+
+	# CTRL-S names the new profile from what was TYPED, so an empty query has nothing to name it.
+	is "$(pop '' ctrl-s '' | grep -c 'type one first')" '1' 'CTRL-S with no typed name is refused'
+	is "$(pop 'bad name' ctrl-s '' | grep -c 'ERROR')" '1' 'CTRL-S rejects an unusable name'
+	rm -rf "$sd"
+
+	# A name that is not a bare identifier would produce a file name or a profile name kanshi
+	# cannot use; refuse rather than write something unusable.
+	is "$(python3 "$HM" --save 'bad name' --dry-run \
+		--monitors-json "$REPO/tests/fixtures/hypr-monitors-live.json" 2>&1 \
+		| grep -c 'ERROR')" '1' 'a profile name with a space is refused'
+fi
+
 section "gitar"
 if command -v zsh >/dev/null 2>&1; then
 	d="$(work)"
@@ -820,6 +934,47 @@ section "public repo hygiene"
 # which would blind it to the fixtures it is meant to police.
 leaked=$(git -C "$REPO" grep -nE 'mkde\.m[e]|\b10\.1[0]\.[0-9]+\.|g[l]\.mk' -- . 2>/dev/null | wc -l)
 is "$leaked" "0" 'no private hostnames or home-LAN addresses in the tracked tree'
+
+# MONITOR SERIALS. These cannot be listed here -- writing them into this public file is exactly
+# the leak being prevented -- so they are read from the PRIVATE repo when it is cloned beside
+# this one, and every one of them is grepped for in the tracked tree.
+#
+# This exists because it actually happened (2026-08-22): the hypr-monitors test fixtures were
+# built by copying a real three-monitor layout, putting ten real serials into a public repo.
+# The check above passed throughout, because a serial is neither a hostname nor an address.
+#
+# SCOPE: `git grep` searches TRACKED content only. That is the right scope -- only tracked
+# content can be committed -- but it means a leak sitting in an untracked file is invisible
+# here until it is staged. Verified while building this: planting a serial in an unstaged
+# fixture left the suite green, and staging the same file turned it red.
+priv="$(dirname "$REPO")/workstation-private"
+if [ -d "$priv" ]; then
+	# kanshi matches on "Make Model Serial", so the serial is the last field of each match
+	# string. Pull those, not whole lines, or the grep below matches make/model words too.
+	serials="$(grep -rhoE '^[[:space:]]*output "[^"]+"' "$priv" 2>/dev/null \
+		| sed -E 's/.*[[:space:]]([^"[:space:]]+)"$/\1/' | sort -u | grep -E '^[A-Za-z0-9-]{4,}$')"
+	if [ -n "$serials" ]; then
+		hits=0
+		while IFS= read -r sn; do
+			[ -z "$sn" ] && continue
+			n=$(git -C "$REPO" grep -F -c -- "$sn" -- . 2>/dev/null | wc -l)
+			hits=$((hits + n))
+		done <<< "$serials"
+		is "$hits" '0' 'no monitor serial from the private repo appears in the tracked tree'
+
+		# Control: the search must be able to FIND a serial, or the assertion above passes
+		# for the trivial reason that it is looking for nothing. Take one real serial and
+		# require it to appear in the private repo it was just extracted from.
+		first="$(printf '%s\n' "$serials" | head -1)"
+		found=$(grep -rl -F -- "$first" "$priv" 2>/dev/null | wc -l | tr -d ' ')
+		ok "$([ "$found" -gt 0 ] && echo 1 || echo 0)" \
+			'...and the serial grep is non-vacuous (it finds one in the private repo)'
+	else
+		skip 'monitor serial leak check' 'no "Make Model Serial" outputs in the private repo'
+	fi
+else
+	skip 'monitor serial leak check' 'workstation-private not cloned beside this repo'
+fi
 
 # COMMIT MESSAGES TOO. The tracked-tree check above searches blobs, so it is
 # structurally incapable of seeing a message -- which is how the 2026-08-20 scrub

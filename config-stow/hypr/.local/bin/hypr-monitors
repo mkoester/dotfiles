@@ -1,0 +1,453 @@
+#!/usr/bin/env python3
+"""hypr-monitors — one keybind, one popup, pick a screen layout.
+
+    hypr-monitors [--list] [--fzf]
+
+Launched from a keybind as a floating ghostty (see hyprland.lua, SUPER+P). Lists the kanshi
+profiles this machine defines and runs `kanshictl switch <name>` on the one you pick.
+
+WHY A SCRIPT RATHER THAN A PLUGIN (decided 2026-08-22)
+-----------------------------------------------------
+The DMS plugin registry (318 entries) has TWO plugins doing exactly this UX -- `displayProfile`
+(a keyboard-driven modal) and `displayProfileManager` (a bar widget) -- and NO kanshi plugin at
+all (grepped, with `battery`/`clipboard`/`weather` as controls proving the search works).
+
+Both are front-ends for the same backend, and that backend is the problem. `displayProfile`'s
+README says it reads `monitorv2` profiles from `hyprland.conf`; its source does not -- it calls
+`dms ipc call outputs listProfiles|setProfile`, which reads `DisplayConfigState.validatedProfiles`,
+backed by `SettingsData.displayProfiles` (Common/SettingsData.qml:970). That is **settings.json**
+-- the file this fleet deploys READ-ONLY (0444) and FLEET-WIDE from shared/dms/base.json.
+
+So adopting either plugin means (a) monitor layout stops being kanshi's job, contradicting the
+convention hyprland.lua states explicitly, and (b) per-machine monitor geometry has to live in a
+shared read-only file, where the GUI cannot persist it anyway. This script keeps kanshi as the
+single source of truth and costs one keybind.
+
+WHY IT PARSES THE CONFIG INSTEAD OF ASKING KANSHI
+-------------------------------------------------
+`kanshictl` has exactly three commands -- reload, switch, status -- and NO way to list profiles.
+So the names have to come from the config files, which means reproducing kanshi's own include
+handling: the public skeleton's first statement is `include ~/.config/kanshi/config.d/*`, and the
+private per-machine profiles live behind it.
+
+That include is also a trap worth knowing about, because it is why kanshi silently did not run on
+mkDesktop at all: kanshi treats an include whose glob matches NOTHING as a hard PARSE ERROR, not
+as an empty include. A machine with no private overlay has only a dot-prefixed `.gitkeep` in
+config.d/, which `*` does not match, so kanshi exits at startup -- no daemon, no profiles, and
+the switch binds silently dead. This script reports that state rather than showing an empty menu,
+because "no profiles" and "kanshi is not running" need different fixes.
+
+ORDER MATTERS AND IS PRESERVED. kanshi applies the FIRST profile whose outputs all match, so a
+name defined in config.d/ (parsed first) shadows a same-named one in the skeleton. The menu lists
+them in kanshi's own order and keeps the first definition of each name, so what you see is what
+kanshi would pick.
+"""
+
+import argparse
+import glob as globmod
+import io
+import json
+import os
+import re
+import subprocess
+import sys
+
+KANSHI_CONFIG = os.path.expanduser("~/.config/kanshi/config")
+
+PROFILE_RE = re.compile(r"^\s*profile\s+([^\s{]+)?\s*\{")
+OUTPUT_RE = re.compile(
+    r"""^\s*output\s+
+        (?: "(?P<q>[^"]+)" | (?P<b>\S+) )      # "Make Model Serial" or a bare connector
+        \s*(?P<rest>.*)$""",
+    re.VERBOSE,
+)
+POSITION_RE = re.compile(r"\bposition\s+(-?\d+),(-?\d+)")
+
+
+def read_config(path, _seen=None):
+    """Yield (source_path, line) for a kanshi config, expanding `include <glob>` as kanshi does.
+
+    Includes are expanded IN PLACE, so the resulting line order is kanshi's parse order --
+    which is what decides profile precedence. _seen guards against an include cycle, which
+    kanshi itself would loop on.
+    """
+    _seen = _seen if _seen is not None else set()
+    real = os.path.realpath(path)
+    if real in _seen or not os.path.isfile(path):
+        return
+    _seen.add(real)
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            stripped = line.strip()
+            if stripped.startswith("include "):
+                pattern = os.path.expanduser(stripped[len("include "):].strip().strip('"'))
+                # A RELATIVE include resolves against the INCLUDING FILE's directory, not the
+                # process cwd -- otherwise the same config reads differently depending on where
+                # you happen to run from, which is a silent wrong answer rather than an error.
+                if not os.path.isabs(pattern):
+                    pattern = os.path.normpath(
+                        os.path.join(os.path.dirname(os.path.abspath(path)), pattern))
+                for match in sorted(globmod.glob(pattern)):
+                    yield from read_config(match, _seen)
+            else:
+                yield path, line
+
+
+def parse_profiles(path=KANSHI_CONFIG):
+    """Return [(name, source, [(output, enabled, position_or_None)])] in kanshi's parse order."""
+    profiles, current, anonymous = [], None, 0
+    for source, line in read_config(path):
+        if line.lstrip().startswith("#"):
+            continue
+        match = PROFILE_RE.match(line)
+        if match:
+            name = match.group(1)
+            if not name:
+                anonymous += 1
+                name = f"(unnamed {anonymous})"
+            current = (name, source, [])
+            profiles.append(current)
+            continue
+        if current is None:
+            continue
+        if line.strip().startswith("}"):
+            current = None
+            continue
+        match = OUTPUT_RE.match(line)
+        if match:
+            output = match.group("q") or match.group("b")
+            rest = match.group("rest")
+            enabled = "disable" not in rest
+            pos = POSITION_RE.search(rest)
+            current[2].append((output, enabled, f"{pos.group(1)},{pos.group(2)}" if pos else None))
+
+    # kanshi applies the first match, so a shadowed redefinition is unreachable -- drop it.
+    seen, unique = set(), []
+    for name, source, outputs in profiles:
+        if name in seen:
+            continue
+        seen.add(name)
+        unique.append((name, source, outputs))
+    return unique
+
+
+def label(output):
+    """A human label for a kanshi output match string.
+
+    Per-machine profiles match on "Make Model Serial" because two panels of the SAME MODEL are
+    distinguishable only by serial -- but a serial is meaningless in a menu, so show the model
+    (the second-to-last token) and let POSITION disambiguate the duplicates. A bare connector
+    (DP-1) is already human-readable and is used as-is.
+    """
+    parts = output.split()
+    return parts[-2] if len(parts) >= 2 else output
+
+
+def summarise(outputs):
+    """One line describing a profile, read LEFT TO RIGHT as the screens physically sit.
+
+    Sorting by x is what makes two identical models legible: "PL3270Q -> PL4071UH -> PL3270Q"
+    tells you the big screen is in the middle, which the config's own order does not.
+    """
+    on = [(o, p) for o, e, p in outputs if e]
+    off = [o for o, e, _ in outputs if not e]
+
+    def x_of(pos):
+        try:
+            return int(pos.split(",")[0])
+        except (AttributeError, ValueError):
+            return 0
+
+    on.sort(key=lambda op: x_of(op[1]))
+    chain = " -> ".join(label(o) for o, _ in on)
+    count = f"{len(on)} screen" + ("s" if len(on) != 1 else "")
+    text = f"{count}  {chain}" if chain else "nothing enabled"
+    if off:
+        text += f"  ({len(off)} off)"
+    return text
+
+
+def is_temp(source):
+    return os.path.basename(source).startswith(TEMP_PREFIX)
+
+
+def render(profiles, color=False):
+    """One row per profile. Temporary ones are marked, so a throwaway is never mistaken for
+    a committed per-machine profile."""
+    if not color:
+        return "".join(f"{n}\t{summarise(o)}{' [temp]' if is_temp(src) else ''}\n"
+                       for n, src, o in profiles)
+    lines = []
+    for name, src, outputs in profiles:
+        tag = " \x1b[33m[temp]\x1b[0m" if is_temp(src) else ""
+        lines.append(f"\x1b[1;32m{name}\x1b[0m\t\x1b[2m{summarise(outputs)}\x1b[0m{tag}\n")
+    return "".join(lines)
+
+
+def kanshi_running():
+    """kanshi's socket in $XDG_RUNTIME_DIR is file-based evidence and needs no Wayland access."""
+    runtime = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+    return bool(globmod.glob(os.path.join(runtime, "*kanshi*")))
+
+
+TEMP_DIR = os.path.expanduser("~/.config/kanshi/config.d")
+TEMP_PREFIX = "90-temp-"
+
+
+def live_monitors(json_file=None):
+    """Current outputs as [(match_string, enabled, x, y, scale, transform, mode_note)].
+
+    Field names taken from Hyprland's own JSON format strings in the shipped binary
+    (`strings -a $(command -v Hyprland)`), not from memory: name, description, make, model,
+    serial, width, height, refreshRate, x, y, scale, transform, disabled.
+
+    `monitors all` rather than `monitors`, because the plain form omits DISABLED outputs — and
+    a profile that does not mention an output leaves it however it was, so a captured "this
+    screen is off" state would silently not reproduce.
+    """
+    if json_file:
+        raw = io.open(json_file, encoding="utf-8").read()
+    else:
+        raw = subprocess.run(["hyprctl", "-j", "monitors", "all"],
+                             capture_output=True, text=True, check=True).stdout
+    out = []
+    for m in json.loads(raw):
+        # kanshi matches on "Make Model Serial". Fall back to the connector when any part is
+        # missing: a match string with an empty field would match nothing, silently.
+        make, model, serial = m.get("make", ""), m.get("model", ""), m.get("serial", "")
+        match = " ".join(x for x in (make, model, serial) if x) if all((make, model, serial)) \
+            else m.get("name", "")
+        out.append({
+            "match": match,
+            "connector": m.get("name", ""),
+            "enabled": not m.get("disabled", False),
+            "x": m.get("x", 0), "y": m.get("y", 0),
+            "scale": m.get("scale", 1),
+            "transform": m.get("transform", 0),
+            "mode": f'{m.get("width")}x{m.get("height")}@{m.get("refreshRate", 0):.5f}',
+        })
+    return out
+
+
+def render_profile(name, monitors):
+    """A kanshi profile block reproducing the given layout.
+
+    MODE IS DELIBERATELY NOT WRITTEN, only recorded as a comment. kanshi requires a mode to
+    match EXACTLY, and a near-miss falls back silently rather than erroring — so writing a
+    captured refresh rate is a standing risk for no benefit, given every panel here runs at its
+    preferred mode anyway. Add a `mode` by hand if you need a non-preferred one; the observed
+    value is in the comment beside each output.
+    """
+    lines = [f"# Captured from the live layout by `hypr-monitors --save {name}`.",
+             "# Edit freely — this is an ordinary kanshi profile.",
+             f"profile {name} {{"]
+    for m in sorted(monitors, key=lambda m: (not m["enabled"], m["x"])):
+        # COMMENTS GO ON THEIR OWN LINE. kanshi does NOT accept a trailing `#` on an output
+        # line -- it parses the rest of the line as directives and refuses the whole config:
+        #     unknown directive '#' in profile output '...'
+        # (measured 2026-08-22; our own reader accepted the trailing form, so only running
+        # kanshi itself caught it.)
+        lines.append(f'\t# {m["connector"]} — {m["mode"]}')
+        if not m["enabled"]:
+            lines.append(f'\toutput "{m["match"]}" disable')
+            continue
+        parts = [f'\toutput "{m["match"]}" enable position {m["x"]},{m["y"]}']
+        if m["scale"] and float(m["scale"]) != 1:
+            parts.append(f'scale {m["scale"]}')
+        if m["transform"]:
+            parts.append(f'transform {m["transform"]}')
+        lines.append(" ".join(parts))
+    lines.append("}")
+    return "\n".join(lines) + "\n"
+
+
+def save_profile(name, monitors, keep=False):
+    """Write the profile. Temporary by default; --keep puts it in the private overlay."""
+    if keep:
+        host = os.uname().nodename.split(".")[0]
+        target_dir = os.path.expanduser(f"~/src/workstation-private/{host}/kanshi")
+        if not os.path.isdir(target_dir):
+            raise SystemExit(
+                f"ERROR: {target_dir} does not exist.\n"
+                "  --keep writes into the private per-machine overlay; create that directory\n"
+                "  (and re-run install.sh so it gets symlinked into config.d/) first.")
+        path = os.path.join(target_dir, f"{name}.conf")
+        note = "PERSISTENT — in workstation-private, commit it"
+    else:
+        os.makedirs(TEMP_DIR, exist_ok=True)
+        path = os.path.join(TEMP_DIR, f"{TEMP_PREFIX}{name}.conf")
+        note = "TEMPORARY — machine-local and gitignored; --keep makes it permanent"
+
+    if os.path.exists(path):
+        raise SystemExit(f"ERROR: {path} exists. Delete it first: hypr-monitors --delete {name}")
+    io.open(path, "w", encoding="utf-8").write(render_profile(name, monitors))
+    print(f"wrote {path}\n  ({note})")
+    return path
+
+
+def delete_profile(name):
+    path = os.path.join(TEMP_DIR, f"{TEMP_PREFIX}{name}.conf")
+    if not os.path.exists(path):
+        raise SystemExit(f"ERROR: no temporary profile {name!r} ({path} not found)")
+    os.remove(path)
+    print(f"removed {path}")
+
+
+def reload_kanshi():
+    """Ask the running kanshi to re-read its config, so a new profile is switchable at once."""
+    try:
+        r = subprocess.run(["kanshictl", "reload"], capture_output=True, text=True)
+    except FileNotFoundError:
+        print("kanshictl not found — reload kanshi yourself", file=sys.stderr)
+        return
+    if r.returncode != 0:
+        print(f"kanshictl reload failed: {r.stderr.strip() or r.stdout.strip()}", file=sys.stderr)
+    else:
+        print("kanshi reloaded")
+
+
+def open_display_settings():
+    """Open DMS's own Displays page — the GUI for physically arranging outputs.
+
+    `openWith` and the tab id `displays` come from DMS's IPC handler
+    (DMSShellIPC.qml: `function openWith(tab)`, and `tabs()` whose fallback string lists every
+    valid id), not from guessing: an unknown tab returns a failure string rather than opening
+    anything, and nothing else would report it.
+
+    This is the one place DMS's display machinery is used. Its output PROFILES are deliberately
+    not (see the module docstring) — but its arrangement GUI is genuinely the easiest way to
+    drag screens into place, and what you arrange there can then be captured with CTRL-S.
+    """
+    r = subprocess.run(["dms", "ipc", "call", "settings", "openWith", "displays"],
+                       capture_output=True, text=True)
+    if r.returncode != 0 or "FAIL" in (r.stdout or ""):
+        print(f"could not open the DMS Displays page: "
+              f"{(r.stderr or r.stdout).strip() or 'unknown error'}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--list", action="store_true", help="print profiles and exit (for testing)")
+    ap.add_argument("--fzf", action="store_true", help="pick one in fzf and switch to it")
+    ap.add_argument("--config", default=KANSHI_CONFIG, help="kanshi config to read")
+    ap.add_argument("--save", metavar="NAME",
+                    help="capture the CURRENT layout as a new profile (temporary by default)")
+    ap.add_argument("--keep", action="store_true",
+                    help="with --save: write to workstation-private/<host>/kanshi/ instead of a "
+                         "machine-local temp file, so it syncs and can be committed")
+    ap.add_argument("--delete", metavar="NAME", help="remove a temporary profile")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="with --save: print the profile instead of writing it")
+    ap.add_argument("--monitors-json", metavar="FILE",
+                    help="read the layout from a JSON file instead of hyprctl (for testing)")
+    args = ap.parse_args()
+
+    if args.delete:
+        delete_profile(args.delete)
+        reload_kanshi()
+        return 0
+
+    if args.save:
+        # Validated HERE rather than inside save_profile, so --dry-run refuses exactly what a
+        # real save would refuse: a preview that accepts an unusable name is worse than none.
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", args.save):
+            raise SystemExit(
+                f"ERROR: profile name must be [A-Za-z0-9_-]+, got {args.save!r}")
+        monitors = live_monitors(args.monitors_json)
+        if args.dry_run:
+            sys.stdout.write(render_profile(args.save, monitors))
+            return 0
+        path = save_profile(args.save, monitors, keep=args.keep)
+        if args.keep:
+            # The private overlay is only reachable by kanshi once install.sh has symlinked it
+            # into config.d/. Saying so here beats a profile that exists and cannot be selected.
+            link = os.path.join(TEMP_DIR, os.path.basename(path))
+            if not os.path.exists(link):
+                print(f"NOTE: {link} does not exist yet — run install.sh (or symlink it) "
+                      "or kanshi will not see this profile.", file=sys.stderr)
+        reload_kanshi()
+        return 0
+
+    profiles = parse_profiles(args.config)
+
+    if not profiles:
+        # Distinguish the two causes: they need different fixes, and an empty menu implies
+        # neither. See the include trap in the module docstring.
+        hint = ("kanshi is not running either -- check its start log for\n"
+                "  \"Could not parse included config\", which means config.d/ is empty."
+                if not kanshi_running() else
+                "kanshi is running but this config defines no profiles.")
+        print(f"No kanshi profiles found in {args.config}.\n{hint}", file=sys.stderr)
+        return 1
+
+    if args.list or not args.fzf:
+        sys.stdout.write(render(profiles))
+        return 0
+
+    # KEYS RATHER THAN PSEUDO-ROWS. The actions could be extra rows in the list, but then ENTER
+    # would mean two different things depending on what is highlighted, and an action row can be
+    # hit by accident while fuzzy-searching. fzf's header is always visible, so the keys are just
+    # as discoverable — the same choice hyprbinds makes with its ALT+1..4 view switches.
+    #
+    # --print-query returns what was TYPED, which is how CTRL-S names a new profile without a
+    # second prompt: type the name, press CTRL-S. --expect reports which key ended the session.
+    out = subprocess.run(
+        ["fzf", "--ansi", "--reverse", "--no-sort", "--info=inline", "--cycle",
+         "--with-nth=1,2", "--delimiter=\t",
+         "--print-query", "--expect=ctrl-s,ctrl-x,ctrl-e",
+         "--prompt=layout> ",
+         # TWO LINES, and both kept under ~62 chars. fzf does NOT wrap a header — it truncates
+         # it, silently, at the window edge: at the 760px this popup was first given, everything
+         # past "CTRL-X delete [t" was simply invisible (2026-08-22). The window rule is now
+         # wider too, but the header must survive a narrow window on its own, since the rule
+         # lives in a different file and a machine may not have it.
+         "--header=ENTER apply · CTRL-S save as typed name · CTRL-X delete\n"
+         "CTRL-E arrange screens · ESC close"],
+        input=render(profiles, color=True), text=True, capture_output=True,
+    )
+    # fzf with both flags prints: query, then the expect key (empty for ENTER), then selection.
+    lines = out.stdout.split("\n")
+    query = lines[0].strip() if lines else ""
+    key = lines[1].strip() if len(lines) > 1 else ""
+    picked = lines[2] if len(lines) > 2 else ""
+    # Strip the SGR codes fzf echoes back with --ansi.
+    name = re.sub(r"\x1b\[[0-9;]*m", "", picked.split("\t")[0]).strip()
+
+    if key == "ctrl-e":
+        return open_display_settings()
+
+    if key == "ctrl-s":
+        if not query:
+            print("CTRL-S saves the CURRENT layout under the name you typed — "
+                  "type one first.", file=sys.stderr)
+            return 1
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", query):
+            print(f"ERROR: profile name must be [A-Za-z0-9_-]+, got {query!r}", file=sys.stderr)
+            return 1
+        save_profile(query, live_monitors(args.monitors_json))
+        reload_kanshi()
+        return 0
+
+    if key == "ctrl-x":
+        if not name:
+            return 0
+        src = next((src for n, src, _ in profiles if n == name), "")
+        if not is_temp(src):
+            # Deleting a committed per-machine profile from a popup would be a surprising,
+            # unrecoverable edit to a tracked file. Only throwaways are removable here.
+            print(f"{name!r} is not a temporary profile — it lives in {src}.\n"
+                  "Edit or remove it there.", file=sys.stderr)
+            return 1
+        delete_profile(name)
+        reload_kanshi()
+        return 0
+
+    if not name:
+        return 0
+    return subprocess.run(["kanshictl", "switch", name]).returncode
+
+
+if __name__ == "__main__":
+    sys.exit(main())

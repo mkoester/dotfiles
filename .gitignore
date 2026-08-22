@@ -2,9 +2,11 @@
 
 # Machine-specific kanshi profiles — monitor make/model/serial must not land in this
 # public repo. Stowed alongside the tracked skeleton, which `include`s them.
-# The directory itself stays tracked (via .gitkeep) so the include glob always resolves.
+# The directory stays tracked via 00-placeholder.conf, which must be a REAL .conf and not a
+# .gitkeep: kanshi hard-errors when the include glob matches nothing, and `*` does not match a
+# dot-prefixed name — so a .gitkeep left kanshi refusing to start at all. See that file.
 config-stow/kanshi/kanshi/config.d/*
-!config-stow/kanshi/kanshi/config.d/.gitkeep
+!config-stow/kanshi/kanshi/config.d/00-placeholder.conf
 
 # Machine-/device-specific niri overrides — real output blocks, custom xkb keymap path,
 # Bluetooth device MAC binds. Optionally `include`d by the tracked config.kdl skeleton;

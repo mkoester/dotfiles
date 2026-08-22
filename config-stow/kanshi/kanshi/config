@@ -12,22 +12,33 @@
 # which is NOT tracked here.
 include ~/.config/kanshi/config.d/*
 
-# --- Generic skeleton profiles -------------------------------------------------
-# Connector names vary per machine; check with `niri msg outputs`. A profile whose
-# outputs don't match anything connected is simply never applied, so these are inert
-# where they don't fit — override them by defining a same-named profile in config.d/.
+# --- NO GENERIC PROFILES HERE, DELIBERATELY (2026-08-22) ------------------------
+# This file used to ship example `docked` and `solo` profiles, with a comment claiming you
+# could "override them by defining a same-named profile in config.d/". BOTH HALVES WERE
+# WRONG, and together they silently broke multi-monitor switching.
 #
-# Do NOT combine kanshi with nwg-displays: it writes ~/.config/niri/monitor.kdl, and
-# the resulting Niri config reload discards every transient change kanshi applied.
-
-# External display plus a second panel to its right.
-profile docked {
-	output DP-1 enable position 0,0
-	output HDMI-A-1 enable position 1920,0
-}
-
-# Primary only.
-profile solo {
-	output DP-1 enable position 0,0
-	output HDMI-A-1 disable
-}
+# 1. DUPLICATE PROFILE NAMES DO NOT OVERRIDE — kanshi parses both and `kanshictl switch <name>`
+#    picks the LATER one, i.e. the generic profile here rather than the machine's real one.
+#    Measured on mkDesktop 2026-08-22, from kanshi's own log:
+#
+#        applying profile 'docked'
+#        applying profile output 'HDMI-A-1' on connected head 'HDMI-A-1'
+#        applying profile output 'DP-1' on connected head 'DP-1'
+#
+#    Two outputs matched by CONNECTOR, where that machine's own `docked` matches three by
+#    "Make Model Serial". Auto-apply on reload had used the right one, so this failed only on
+#    an explicit switch — which is why it looked like an intermittent fault.
+#
+# 2. THE GEOMETRY OVERLAPPED ANY MODERN PRIMARY. The generic `docked` put a second output at
+#    x=1920, which collides with any first output wider than that — 2560 and 3440 panels are
+#    the norm across this fleet, so the profile was unusable everywhere it managed to win.
+#
+# Every machine with an overlay already defines its own `docked` (mkDell, mkMac2014, mkMac2017
+# — checked), so nothing here is load-bearing. Real profiles belong in the include above, which
+# is NOT tracked: "Make Model Serial" matching is the robust form and leaks hardware serials.
+#
+# Do NOT reintroduce example profiles under names a machine is likely to use. If you want
+# examples, put them in a comment.
+#
+# Do NOT combine kanshi with nwg-displays: it writes ~/.config/niri/monitor.kdl, and the
+# resulting Niri config reload discards every transient change kanshi applied.
