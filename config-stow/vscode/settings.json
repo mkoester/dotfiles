@@ -1,0 +1,11 @@
+{
+    "editor.wordWrap": "on",
+    "explorer.sortOrder": "filesFirst",
+    "explorer.compactFolders": false,
+    "workbench.editor.labelFormat": "short",
+    "svelte.enable-ts-plugin": true,
+    // Carried over from the Code - OSS profile on mkDesktop, 2026-08-23, before swapping
+    // that build for visual-studio-code-bin. It was the only key the live OSS profile had
+    // that this file did not, so without it the swap would have lost it silently.
+    "claudeCode.preferredLocation": "panel"
+}

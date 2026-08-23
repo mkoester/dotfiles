@@ -213,7 +213,7 @@ case "$PM" in
 esac
 
 # ══════════════════════════════════════════════════════════════════════════
-step "3/9  Stow base config (git, ssh, vscode)"
+step "3/9  Stow base config (git, ssh) + link VS Code settings"
 stow_pkg "$HOME" git
 
 # ~/.ssh must EXIST as a real directory before stowing, or stow folds the whole
@@ -231,10 +231,44 @@ if [ -d "$PRIVATE_REPO/shared/ssh" ] && ls "$PRIVATE_REPO/shared/ssh/"*.conf >/d
 else
 	info "  no shared ssh entries yet — put host blocks in workstation-private/shared/ssh/*.conf"
 fi
-run mkdir -p "$HOME/.config/Code/User"
-stow_pkg "$HOME/.config" vscode
-run mkdir -p "$HOME/.var/app/com.visualstudio.code/config/Code/User"
-stow_pkg "$HOME/.var/app/com.visualstudio.code/config" vscode
+# VS Code: explicit symlinks, NOT stow. The fleet runs the OPEN-SOURCE build (MK, 2026-08-23),
+# and the three OSS packagings do not agree on a config directory name — `Code - OSS` on Arch,
+# `VSCodium` for the brew cask and the flatpak — so one stow package cannot serve them without
+# duplicating the file. It is a single file, so a loop over the candidate paths is simpler.
+#
+# WHY OSS: the one thing the Microsoft build adds over this is Settings Sync, which writes to
+# settings.json — a symlink into this PUBLIC repo. Settings here are already synced by git+stow,
+# so a second syncer writing through that link is a hazard, not a feature. Every extension in
+# use was verified working on Code - OSS. See workstation-private/manifest/README.md.
+#
+# THIS BLOCK USED TO TARGET `Code/User` (the Microsoft build) AND `com.visualstudio.code`, so on
+# mkDesktop the tracked settings were deployed to a build that was not installed and read by
+# nothing from 2026-07-27 until this was fixed. The path is the whole mechanism here: a config
+# in the wrong directory looks exactly like a fresh install, never like a broken one.
+VSCODE_SETTINGS="$DOTFILES_REPO/config-stow/vscode/settings.json"
+# The PRIMARY target is created unconditionally. It must not be conditional on the directory
+# already existing: a fresh machine has no ~/.config/Code - OSS until VS Code has been launched
+# once, so an existence guard would make install.sh link nothing, report success, and leave the
+# settings undeployed until someone happened to re-run it — the same silent-skip shape as the
+# `dms setup binds` miss on mkDesktop.
+case "$PM" in
+	brew) VSCODE_PRIMARY="$HOME/Library/Application Support/VSCodium/User" ;;
+	*)    VSCODE_PRIMARY="$HOME/.config/Code - OSS/User" ;;
+esac
+run mkdir -p "$VSCODE_PRIMARY"
+run ln -sfn "$VSCODE_SETTINGS" "$VSCODE_PRIMARY/settings.json"
+
+# Secondary packagings get a link only where they are actually installed — linking into a
+# flatpak dir that does not exist would create the tree for a flatpak nobody has.
+for _vsdir in \
+	"$HOME/.config/VSCodium/User" \
+	"$HOME/.var/app/com.vscodium.codium/config/VSCodium/User"
+do
+	[ "$_vsdir" = "$VSCODE_PRIMARY" ] && continue
+	[ -d "$(dirname "$_vsdir")" ] || continue
+	run mkdir -p "$_vsdir"
+	run ln -sfn "$VSCODE_SETTINGS" "$_vsdir/settings.json"
+done
 
 # ══════════════════════════════════════════════════════════════════════════
 step "4/9  oh-my-zsh + theme + plugins"

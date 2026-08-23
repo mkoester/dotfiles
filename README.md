@@ -173,12 +173,22 @@ brew install stow
 ```sh
 cd ${DOTFILES_REPO:-$HOME/src/dotfiles}/config-stow && \
 stow -t $HOME git && \
-mkdir -p $HOME/.config/Code/User && \
-stow -t $HOME/.config vscode && \
-mkdir -p $HOME/.var/app/com.visualstudio.code/config/Code/User && \
-stow -t $HOME/.var/app/com.visualstudio.code/config vscode && \
 cd ..
 ```
+
+**VS Code is no longer a stow package** (changed 2026-08-23). The fleet runs the *open-source*
+build, whose three packagings disagree on the config directory name — `Code - OSS` on Arch,
+`VSCodium` for the brew cask and the flatpak — which one stow package cannot express without
+duplicating the file. `install.sh` symlinks the single tracked file instead. By hand:
+
+```sh
+mkdir -p "$HOME/.config/Code - OSS/User" && \
+ln -sfn ${DOTFILES_REPO:-$HOME/src/dotfiles}/config-stow/vscode/settings.json "$HOME/.config/Code - OSS/User/settings.json"
+```
+
+On macOS the target is `~/Library/Application Support/VSCodium/User/`. Reasoning for the OSS
+build, and the deployment bug the old MS-build path caused, are in
+`workstation-private/manifest/README.md` § *Which VS Code*.
 
 **Add `--ignore='\.claude'` to any manual `stow` command in this README if you run Claude Code in this repo.** Claude Code leaves an empty `.claude/.cc-writes/` in every directory it writes to, and git never reports it (empty directories are not tracked) — but stow works on the filesystem and happily symlinks it into the target, e.g. `~/.config/xkb/.claude` → the repo. `install.sh` passes the flag on every package for exactly this reason. Note the pattern carries **no `^…$` anchors**: stow anchors it itself, and `'^\.claude$'` silently matches nothing.
 
