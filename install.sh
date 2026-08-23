@@ -405,6 +405,14 @@ if ask_yn DF_DESKTOP "Wayland desktop (bar, monitor profiles, notifications)?"; 
 	stow_pkg "$HOME/.config" kanshi
 	run mkdir -p "$HOME/.config/systemd/user"
 	stow_pkg "$HOME/.config" systemd-user
+	# ydotoold.service ships in that package but is deliberately NOT enabled here: the daemon holds
+	# /dev/uinput open for the whole session, and starting a global input-injection daemon on every
+	# desktop to serve a Stream Deck attached to one machine is the wrong trade — the same
+	# least-privilege call streamdeck-ydotool.md makes about the `input` group. Measured on
+	# mkDesktop 2026-08-23: the unit read `linked` (that is the stow symlink, NOT `enabled`, and it
+	# appears in the same status field) with no wants symlink, so it had never run on any machine.
+	info "ydotoold is stowed but not enabled; on a machine with a Stream Deck:"
+	info "  systemctl --user enable --now ydotoold.service"
 	# custom xkb keymap (Caps-Lock -> German umlauts): generic + public, activated
 	# per-machine in niri's local.kdl (or setxkbmap). Just needs to be on disk.
 	stow_pkg "$HOME" xkb
