@@ -27,8 +27,20 @@ Type=simple
 # Verify with `getfacl /dev/uinput` (expect a user:<you>:rw- entry) before adding any rule.
 # Full reasoning: Workstation-Documentation/desktop/streamdeck-ydotool.md
 ExecStart=/usr/bin/ydotoold
-# The client finds the daemon via this socket; export the same path in your shell/session
-# so `ydotool` (and StreamController) reach it: YDOTOOL_SOCKET=%t/.ydotool_socket
+# The client finds the daemon via this socket.
+#
+# CORRECTED 2026-08-23. This used to say to export the same path in your shell/session so the
+# client could reach it. That is NOT needed and never was: %t is $XDG_RUNTIME_DIR, and the
+# ydotool client already defaults to $XDG_RUNTIME_DIR/.ydotool_socket. Measured after first
+# enabling the unit — `ydotool type hello` succeeded in a shell with YDOTOOL_SOCKET unset (it is
+# exported nowhere in either fleet repo), the socket exists at /run/user/<uid>/.ydotool_socket,
+# and /tmp/.ydotool_socket does not exist at all. Both binaries do contain a literal
+# /tmp/.ydotool_socket, but that is the FALLBACK for when XDG_RUNTIME_DIR is unset — which is
+# why `strings` alone could not settle this and the running socket had to be looked at.
+#
+# The one case where it would still matter: a caller with no XDG_RUNTIME_DIR (a system unit, a
+# bare cron job) falls back to /tmp and will not find this daemon. A Stream Deck action launched
+# from the desktop session has it, so the normal path is fine.
 Environment=YDOTOOL_SOCKET=%t/.ydotool_socket
 Restart=always
 RestartSec=1
