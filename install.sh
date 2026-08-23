@@ -134,9 +134,19 @@ esac
 # ══════════════════════════════════════════════════════════════════════════
 step "2/9  Base tools"
 case "$PM" in
-	pacman) pm_install zsh zoxide tmux git git-delta curl wget eza sqlite fzf ;;
-	apt)    pm_install zsh zoxide tmux git git-delta gitk curl wget eza fzf ;;
-	dnf)    pm_install zsh zoxide tmux git git-delta gitk curl wget eza sqlite fzf ;;
+	pacman) pm_install zsh zoxide tmux git git-delta curl wget eza sqlite fzf jq ripgrep ;;
+	apt)    pm_install zsh zoxide tmux git git-delta gitk curl wget eza fzf jq ripgrep ;;
+	dnf)    pm_install zsh zoxide tmux git git-delta gitk curl wget eza sqlite fzf jq ripgrep ;;
+	# jq added 2026-08-23 — it is a HARD dependency of this fleet's own committed scripts
+	# (dms-settings-deploy, dms-plugin-enable, claude-local-defaults, fleet-audit,
+	# okf/scripts/obsidian-plugins — 27 call sites), and it was installed on mkDell only as a
+	# transitive dependency of `scx-scheds`. Nothing declared it, so removing that unrelated
+	# CachyOS package, or installing on any non-CachyOS machine, silently breaks all of them.
+	# Same pairing rule as git-delta below: the script and its interpreter arrive together.
+	#
+	# ripgrep for the same reason one level down — workspace_homelab/CLAUDE.md prescribes
+	# `rg -li … --no-ignore` as THE fix for the gitignored-member search blind spot, so the
+	# documented workaround assumed a binary nothing installed.
 	# git-delta was MISSING here until 2026-08-16, and its absence broke git itself: the tracked
 	# config-stow/git/.gitconfig sets `pager = delta` unconditionally, so on a Mac every
 	# `git diff`/`git log` piped into a binary that does not exist. Not a cosmetic divergence —
@@ -308,7 +318,18 @@ if ask_yn DF_DESKTOP "Wayland desktop (bar, monitor profiles, notifications)?"; 
 		#
 		# flatpak is on every branch except brew: it is packaged under that exact name on
 		# Arch, Debian and Fedora, so unlike ghostty/hyprlock above there is no guessing.
-		pacman) pm_install libnotify kanshi waybar swayidle hyprlock ghostty flatpak ;;
+		# kitty added 2026-08-23. The `terminals` stow package has shipped kitty.conf since
+		# 2026-08-10 and install.sh has installed kitty-terminfo since 2026-08-16, but nothing
+		# ever installed kitty itself — measured absent on mkDell while its config was deployed
+		# and Workstation-Documentation/desktop/terminal-emulator-comparison.md described its
+		# behaviour in detail. Same config-and-package-arrive-together rule as git-delta above.
+		#
+		# wl-clipboard/grim/slurp/brightnessctl: referenced by tracked config — the stowed
+		# systemd-user units (screen-blank.sh, swayidle-laptop.service) and the niri/hypr
+		# keybinds. All four were explicitly installed by hand on mkDell and declared nowhere,
+		# so a fresh compositor machine gets keybinds that silently do nothing.
+		pacman) pm_install libnotify kanshi waybar swayidle hyprlock ghostty kitty flatpak \
+		                   wl-clipboard grim slurp brightnessctl ;;
 		apt)    pm_install libnotify-bin flatpak ;;
 		dnf)    pm_install libnotify flatpak ;;
 		brew)   : ;;
