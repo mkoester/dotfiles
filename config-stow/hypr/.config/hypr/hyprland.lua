@@ -375,6 +375,52 @@ hl.bind(mod .. " + ALT + M", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/h
 hl.bind(mod .. " + SHIFT + ALT + M", hl.dsp.window.move({ workspace = ws_chat }),
         { description = "Move window to `chat`" })
 
+-- The `git` workspace — FLEET-WIDE since 2026-08-24 (MK: "I want a git workspace on all my
+-- hyprland machines in the fleet"). Promoted from mkDell's local.lua, where it had lived since
+-- 2026-08-10.
+--
+-- THE SPLIT IS DELIBERATE and is why this is not a straight copy. Portable: the workspace, its
+-- keys, its window rule, its launcher. Per-machine: the MONITOR it sits on (mkDell pins it to
+-- HDMI-A-1, its second screen) and whether gitaw AUTOSTARTS at login. Both stay in local.lua —
+-- a `monitor` field here would name a connector that exists on exactly one machine.
+--
+-- NOT in the `named_workspaces` table above, for the same reason as `chat`: its keys are on the
+-- ALT layer, because SUPER+G is `google` and SUPER+SHIFT+G moves a window there.
+--
+-- Id 19, so it sorts after the skeleton's 11-18 in the DMS bar.
+local ws_git = 19
+hl.bind(mod .. " + ALT + G", hl.dsp.focus({ workspace = ws_git }),
+        { description = "Workspace: git" })
+hl.bind(mod .. " + ALT + SHIFT + G", hl.dsp.window.move({ workspace = ws_git }),
+        { description = "Move to workspace: git" })
+
+-- `gitaw` is a zsh FUNCTION (dotfiles/oh-my-zsh-custom/gita.zsh), not a binary and not an alias
+-- — `ghostty -e gitaw` dies with "command not found", and `sh -c` cannot see it either (the same
+-- trap gitaw's own comment records about `watch`). It needs an INTERACTIVE zsh, which is what
+-- sources ~/.zshrc and the oh-my-zsh-custom snippets.
+--
+-- That snippet is linked only under DF_GITA, so on a machine that answered no this opens a
+-- terminal that exits immediately. That is the reason this is a BIND rather than an autostart:
+-- a dead keybind is a keypress nobody makes, a dead autostart is a flash at every login.
+-- Machines that do want it at login exec it from their own local.lua (mkDell does).
+--
+-- `--class=mk.git` invents a class for the window rule to match, exactly as herdr does; a
+-- terminal otherwise carries ghostty's own class and cannot be pinned separately. The `mk.`
+-- prefix is required, not stylistic — ghostty demands a valid GTK application id and silently
+-- drops a single-word class. See the note beside `local term`.
+--
+-- `--title` FORCES the title (2026-08-15): without it the window reads `zsh`, because the title
+-- comes from the program `-e` runs. It shows wherever a window list does — the DMS bar and
+-- overview, and `hypr-switcher`'s TITLE column, where "zsh" identifies nothing.
+--
+-- ⚠ mkDell's local.lua REPEATS this command string for its login autostart, because this is a
+-- local in this chunk and is not visible there. Change one, change both.
+local gitaw_cmd = [[ghostty --class=mk.git --title="gita watch" -e zsh -i -c gitaw]]
+
+-- Re-launch after closing (gitaw is `watch`, so q or CTRL+C ends the terminal with it).
+hl.bind(mod .. " + ALT + SHIFT + Return", hl.dsp.exec_cmd(gitaw_cmd),
+        { description = "Launch gitaw" })
+
 -- Monitor layout (kanshi profiles; define them in the kanshi package's config.d/).
 --
 -- SUPER+P opens `hypr-monitors`, a popup listing every kanshi profile this machine defines
@@ -382,11 +428,25 @@ hl.bind(mod .. " + SHIFT + ALT + M", hl.dsp.window.move({ workspace = ws_chat })
 -- it reads the config — whereas the two binds below hardcode profile names that only exist
 -- where a machine happens to define them. Prefer the menu; D/S are kept as direct shortcuts.
 --
--- SUPER+P IS FREE — no unbind needed. This comment used to say "DMS binds SUPER+P to its own
--- output profile cycling"; that is FALSE, measured 2026-08-22 by extracting DMS's own bind
--- template from the shipped binary (`strings -a $(command -v dms) | grep 'hl.bind'`), which
--- contains no P binding at all. It mattered: binds ACCUMULATE rather than replace, so a
--- believed-taken key invites a needless unbind, and a genuinely taken one fires both actions.
+-- ⚠ SUPER+P IS TAKEN BY DMS AND MUST BE UNBOUND — reversed 2026-08-24, and the paragraph this
+-- replaces asserted the opposite for two days. It read "SUPER+P IS FREE — no unbind needed …
+-- measured 2026-08-22 … contains no P binding at all". Re-measured on 2026-08-24 with the same
+-- command on the same machine, dms-shell 1.5.3:
+--     strings -a $(command -v dms) | grep -o 'hl\.bind("SUPER + P".\{0,160\}'
+--     hl.bind("SUPER + P", hl.dsp.exec_cmd("dms ipc outputs cycleProfile"))
+-- So for two days one press did BOTH: opened `hypr-monitors` and cycled DMS's own output
+-- profile — the second half invisible unless a profile happened to change the layout.
+--
+-- Which of the two measurements was wrong is NOT established, and guessing would be the same
+-- error again. The two candidates: DMS was upgraded in between (most likely — the technique is
+-- sound and was correctly applied both times), or the earlier grep pattern missed it. Either way
+-- the lesson is the same, and it is why the unbind below is unconditional: **a bind list read
+-- from a third-party binary is a fact with an expiry date.** Re-run the command above after any
+-- DMS upgrade; an unbind on a key DMS no longer binds costs nothing, while a missing one fires a
+-- second action silently.
+--
+-- Binds ACCUMULATE rather than replace, which is what makes this fail quietly: nothing errors,
+-- nothing is logged, and the extra action is only noticeable when it has a visible effect.
 --
 -- DMS *does* have its own display-profile system (SettingsData.displayProfiles, reachable as
 -- `dms ipc call outputs listProfiles|setProfile`, and two registry plugins front-end it). It is
@@ -403,6 +463,7 @@ hl.bind(mod .. " + ALT + S", hl.dsp.exec_cmd("kanshictl switch solo"),   { descr
 -- only for INTERACTIVE shells, and a compositor-spawned process is not one — a bare name would
 -- fail to exec, the terminal would close instantly, and the bind would look dead with no error.
 local monitors = os.getenv("HOME") .. "/.local/bin/hypr-monitors"
+hl.unbind(mod .. " + P")
 hl.bind(mod .. " + P",
         hl.dsp.exec_cmd("ghostty --class=mk.monitors -e " .. monitors .. " --fzf"),
         { description = "Monitors: pick a layout" })
@@ -642,6 +703,12 @@ end
 -- first, back when the order was alphabetical).
 hl.workspace_rule({ workspace = tostring(ws_chat), default_name = "chat", persistent = true })
 
+-- git: the gitaw watch terminal (id 19), fleet-wide since 2026-08-24 — see the bind section.
+-- NO `monitor` field here: that is the per-machine half and lives in
+-- workstation-private/<host>/hypr/local.lua. Without such a rule a persistent workspace lands
+-- wherever Hyprland picks, and it re-picks on every `hyprctl reload` and every output change.
+hl.workspace_rule({ workspace = tostring(ws_git), default_name = "git", persistent = true })
+
 -- herdr is a terminal app with no class of its own, so it is not pinned by an app rule; it is
 -- launched at login with `--class mk.herdr`, which invents a class the window rule below can
 -- match. Its workspace rule comes from the `named_workspaces` loop above (id 13).
@@ -726,6 +793,11 @@ hl.window_rule({ match = { class = "ch.threema.threema-desktop" }, workspace = w
 -- elements minimum). See the note beside `local term` at the top — an invalid class is accepted
 -- by ghostty's parser and dropped by GTK, so this rule would silently never match.
 hl.window_rule({ match = { class = "mk.herdr" }, workspace = ws.herdr })
+
+-- The gitaw terminal (id 19), same invented-class trick as herdr directly above and for the
+-- same reason. Launched by SUPER+ALT+SHIFT+Return, or at login on machines whose local.lua
+-- autostarts it.
+hl.window_rule({ match = { class = "mk.git" }, workspace = ws_git })
 
 -- The cheat sheet floats and stays on the CURRENT workspace — deliberately no `workspace`
 -- field, unlike every rule above: a reference you open mid-task must not yank you elsewhere.
