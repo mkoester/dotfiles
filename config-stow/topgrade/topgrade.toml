@@ -100,6 +100,11 @@ upgrade = true              # actually apply fwupd firmware updates (default: on
 #   remove all saved diffs?           [Y/n] -> yes
 # It is NOT "say yes to everything" — don't "fix" this by adding -y anywhere.
 #
+# All three are guarded on the binary existing: this config is stowed fleet-wide
+# and mkMac2017 runs macOS, where there is no paru, no pacman and no flatpak —
+# unguarded they fail the custom-commands step on every run there. See the guard
+# rationale in the DMS block below; it applies verbatim to these three.
+#
 # ── DMS plugins and their providers ─────────────────────────────────────────
 # topgrade has no DMS step. Plugins are git checkouts under
 # ~/.config/DankMaterialShell/plugins that `dms plugins update` pulls; the
@@ -114,10 +119,11 @@ upgrade = true              # actually apply fwupd firmware updates (default: on
 # right-hand side of an assignment, which zsh expands and which the second entry
 # depends on.
 #
-# BOTH ARE GUARDED, because this config is stowed fleet-wide and mkMac2017 runs
-# macOS, where neither exists. The guard is `… || exit 0` rather than
-# `… && cmd || true`: a missing dms is a silent skip, but a dms that runs and
-# FAILS must still fail the step — `|| true` would swallow both alike. The
+# EVERY ENTRY IN THIS BLOCK IS GUARDED, because this config is stowed fleet-wide
+# and mkMac2017 runs macOS, where none of these tools exist. The guard is
+# `… || exit 0` rather than `… && cmd || true`: a missing dms is a silent skip,
+# but a dms that runs and FAILS must still fail the step — `|| true` would
+# swallow both alike, which is exactly the failure you would never notice. The
 # provider guard tests the script itself, which also covers a DMS machine that
 # simply does not have this plugin installed.
 #
@@ -130,8 +136,8 @@ upgrade = true              # actually apply fwupd firmware updates (default: on
 # no restart either way, since the daemon reads those files through FileView
 # with watchChanges.
 [commands]
-"cleanup: pacman + AUR cache" = "paru --pacman pacman -Scc --noconfirm"
-"cleanup: flatpak unused (user)" = "flatpak uninstall --user --unused -y"
-"cleanup: flatpak unused (system)" = "flatpak uninstall --system --unused -y"
+"cleanup: pacman + AUR cache" = "command -v paru >/dev/null || exit 0; paru --pacman pacman -Scc --noconfirm"
+"cleanup: flatpak unused (user)" = "command -v flatpak >/dev/null || exit 0; flatpak uninstall --user --unused -y"
+"cleanup: flatpak unused (system)" = "command -v flatpak >/dev/null || exit 0; flatpak uninstall --system --unused -y"
 "dms: plugin updates" = "command -v dms >/dev/null || exit 0; dms plugins update -a"
 "dms: attention-badges providers" = "p=~/.config/DankMaterialShell/plugins/attentionBadges/scripts/providers; test -x $p || exit 0; $p update"
