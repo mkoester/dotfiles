@@ -207,6 +207,42 @@ else
 	skip 'stow_conflicts' 'stow not installed'
 fi
 
+# ── rust_lib32_needed ────────────────────────────────────────────────────────
+# Three conditions, so five cases: one known-positive plus each condition flipped on its own.
+# The positive is what makes the negatives mean anything — a predicate that always returned
+# false would pass every "expect 0" case and look thoroughly tested.
+section "rust_lib32_needed"
+d="$(work)"
+mkdir -p "$d/bin" "$d/nobin"
+printf '#!/usr/bin/env bash\nexit 0\n' >"$d/bin/rustup"; chmod u+x "$d/bin/rustup"
+# The predicate calls exactly one external command, so a PATH holding just grep is a PATH with
+# no rustup on it. Prepending a stub dir would not do: rustup really is in /usr/bin here.
+ln -s "$(command -v grep)" "$d/nobin/grep"
+P_YES="$d/bin:$d/nobin"    # rustup + grep
+P_NO="$d/nobin"            # grep only
+
+printf '[core]\n[extra]\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n'    >"$d/on.conf"
+printf '[core]\n[extra]\n#[multilib]\n#Include = /etc/pacman.d/mirrorlist\n'  >"$d/off.conf"
+printf '[core]\n  [multilib]\nInclude = /etc/pacman.d/mirrorlist\n'           >"$d/indented.conf"
+
+# Drives the REAL function; the subshell scopes the three inputs it reads.
+needed() {  # <pm> <pacman.conf> <PATH>
+	( PM="$1"; PACMAN_CONF="$2"; PATH="$3"; rust_lib32_needed && echo 1 || echo 0 )
+}
+
+is "$(needed pacman "$d/on.conf" "$P_YES")" '1' 'arch + multilib + rustup needs the i686 target'
+is "$(needed pacman "$d/on.conf" "$P_NO")"  '0' 'system rust (no rustup) is already covered'
+is "$(needed pacman "$d/off.conf" "$P_YES")" '0' 'a commented-out [multilib] does not count'
+is "$(needed brew "$d/on.conf" "$P_YES")"   '0' 'the Mac is skipped'
+is "$(needed dnf "$d/on.conf" "$P_YES")"    '0' 'a Fedora server is skipped'
+# pacman tolerates a leading-whitespace section header, so the anchor must too — otherwise the
+# step silently skips a machine that does have multilib on.
+is "$(needed pacman "$d/indented.conf" "$P_YES")" '1' 'an indented [multilib] still counts'
+# A missing pacman.conf must return false, not abort the caller: install.sh runs under
+# `set -euo pipefail`, where an unredirected grep failure would end the install.
+is "$(needed pacman "$d/nonexistent.conf" "$P_YES")" '0' 'a missing pacman.conf is false, not fatal'
+rm -rf "$d"
+
 # ── syntax ───────────────────────────────────────────────────────────────────
 section "syntax"
 bash -n "$REPO/lib.sh" 2>/dev/null && r=1 || r=0;    ok "$r" 'lib.sh parses'

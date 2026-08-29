@@ -212,6 +212,24 @@ case "$PM" in
 	brew)   : ;;
 esac
 
+# 32-BIT RUST STD, for machines that BUILD lib32 packages — also deliberately NOT under a
+# DF_ question, and pointedly not under DF_DEV: the trigger is multilib, not language
+# preference. rust_lib32_needed() in lib.sh carries the full reasoning, including why pacman
+# considers this dependency satisfied and so never asks for it.
+#
+# --toolchain stable is not optional: lib32 PKGBUILDs `export RUSTUP_TOOLCHAIN=stable`, so
+# stable is the toolchain that has to carry the target, and a machine may well have others
+# installed (mkDesktop has 1.95 and 1.96.1 alongside it). Adding a target is idempotent, so
+# this is a no-op on every later run.
+#
+# `|| warn` rather than a bare `run`: this step needs the network, and it also fails on a
+# rustup that has no `stable` toolchain yet. Under `set -e` either would abort the whole
+# install at a step that is an optimisation, not a prerequisite.
+if rust_lib32_needed; then
+	run rustup target add --toolchain stable i686-unknown-linux-gnu \
+		|| warn "could not add the i686 Rust target — lib32 packages containing Rust code will fail to build."
+fi
+
 # ══════════════════════════════════════════════════════════════════════════
 step "3/9  Stow base config (git, ssh) + link VS Code settings"
 stow_pkg "$HOME" git

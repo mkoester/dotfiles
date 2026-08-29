@@ -157,6 +157,42 @@ pm_install() {
 	esac
 }
 
+# rust_lib32_needed — true when this machine BUILDS lib32 packages with a rustup-managed Rust,
+# and therefore needs the i686 std added to the toolchain by hand.
+#
+# The failure it prevents names the wrong cause. meson reports a missing 32-bit std as
+# "Compiler for language rust for the host machine not found", which reads as "install rust" and
+# is not: rustc runs fine (`rustc --target i686-… --version` succeeds in the same log), it just
+# has no i686-unknown-linux-gnu std, so the sanity compile dies with "can't find crate for std".
+# Building any lib32 package containing Rust code then aborts — and since paru runs inside
+# topgrade, it takes the whole system upgrade with it. lib32-gstreamer is the one that bites
+# here, via its PTP helper (mkDesktop, 2026-08-29).
+#
+# Nothing prompts for this, because pacman believes the dependency is already satisfied:
+# lib32-rust-libs `Provides: lib32-rust` and ships the i686 std into /usr/lib/rustlib — the
+# SYSTEM rust's tree. rustup `Provides: rust`, so it satisfies that package's own
+# `Depends On: rust`, and then shadows /usr/bin/rustc with a shim resolving into ~/.rustup,
+# where the std is not. Both packages are installed and neither is broken; the target simply
+# lives in a tree the compiler in use never looks at.
+#
+# Note NONE of the three conditions is "does this machine write Rust" — there is no such class
+# in this fleet, and on mkDesktop rustup is `Install Reason: Installed as a dependency` of
+# lib32-rust-libs, i.e. a lib32 chain dragged a toolchain in and nobody chose it:
+#   pacman    lib32 is an Arch concept; the Mac and the Fedora servers have no such packages.
+#   rustup    with the system `rust` package instead, lib32-rust-libs already covers this and
+#             there is nothing to add. Never both — rustup `Conflicts With: rust`.
+#   multilib  enabled means the machine intends to carry 32-bit packages at all.
+#
+# multilib is read as CONFIGURATION rather than probed with `pacman -Sl multilib`, which needs a
+# synced db and so answers "no" on a fresh machine — the one case where this step matters most.
+rust_lib32_needed() {
+	[ "${PM:-}" = pacman ] || return 1
+	have rustup || return 1
+	# Anchored, so a disabled `#[multilib]` does not match. Leading whitespace is allowed
+	# because pacman's own parser allows it.
+	grep -q '^[[:space:]]*\[multilib\]' "${PACMAN_CONF:-/etc/pacman.conf}" 2>/dev/null
+}
+
 # ── stow helpers ──
 # STOW_IGNORE — never stow Claude Code's scratch dirs. A `.claude/.cc-writes/` appears inside
 # any directory Claude has written to, so editing a tracked file under config-stow leaves one
