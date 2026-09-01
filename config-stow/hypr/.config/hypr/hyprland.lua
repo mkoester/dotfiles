@@ -740,10 +740,46 @@ hl.window_rule({ match = { class = "firefox", title = "^Picture-in-Picture$" }, 
 -- just pads itself with green felt.
 hl.window_rule({ match = { class = "sol.exe" }, float = true })
 
--- NO Thunderbird float rule here, deliberately — a title-matched one CANNOT work for that app.
--- `{ class = "org.mozilla.Thunderbird", title = "Alias" }, float = true` stood here from the
--- original skeleton until 2026-08-11 and had never once fired. See the `window.title` handler
--- further down, which is the working replacement.
+-- Float the calendar reminder popup. THE ONE THUNDERBIRD WINDOW A STATIC RULE CAN SELECT, and
+-- the reason is worth reading before assuming the rest of this app is equally tractable.
+--
+-- MEASURED 2026-09-01, `hyprctl -j clients` with the reminder open:
+--
+--   initialTitle         title                                        floating  fs  fsClient  size
+--   Calendar Reminders   1 Reminder                                   false     0   0         1708x1384
+--   Mozilla Thunderbird  All - … - Mozilla Thunderbird                false     0   0         1708x1384
+--
+-- Unlike the Send-As-Alias dialog and the Bitwarden popup — both of which map as the generic app
+-- title and therefore need a `window.title` handler — this window carries a DISTINCTIVE title at
+-- map time. So `initial_title` selects it, and this can be a static rule with no handler, no
+-- address juggling and no re-entry guard.
+--
+-- `initial_title`, NOT `title`: the settled title is "1 Reminder", which is both generic and
+-- pluralised (it will read "2 Reminders" with two). The map-time title is the stable one here —
+-- the reverse of the compose-window case noted below. Field name verified against the validator
+-- with a control (an invented `bogus_field_xyz` in the same position is rejected with
+-- `unknown match property`), because a silently-ignored match key would leave the rule matching
+-- on class alone and float EVERY Thunderbird window.
+--
+-- ONE DISPATCH-equivalent, i.e. `float` only. `fullscreen` and `fullscreenClient` are both 0, so
+-- there is nothing to unmaximize — this is NOT the Send-As-Alias case, which arrives maximized
+-- and needs `fullscreen_state`. The "full height, half width" appearance that prompted this is
+-- not Thunderbird asserting any geometry at all: 1708x1384 is IDENTICAL to the main window's, i.e.
+-- it is simply the scrolling layout's tile. Reading the symptom off the screen suggests the window
+-- asked to be half the screen; the numbers say it asked for nothing and was tiled.
+--
+-- UNMEASURED, deliberately left alone: what size it takes once floated. It may keep 1708x1384 or
+-- fall back to Hyprland's float default. If it comes up wrong, add a second rule
+-- (`size = { w, h }`, same match) — same as the `mk.switcher` pair above, which is two rules for
+-- the ordering reason documented there. Do NOT guess the numbers; read them off a floated window.
+hl.window_rule({ match = { class = "org.mozilla.Thunderbird", initial_title = "Calendar Reminders" }, float = true })
+
+-- NO Thunderbird float rule for the SEND-AS-ALIAS dialog here, deliberately — a title-matched one
+-- CANNOT work for it. `{ class = "org.mozilla.Thunderbird", title = "Alias" }, float = true` stood
+-- here from the original skeleton until 2026-08-11 and had never once fired. See the
+-- `window.title` handler further down, which is the working replacement. The contrast with the
+-- reminder rule directly above is the useful part: same app, same class, and whether a static rule
+-- can work at all comes down to whether the window has its real title when it maps.
 
 -- App -> static workspace. EVERY class below was read off a LIVE WINDOW with
 -- `hyprctl -j clients | grep -i class` (2026-08-10, mkMac2014) — no guesses, no .desktop files.
