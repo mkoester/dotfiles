@@ -1,0 +1,306 @@
+#!/usr/bin/env bash
+#
+# wifi-diagnose — find out why Wi-Fi is dead, with the emphasis on the failure
+# that actually bites this fleet: an OUT-OF-TREE (DKMS) driver that built for one
+# installed kernel and not for another. Read-only: it changes nothing.
+#
+# The shape of that bug, measured on mkMac2014 2026-08-26: the BCM4360 in the
+# 2014 MacBook Pro needs the proprietary `wl` module, which is not in the kernel.
+# broadcom-wl-dkms built fine against the LTS kernel and FAILED against mainline,
+# so booting mainline produced a machine with no wlan0 at all. Nothing warns you:
+# pacman reports success, the kernel boots, and the only trace is a make.log
+# nobody reads. `dkms status` shows the LTS build sitting there looking healthy.
+#
+# WHY DETECTION READS SYSFS AND NOT `ip link`
+# In the broken state there IS no wireless interface, so any check that starts
+# from `ip link` / /sys/class/net finds nothing and reports it as "no Wi-Fi
+# hardware" — which is indistinguishable from a machine that genuinely has none.
+# This script starts from the PCI/USB class code instead, which is a property of
+# the HARDWARE and is present whether or not a driver ever loaded.
+#
+# Exit status: 0 = nothing wrong found, 1 = at least one FAIL.
+#
+# Companion doc: Workstation-Documentation/hardware/intel-mac-cachyos.md
+
+set -uo pipefail
+
+FAILS=0
+WARNS=0
+
+c_r=$'\033[31m'; c_g=$'\033[32m'; c_y=$'\033[33m'; c_b=$'\033[1m'; c_0=$'\033[0m'
+[ -t 1 ] || { c_r=; c_g=; c_y=; c_b=; c_0=; }
+
+pass() { printf '  %sPASS%s  %s\n' "$c_g" "$c_0" "$*"; }
+warn() { printf '  %sWARN%s  %s\n' "$c_y" "$c_0" "$*"; WARNS=$((WARNS+1)); }
+fail() { printf '  %sFAIL%s  %s\n' "$c_r" "$c_0" "$*"; FAILS=$((FAILS+1)); }
+info() { printf '        %s\n' "$*"; }
+skip() { printf '  SKIP  %s\n' "$*"; }
+head_() { printf '\n%s== %s ==%s\n' "$c_b" "$*" "$c_0"; }
+
+printf '%swifi-diagnose%s  host=%s  kernel=%s  %s\n' \
+  "$c_b" "$c_0" "$(hostname -s)" "$(uname -r)" "$(date '+%F %T')"
+
+# ---------------------------------------------------------------- 1. kernels --
+head_ "1. Kernel context"
+
+RUNNING=$(uname -r)
+INSTALLED=()
+for d in /usr/lib/modules/*/; do
+  b=$(basename "$d")
+  # A leftover module dir with no kernel image is not a bootable kernel.
+  [ -e "$d/vmlinuz" ] || [ -e "$d/pkgbase" ] || continue
+  INSTALLED+=("$b")
+done
+
+info "running:   $RUNNING"
+info "installed: ${INSTALLED[*]:-none found}"
+
+if [ ! -d "/usr/lib/modules/$RUNNING" ]; then
+  # This is the NORMAL state right after a kernel upgrade, so it is a warning
+  # rather than a failure: nothing is broken, a reboot is simply pending. Grading
+  # it FAIL would make the exit code meaningless after every routine upgrade,
+  # which is how a check stops being read.
+  if [ "${#INSTALLED[@]}" -gt 0 ]; then
+    warn "running kernel $RUNNING is no longer installed — REBOOT PENDING"
+    info "normal after a kernel upgrade: the running kernel's modules are gone from"
+    info "disk, so any module not ALREADY loaded can no longer be loaded."
+    info "fix: reboot — check section 3 first to confirm the driver is ready"
+  else
+    fail "no module tree for the running kernel, and no installed kernel found"
+    info "this system has no bootable kernel modules at all"
+  fi
+else
+  pass "module tree exists for the running kernel"
+fi
+
+if [ "${#INSTALLED[@]}" -gt 1 ]; then
+  info "more than one kernel is installed — an out-of-tree driver must be built"
+  info "for EACH of them (section 3 is where that usually goes wrong)"
+fi
+
+# ------------------------------------------------------------- 2. hardware ---
+head_ "2. Wi-Fi hardware and bound driver"
+
+# PCI class 0x0280 = "Network controller" (i.e. wireless). Read from sysfs so
+# this works with no driver loaded and no interface present.
+WIFI_DEVS=()
+for dev in /sys/bus/pci/devices/*/; do
+  cls=$(cat "$dev/class" 2>/dev/null) || continue
+  case "$cls" in
+    0x0280*) WIFI_DEVS+=("$dev") ;;
+  esac
+done
+
+# USB Wi-Fi dongles do not carry a useful class at the device level; catch the
+# common case by looking for a driver that owns a wireless phy.
+if [ "${#WIFI_DEVS[@]}" -eq 0 ] && [ -d /sys/class/ieee80211 ]; then
+  for phy in /sys/class/ieee80211/*/; do
+    [ -e "$phy/device" ] && WIFI_DEVS+=("$(readlink -f "$phy/device")/")
+  done
+fi
+
+DRIVERS=()
+if [ "${#WIFI_DEVS[@]}" -eq 0 ]; then
+  fail "no wireless device found on the PCI bus"
+  info "either the machine has none, or the card is disabled in firmware/BIOS"
+else
+  for dev in "${WIFI_DEVS[@]}"; do
+    ven=$(cat "$dev/vendor" 2>/dev/null); did=$(cat "$dev/device" 2>/dev/null)
+    slot=$(basename "$dev")
+    if [ -e "$dev/driver" ]; then
+      drv=$(basename "$(readlink -f "$dev/driver")")
+      DRIVERS+=("$drv")
+      pass "$slot [${ven#0x}:${did#0x}] driver bound: $drv"
+    else
+      fail "$slot [${ven#0x}:${did#0x}] NO DRIVER BOUND"
+      info "this is the signature of a missing/unbuilt kernel module"
+      # modalias tells us which module *should* claim it.
+      if [ -e "$dev/modalias" ]; then
+        want=$(modprobe -R "$(cat "$dev/modalias")" 2>/dev/null | head -3 | tr '\n' ' ')
+        [ -n "$want" ] && info "modalias resolves to module(s): $want" \
+                       || info "no module in this kernel claims its modalias"
+      fi
+    fi
+  done
+fi
+
+# ------------------------------------- 3. out-of-tree module coverage matrix --
+head_ "3. Module present for EVERY installed kernel"
+# This is the check that catches the boot-into-mainline-and-lose-Wi-Fi bug.
+
+# Which modules matter: whatever is bound now, plus anything DKMS manages.
+MODS=()
+[ "${#DRIVERS[@]}" -gt 0 ] && MODS+=("${DRIVERS[@]}")
+
+DKMS_MODS=()
+if command -v dkms >/dev/null 2>&1; then
+  while IFS= read -r line; do
+    [ -n "$line" ] && DKMS_MODS+=("$line")
+  done < <(dkms status 2>/dev/null | sed 's/[,/].*//' | sort -u)
+fi
+
+# Map a DKMS package name to the module it ships (broadcom-wl -> wl).
+for dm in "${DKMS_MODS[@]:-}"; do
+  [ -z "$dm" ] && continue
+  found=""
+  for k in "${INSTALLED[@]}"; do
+    f=$(find "/usr/lib/modules/$k" -name '*.ko' -o -name '*.ko.*' 2>/dev/null \
+        | grep -E "/(updates|extramodules)/" | head -20)
+    [ -n "$f" ] && found="$found$f"$'\n'
+  done
+  while IFS= read -r ko; do
+    [ -z "$ko" ] && continue
+    m=$(basename "$ko"); m=${m%%.ko*}
+    case " ${MODS[*]:-} " in *" $m "*) ;; *) MODS+=("$m") ;; esac
+  done <<< "$found"
+done
+
+if [ "${#MODS[@]}" -eq 0 ]; then
+  skip "no candidate module identified (no driver bound and no DKMS modules)"
+else
+  # de-duplicate
+  readarray -t MODS < <(printf '%s\n' "${MODS[@]}" | sort -u)
+  for m in "${MODS[@]}"; do
+    printf '  module %s%s%s\n' "$c_b" "$m" "$c_0"
+    missing_any=0
+    for k in "${INSTALLED[@]}"; do
+      hit=$(find "/usr/lib/modules/$k" \( -name "$m.ko" -o -name "$m.ko.*" \) 2>/dev/null | head -1)
+      if [ -n "$hit" ]; then
+        loc=$(printf '%s' "$hit" | grep -qE '/(updates|extramodules)/' && echo "out-of-tree" || echo "in-tree")
+        printf '    %sok%s   %-34s %s\n' "$c_g" "$c_0" "$k" "$loc"
+      else
+        printf '    %sMISS%s %-34s not built for this kernel\n' "$c_r" "$c_0" "$k"
+        missing_any=1
+      fi
+    done
+    if [ "$missing_any" -eq 1 ]; then
+      fail "$m is missing for at least one installed kernel — booting that kernel loses this device"
+    fi
+  done
+fi
+
+# ------------------------------------------------------- 4. DKMS build state --
+head_ "4. DKMS status and last build failure"
+
+if ! command -v dkms >/dev/null 2>&1; then
+  skip "dkms not installed (nothing out-of-tree to build)"
+else
+  st=$(dkms status 2>/dev/null)
+  if [ -z "$st" ]; then
+    skip "dkms installed but manages no modules"
+  else
+    printf '%s\n' "$st" | sed 's/^/        /'
+    # A stale build dir with a make.log is the fingerprint of a FAILED build:
+    # a successful one is moved into the per-kernel directory.
+    while IFS= read -r log; do
+      [ -z "$log" ] && continue
+      kver=$(sed -n 's/.*for kernel \(.*\) (.*/\1/p' "$log" | head -1)
+      fail "a failed DKMS build is recorded for kernel ${kver:-unknown}"
+      info "log: $log"
+      grep -m3 -E '^[^ ].*error:' "$log" | sed 's/^/        > /'
+    done < <(find /var/lib/dkms -path '*/build/make.log' 2>/dev/null)
+  fi
+fi
+
+# ----------------------------------------------------------- 5. rfkill ------
+head_ "5. Radio kill switches"
+
+if [ ! -d /sys/class/rfkill ] || [ -z "$(ls -A /sys/class/rfkill 2>/dev/null)" ]; then
+  skip "no rfkill entries (no driver registered a radio yet)"
+else
+  for rk in /sys/class/rfkill/*/; do
+    n=$(cat "$rk/name" 2>/dev/null); t=$(cat "$rk/type" 2>/dev/null)
+    [ "$t" = "wlan" ] || continue
+    s=$(cat "$rk/soft" 2>/dev/null); h=$(cat "$rk/hard" 2>/dev/null)
+    if [ "$h" = "1" ]; then
+      fail "$n: HARD blocked (physical switch / firmware) — software cannot override"
+    elif [ "$s" = "1" ]; then
+      fail "$n: soft blocked — fix: rfkill unblock wifi"
+    else
+      pass "$n: not blocked"
+    fi
+  done
+fi
+
+# -------------------------------------------------------- 6. interface -----
+head_ "6. Wireless interface state"
+
+IFACES=()
+for n in /sys/class/net/*/; do
+  [ -d "$n/wireless" ] || [ -e "$n/phy80211" ] || continue
+  IFACES+=("$(basename "$n")")
+done
+
+if [ "${#IFACES[@]}" -eq 0 ]; then
+  fail "no wireless interface exists"
+  info "consistent with sections 2/3: the driver never loaded or never built"
+else
+  for i in "${IFACES[@]}"; do
+    op=$(cat "/sys/class/net/$i/operstate" 2>/dev/null)
+    case "$op" in
+      up)      pass "$i: operstate=up" ;;
+      dormant) warn "$i: operstate=dormant (radio up, not associated)" ;;
+      down)    warn "$i: operstate=down (interface exists but is not enabled)" ;;
+      *)       warn "$i: operstate=$op" ;;
+    esac
+  done
+fi
+
+# --------------------------------------------------- 7. network management --
+head_ "7. Network management daemon"
+
+# A blocked probe must not be reported as a negative result. Inside a container
+# or the Claude Code sandbox the system bus is unreachable, and `systemctl
+# is-active` then answers "inactive" for a daemon that is running perfectly well.
+if ! command -v systemctl >/dev/null 2>&1; then
+  skip "systemctl unavailable"
+elif bus_probe=$(systemctl is-system-running 2>&1); \
+     printf '%s' "$bus_probe" | grep -q 'Failed to connect'; then
+  skip "cannot reach the system bus (container/sandbox) — this check CANNOT answer here"
+  info "re-run from a normal terminal; treating this as \"no daemon\" would be wrong"
+else
+  found_nm=0
+  for svc in NetworkManager iwd systemd-networkd wpa_supplicant; do
+    if [ "$(systemctl is-active "$svc" 2>/dev/null)" = "active" ]; then
+      pass "$svc is active"; found_nm=1
+    fi
+  done
+  [ "$found_nm" -eq 0 ] && fail "no network management daemon is active"
+fi
+
+# ------------------------------------------------------------ 8. firmware ---
+head_ "8. Driver messages in the kernel log"
+
+if command -v journalctl >/dev/null 2>&1; then
+  pat=$(printf '%s|' "${MODS[@]:-wifi}" | sed 's/|$//')
+  hits=$(journalctl -k -b 0 --no-pager 2>/dev/null \
+         | grep -iE "($pat|firmware|ieee80211|cfg80211)" \
+         | grep -iE 'fail|error|timeout|missing|denied|reject' \
+         | grep -vE 'module verification failed|Modules linked in:' | tail -8)
+  if [ -n "$hits" ]; then
+    warn "errors in this boot's kernel log:"
+    printf '%s\n' "$hits" | sed 's/^/        > /'
+  else
+    pass "no driver/firmware errors in this boot's kernel log"
+  fi
+else
+  skip "journalctl unavailable"
+fi
+
+# --------------------------------------------------------------- summary ----
+head_ "Summary"
+if [ "$FAILS" -eq 0 ] && [ "$WARNS" -eq 0 ]; then
+  printf '  %sNothing wrong found.%s\n' "$c_g" "$c_0"
+elif [ "$FAILS" -eq 0 ]; then
+  printf '  %s%d warning(s), no failures.%s\n' "$c_y" "$WARNS" "$c_0"
+else
+  printf '  %s%d FAILURE(S)%s and %d warning(s).\n' "$c_r" "$FAILS" "$c_0" "$WARNS"
+  printf '\n  If section 3 shows a MISS, the driver simply is not built for that\n'
+  printf '  kernel. Rebuild it:\n\n'
+  printf '      sudo dkms autoinstall -k <kernel-version>\n\n'
+  printf '  If that build FAILS, read the log named in section 4 — the driver\n'
+  printf '  source needs patching for the newer kernel, and until it is patched\n'
+  printf '  the only working configuration is to boot the older kernel.\n'
+fi
+printf '\n'
+[ "$FAILS" -eq 0 ]
