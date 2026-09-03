@@ -560,6 +560,77 @@ else
 		| grep -c 'ERROR')" '1' 'a profile name with a space is refused'
 fi
 
+section 'hypr-window-capture — window state recorder'
+HWC="$REPO/config-stow/hypr/.local/bin/hypr-window-capture"
+if ! command -v python3 >/dev/null 2>&1; then
+	skip 'hypr-window-capture' 'python3 not installed'
+else
+	F="$REPO/tests/fixtures"
+	cap() { python3 "$HWC" "$@"; }
+	# The three samples are one Thunderbird lifecycle: main window alone; the compose
+	# window opens and the layout splits the column; then the anomaly of 2026-09-03.
+	seq3="$F/hypr-window-capture-1.json $F/hypr-window-capture-2.json $F/hypr-window-capture-3.json"
+
+	# CHANGES-ONLY IS THE DEFAULT, and this is the assertion that proves it is doing
+	# anything. Replaying the SAME sample twice must yield one data row, not two --
+	# feeding the timestamp into the comparison would silently make every sample
+	# "changed", i.e. the tool would look like it worked while suppressing nothing.
+	# The --every-sample run is the control: same input, two rows.
+	same="$F/hypr-window-capture-1.json $F/hypr-window-capture-1.json"
+	is "$(cap --clients-json $same | tail -n +2 | wc -l | tr -d ' ')" '1' \
+		'an unchanged window is reported once, not once per sample'
+	is "$(cap --clients-json $same --every-sample | tail -n +2 | wc -l | tr -d ' ')" '2' \
+		'...and --every-sample is the control that shows both samples were read'
+
+	# Every transition in the sequence must appear: 1 (main) + 2 (main resized, compose
+	# appears) + 2 (both change) = 5.
+	is "$(cap --clients-json $seq3 | tail -n +2 | wc -l | tr -d ' ')" '5' \
+		'each state transition produces exactly one row'
+
+	# THE ANOMALY MUST BE VISIBLE, or the tool is useless for the thing it was built for.
+	# A client-asserted maximize is fullscreenClient=1 -- the field that distinguishes
+	# "the client asked for this" from "Hyprland did it", and therefore decides whether
+	# the fix is suppress_event or a dispatch.
+	is "$(cap --clients-json $seq3 --no-titles | awk -F'\t' '$6 == 1' | wc -l | tr -d ' ')" '1' \
+		'a client-asserted maximize shows as fullscreenClient=1'
+	is "$(cap --clients-json $seq3 --no-titles | awk -F'\t' '$4 == "True"' | wc -l | tr -d ' ')" '1' \
+		'a window that starts floating itself shows as floating=True'
+
+	# A window that CLOSES is evidence too: it separates "this window changed" from
+	# "this window was replaced by a new one at a different address".
+	rev="$F/hypr-window-capture-2.json $F/hypr-window-capture-1.json"
+	is "$(cap --clients-json $rev | grep -c -- '-gone-')" '1' \
+		'a window that disappears is reported once'
+
+	# TITLES CAN CONTAIN A TAB OR A NEWLINE and would otherwise split or shift the row.
+	# The hypr-switcher fixture carries one deliberately. Seven windows plus a header is
+	# eight lines -- a raw title would make nine and shift every later column.
+	is "$(cap --clients-json "$F/hypr-switcher-clients.json" | wc -l | tr -d ' ')" '8' \
+		'a title containing a tab/newline does not break the row'
+	is "$(cap --clients-json "$F/hypr-switcher-clients.json" | grep -c 'herdr\\tsplit\\nline')" '1' \
+		'...and the offending characters are escaped, not dropped'
+
+	# --no-titles is the redaction lever: this repo is PUBLIC and a real capture carries
+	# subject lines and correspondent names. Assert the columns are gone, not merely blank.
+	is "$(cap --clients-json "$F/hypr-window-capture-1.json" --no-titles | head -1 | grep -c title)" '0' \
+		'--no-titles removes the title columns from the header'
+	is "$(cap --clients-json "$F/hypr-window-capture-1.json" | head -1 | grep -c title)" '1' \
+		'...and they are present without it (the control)'
+
+	# The class filter must actually filter -- the switcher fixture has seven windows of
+	# six classes, so a wrong regex that matched everything would pass a weaker check.
+	is "$(cap --clients-json "$F/hypr-switcher-clients.json" --class '^code$' \
+		| tail -n +2 | wc -l | tr -d ' ')" '1' 'the --class regex selects a single window'
+	is "$(cap --clients-json "$F/hypr-switcher-clients.json" --class 'no-such-class-xyz' \
+		| tail -n +2 | wc -l | tr -d ' ')" '0' '...and a non-matching regex selects none'
+
+	# A bad regex must fail loudly. Silently matching everything would produce a capture
+	# that looks complete and is not scoped to the window being investigated.
+	cap --clients-json "$F/hypr-window-capture-1.json" --class '[unclosed' >/dev/null 2>&1 \
+		&& r=0 || r=1
+	ok "$r" 'an invalid --class regex exits non-zero'
+fi
+
 section "gitar"
 if command -v zsh >/dev/null 2>&1; then
 	d="$(work)"

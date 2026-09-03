@@ -1,0 +1,24 @@
+[
+  {
+    "address": "0xAAAA1111",
+    "class": "org.mozilla.Thunderbird",
+    "initialTitle": "Mozilla Thunderbird",
+    "title": "All - user@example.invalid - Mozilla Thunderbird",
+    "floating": true,
+    "fullscreen": 0,
+    "fullscreenClient": 0,
+    "size": [556, 404],
+    "at": [900, 400]
+  },
+  {
+    "address": "0xBBBB2222",
+    "class": "org.mozilla.Thunderbird",
+    "initialTitle": "Write: (no subject)",
+    "title": "Write: Example subject line - Thunderbird",
+    "floating": false,
+    "fullscreen": 1,
+    "fullscreenClient": 1,
+    "size": [3428, 1384],
+    "at": [6, 50]
+  }
+]

@@ -1,0 +1,256 @@
+#!/usr/bin/env python3
+"""hypr-window-capture — record how a window's state changes over its lifetime.
+
+    hypr-window-capture [--class REGEX] [--interval S] [--duration S]
+                        [--out FILE] [--every-sample] [--no-titles]
+
+Polls `hyprctl -j clients` and prints one TSV row whenever a matching window APPEARS,
+CHANGES STATE, or DISAPPEARS. Built for the failure this config keeps hitting: a window
+that floats, maximizes or resizes itself moments after it maps, where the symptom on
+screen names the wrong cause and the only honest evidence is a timestamped sample.
+
+WHY THIS EXISTS (2026-09-03)
+----------------------------
+Every window-rule fix in hyprland.lua was settled the same way -- by watching a window
+through its whole lifetime and reading `floating` / `fullscreen` / `fullscreenClient`
+off it, rather than describing what the screen looked like. Three worked examples are
+written up in that file, and in all three the SCREEN LIED ABOUT THE CAUSE:
+
+  * the Bitwarden popup read as "it became a full-width tiled window and then floated
+    again"; `floating` was true on every sample and the address never changed. Firefox
+    was asserting maximize ON the floating window.
+  * the Thunderbird calendar reminder read as "it asked to be half the screen"; it was
+    asserting nothing at all -- its size was identical to the main window's, i.e. it was
+    simply the scrolling layout's tile.
+  * the Send-As-Alias dialog needed `fullscreen_state` rather than `fullscreen unset`,
+    a distinction visible ONLY in `fullscreenClient` (1 = the CLIENT is asserting it).
+
+So this script exists to stop that measurement being retyped by hand each time.
+
+WHY POLLING, NOT THE EVENT SOCKET
+---------------------------------
+Hyprland's socket2 emits events for map/unmap/title/workspace, but a CLIENT-ASSERTED
+geometry change is not one of them -- and it is the thing being hunted. The Bitwarden
+maximize arrived AFTER the last title change, which is precisely why the `window.title`
+handler could not fix it and why a `suppress_event` rule was needed instead. An event
+subscription would not have seen it. Polling does.
+
+WHY CHANGES-ONLY IS THE DEFAULT
+-------------------------------
+The bug being chased is transient and rare, so the capture has to be left running long.
+A 9-second capture on 2026-09-03 produced 40 rows, 38 of them identical. Printing only
+transitions makes an hours-long capture readable and puts the anomaly on one line.
+`--every-sample` restores the raw stream when you want to see cadence.
+
+⚠ A CAPTURE LOG CARRIES PII AND MUST NOT BE PASTED INTO A PUBLIC REPO
+---------------------------------------------------------------------
+Window titles are real subject lines, correspondent names, file paths and URLs. The
+2026-09-03 capture that prompted this script contained an email address, a real postal
+address and a third party's business enquiry -- in a Thunderbird window title. This repo
+is PUBLIC, and its test suite already polices a leak of exactly this shape (real monitor
+serials reached public fixtures on 2026-08-22 via copied test data).
+
+`--no-titles` omits the two title columns. Use it whenever the titles are not the thing
+being diagnosed -- for a float/maximize question they never are. Redact before sharing.
+"""
+
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+
+# The fields that decide a float/maximize diagnosis. `address` leads because the single
+# most common misreading is treating one window changing state as two different windows
+# (or the reverse) -- the Bitwarden case looked like a second window until the address
+# was checked and turned out constant.
+COLUMNS = ["ts", "address", "class", "floating", "fs", "fsClient", "size", "at"]
+TITLE_COLUMNS = ["initialTitle", "title"]
+
+
+def clients(fixture=None):
+    """Return the client list, from a fixture file or from a live hyprctl."""
+    if fixture:
+        with open(fixture, encoding="utf-8") as fh:
+            return json.load(fh)
+
+    try:
+        proc = subprocess.run(
+            ["hyprctl", "-j", "clients"],
+            capture_output=True, text=True, check=False,
+        )
+    except FileNotFoundError:
+        sys.exit("hyprctl not found — is Hyprland installed and on PATH?")
+
+    # A blocked or absent socket must be reported as BLOCKED, never as an empty client
+    # list. An empty list is a legitimate answer ("no windows match") and would read as
+    # one, which is the silent-empty-result trap: the capture would look like it ran and
+    # found nothing. Same reason wifi-diagnose reports SKIP rather than a negative when
+    # a probe cannot run.
+    if proc.returncode != 0:
+        sys.exit(
+            "hyprctl failed (rc=%d): %s\n"
+            "If this is a sandboxed session the compositor socket is unreachable — run "
+            "it from a normal terminal." % (proc.returncode, proc.stderr.strip())
+        )
+    return json.loads(proc.stdout)
+
+
+def cell(value):
+    r"""Stringify one field so it cannot break the TSV.
+
+    A WINDOW TITLE CAN CONTAIN A TAB OR A NEWLINE. That is not hypothetical: this repo's
+    hypr-switcher fixture carries `herdr\tsplit\nline` for exactly this reason. Either
+    character silently splits one row into two, or shifts every later column left by one
+    -- so the log still parses, and `floating` is read out of the `fsClient` column. A
+    corrupted row that still looks like a row is worse than a crash.
+    """
+    return str(value).replace("\t", "\\t").replace("\n", "\\n").replace("\r", "\\r")
+
+
+def row(client, ts, with_titles):
+    """One client -> one list of TSV cells."""
+    size = client.get("size") or [0, 0]
+    at = client.get("at") or [0, 0]
+    cells = [
+        ts,
+        cell(client.get("address", "")),
+        cell(client.get("class", "")),
+        cell(client.get("floating", "")),
+        cell(client.get("fullscreen", "")),
+        cell(client.get("fullscreenClient", "")),
+        "%sx%s" % (cell(size[0]), cell(size[1])),
+        "%s,%s" % (cell(at[0]), cell(at[1])),
+    ]
+    if with_titles:
+        cells += [cell(client.get("initialTitle", "")), cell(client.get("title", ""))]
+    return cells
+
+
+def state(cells):
+    """The part of a row that decides whether anything CHANGED.
+
+    Deliberately excludes the timestamp (column 0) -- otherwise every sample differs
+    from the last and --changes-only degrades silently into --every-sample, which is the
+    kind of bug that makes a tool look like it is working while doing nothing.
+    """
+    return tuple(cells[1:])
+
+
+def main():
+    ap = argparse.ArgumentParser(
+        description="Record Hyprland window state changes over time.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    ap.add_argument("--class", dest="cls", default=".",
+                    help="RE2/Python regex matched against the window class (default: all)")
+    ap.add_argument("--interval", type=float, default=0.25,
+                    help="seconds between samples (default: 0.25)")
+    ap.add_argument("--duration", type=float,
+                    help="stop after this many seconds (default: run until Ctrl-C)")
+    ap.add_argument("--out", help="also append rows to this file")
+    ap.add_argument("--every-sample", action="store_true",
+                    help="print every sample, not just transitions")
+    ap.add_argument("--no-titles", action="store_true",
+                    help="omit the title columns (they carry PII — see the module docstring)")
+    # Takes a SEQUENCE of files, replayed as successive polls. One file could only ever
+    # test the formatting; the change detection -- the whole point of the tool -- needs
+    # at least two samples to compare, and a tool whose central logic is untestable
+    # tends to stay untested.
+    ap.add_argument("--clients-json", nargs="+", metavar="FILE",
+                    help="replay these client lists as successive samples instead of "
+                         "polling (for tests)")
+    args = ap.parse_args()
+
+    try:
+        pattern = re.compile(args.cls)
+    except re.error as exc:
+        sys.exit("bad --class regex: %s" % exc)
+
+    with_titles = not args.no_titles
+    columns = COLUMNS + (TITLE_COLUMNS if with_titles else [])
+
+    sink = open(args.out, "a", encoding="utf-8") if args.out else None
+
+    def emit(cells):
+        line = "\t".join(cells)
+        print(line, flush=True)
+        if sink:
+            sink.write(line + "\n")
+            sink.flush()
+
+    emit(columns)
+
+    # address -> last emitted state, so a window that closes can be reported too. A
+    # disappearance is evidence: it separates "the window changed" from "the window was
+    # replaced by a new one at a new address".
+    last = {}
+    started = time.time()
+
+    replay = list(args.clients_json) if args.clients_json else None
+    sample = 0
+
+    try:
+        while True:
+            if replay:
+                # SYNTHETIC, SPACED BY --interval, and not merely cosmetic. A replay runs
+                # all its samples inside the same millisecond, so a real clock stamps them
+                # identically -- which made the changes-only test VACUOUS: breaking
+                # `state()` to include the timestamp left the suite green, because the
+                # timestamps did not differ either. Distinct stamps make that assertion
+                # able to fail, and make replay output reproducible as a side effect.
+                offset = sample * args.interval
+                ts = time.strftime("%H:%M:%S", time.gmtime(offset)) + \
+                    ".%03d" % round((offset % 1) * 1000)
+            else:
+                ts = time.strftime("%H:%M:%S") + ".%03d" % ((time.time() % 1) * 1000)
+            fixture = replay[sample] if replay else None
+            matched = [c for c in clients(fixture)
+                       if pattern.search(str(c.get("class", "")))]
+
+            seen = set()
+            for client in matched:
+                cells = row(client, ts, with_titles)
+                addr = cells[1]
+                seen.add(addr)
+                if args.every_sample or last.get(addr) != state(cells):
+                    emit(cells)
+                    last[addr] = state(cells)
+
+            for addr in [a for a in last if a not in seen]:
+                gone = [ts, addr] + ["-gone-"] * (len(columns) - 2)
+                emit(gone)
+                del last[addr]
+
+            # Replay stops when the samples run out; polling would otherwise loop on the
+            # last fixture forever, printing nothing (no changes) and looking like a hang.
+            if replay:
+                sample += 1
+                if sample >= len(replay):
+                    break
+                continue
+            if args.duration and (time.time() - started) >= args.duration:
+                break
+            time.sleep(args.interval)
+    except KeyboardInterrupt:
+        pass
+    except BrokenPipeError:
+        # `hypr-window-capture … | head -5` closes the pipe under us. Without this the
+        # tool dumps a stack trace over the very output being read, and Python then
+        # prints a SECOND "Exception ignored while flushing sys.stdout" at shutdown.
+        # Point stdout at devnull so the interpreter's final flush has somewhere to go.
+        try:
+            os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        except OSError:
+            pass
+    finally:
+        if sink:
+            sink.close()
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
