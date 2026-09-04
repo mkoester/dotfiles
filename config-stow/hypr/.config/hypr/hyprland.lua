@@ -806,11 +806,56 @@ hl.window_rule({ match = { class = "org.mozilla.Thunderbird", initial_title = "C
 -- up wrong, add a second rule (`size = { w, h }`, same match) — do NOT guess the numbers, read
 -- them off a floated window.
 --
--- UNMEASURED, second item: only the NEW-event case was captured. Editing an EXISTING event is
--- expected to map as "Edit Item" too — the string is the dialog's, not the new-event action's —
--- and floating it is wanted either way, but nobody has looked. If an existing-event dialog comes
--- up tiled, capture its initialTitle before changing this rule.
+-- ⚠ THIS RULE COVERS NEW EVENTS ONLY. Opening an EXISTING event is a different window as far as
+-- matching is concerned, and the prediction that stood here — "expected to map as Edit Item too,
+-- the string is the dialog's" — was measured FALSE the same day:
+--
+--   class                    initialTitle         title                                floating
+--   org.mozilla.Thunderbird  Mozilla Thunderbird  14.–20. September 2026 - Mozilla Th…  false
+--   org.mozilla.Thunderbird  (empty string)       WEG: Münster Begehung                 false
+--
+-- It maps with an EMPTY initialTitle and settles on the event's own summary. So it is the exact
+-- inverse of the new-event window above: there the map-time title is the stable one and the
+-- settled title is junk; here the map-time title is junk and the settled title is arbitrary USER
+-- TEXT, which no rule can key on. Two windows of the same dialog, opened two ways, needing two
+-- different techniques — which is why the reminder rule's "read the live window" refrain applies
+-- per ENTRY POINT, not per dialog.
+--
+-- Handled by the SECOND rule below rather than by widening this one — two narrow static rules,
+-- because the two entry points genuinely have nothing in common to match on.
 hl.window_rule({ match = { class = "org.mozilla.Thunderbird", initial_title = "^Edit Item$" }, float = true })
+
+-- The same dialog, opened on an EXISTING event: matched on the empty map-time title.
+--
+-- Matching on emptiness is a weak-looking discriminator, so it was measured rather than assumed —
+-- every Thunderbird window type reachable without effort, in two captures (2026-09-04, mkDell):
+--
+--   window                                        initialTitle
+--   main window (any tab)                         Mozilla Thunderbird
+--   compose                                       Write: (no subject)
+--   Send As Alias dialog                          Mozilla Thunderbird
+--   Calendar Reminders                            Calendar Reminders
+--   New Event                                     Edit Item
+--   EXISTING event                                (empty)
+--
+-- Address Book and Settings are NOT windows here — they open as tabs, so the row that reads
+-- "Address Book - Mozilla Thunderbird" above is the main window wearing a tab's title. That is
+-- also why this list is shorter than it looks: several things worth worrying about turned out not
+-- to be separate windows at all.
+--
+-- So the event dialog is the only titleless window, and `^$` does not over-match anything in that
+-- set. CONFIRMED WORKING on the live compositor after `hyprctl reload` (2026-09-04, mkDell): both
+-- entry points float, i.e. Hyprland does evaluate a title regex against an empty string — which
+-- the validator could never have told us, since it accepts the regex either way.
+--
+-- One caveat left standing: the measured set is "what a normal session opens", so a rarely-seen
+-- dialog (Edit Filters, Activity Manager, an import wizard) was never checked and could map
+-- titleless too. That failure is LOUD — a window floats that should not — so it costs a glance,
+-- not a silent misconfiguration; narrow the match if one turns up.
+--
+-- `float` only, and no `size`: fullscreen/fullscreenClient are 0 and the geometry is the same
+-- 1708x1384 tile as every other window measured here, i.e. nothing was asserted.
+hl.window_rule({ match = { class = "org.mozilla.Thunderbird", initial_title = "^$" }, float = true })
 
 -- NO Thunderbird float rule for the SEND-AS-ALIAS dialog here, deliberately — a title-matched one
 -- CANNOT work for it. `{ class = "org.mozilla.Thunderbird", title = "Alias" }, float = true` stood
