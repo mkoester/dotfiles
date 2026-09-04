@@ -774,6 +774,44 @@ hl.window_rule({ match = { class = "sol.exe" }, float = true })
 -- the ordering reason documented there. Do NOT guess the numbers; read them off a floated window.
 hl.window_rule({ match = { class = "org.mozilla.Thunderbird", initial_title = "Calendar Reminders" }, float = true })
 
+-- Float the calendar event dialog — Thunderbird's New Event window, and (see below) the same
+-- window opened on an existing event.
+--
+-- MEASURED 2026-09-04 (mkDell), `hyprctl -j clients` with the dialog open, calendar tab behind it:
+--
+--   class                    initialTitle         title                           floating  fs  fsClient  size
+--   org.mozilla.Thunderbird  Mozilla Thunderbird  Calendar - Mozilla Thunderbird  false     0   0         1708x1384
+--   org.mozilla.Thunderbird  Edit Item            New Event:                      false     0   0         1708x1384
+--
+-- THIRD static-rule case, and it lands on the same side as the reminder rule directly above: a
+-- DISTINCTIVE title at map time, so no handler, no address juggling, no re-entry guard.
+--
+-- `initial_title`, NOT `title` — and here the two fields disagree in the useful direction. The
+-- settled title is "New Event:", which is generic-looking and about to grow the event's summary
+-- after that colon as it is typed; "Edit Item" is fixed. Same reasoning as the reminder rule
+-- above, where the map-time title was likewise the stable one.
+--
+-- ANCHORED, unlike the reminder rule. "Edit Item" is a generic phrase that could plausibly occur
+-- inside some other window's title, where "Calendar Reminders" could not, so the regex is pinned
+-- rather than left a bare literal. Costs nothing if Hyprland full-matches anyway.
+--
+-- `float` ONLY. `fullscreen` and `fullscreenClient` are both 0, so there is nothing to unmaximize
+-- — this is the reminder case, NOT the Send-As-Alias case below, which arrives maximized and needs
+-- a `fullscreen_state` dispatch on top of the float.
+--
+-- 1708x1384 is IDENTICAL to the main window's, i.e. Thunderbird asserted no geometry at all and
+-- was simply tiled — exactly as measured for the reminder window, and the same trap: on screen it
+-- reads as the dialog demanding a full-height slab, and the numbers say it demanded nothing. So,
+-- as there: what size it takes once floated is UNMEASURED and deliberately left alone. If it comes
+-- up wrong, add a second rule (`size = { w, h }`, same match) — do NOT guess the numbers, read
+-- them off a floated window.
+--
+-- UNMEASURED, second item: only the NEW-event case was captured. Editing an EXISTING event is
+-- expected to map as "Edit Item" too — the string is the dialog's, not the new-event action's —
+-- and floating it is wanted either way, but nobody has looked. If an existing-event dialog comes
+-- up tiled, capture its initialTitle before changing this rule.
+hl.window_rule({ match = { class = "org.mozilla.Thunderbird", initial_title = "^Edit Item$" }, float = true })
+
 -- NO Thunderbird float rule for the SEND-AS-ALIAS dialog here, deliberately — a title-matched one
 -- CANNOT work for it. `{ class = "org.mozilla.Thunderbird", title = "Alias" }, float = true` stood
 -- here from the original skeleton until 2026-08-11 and had never once fired. See the
