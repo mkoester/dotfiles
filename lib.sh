@@ -286,6 +286,22 @@ unlink_omz() {
 	esac
 }
 
+# link_overlay_dir <src-dir> <dest-dir> [glob] — symlink a per-machine overlay directory from
+# workstation-private into a config dir (the topgrade.d / kanshi config.d shape). Absent or empty
+# source is a silent no-op: a machine without the private clone must still install cleanly.
+#
+# The <glob> defaults to `*` but exists because topgrade parses EVERY file in ~/.config/topgrade.d
+# as TOML and propagates the error — one README.md linked in there aborts the whole topgrade run,
+# which reads as "topgrade is broken", not as "that file should not be there". Pass '*.toml' for
+# any destination whose consumer is that literal-minded.
+link_overlay_dir() {
+	local src="$1" dest="$2" glob="${3:-*}"
+	[ -d "$src" ] || return 0
+	compgen -G "$src/$glob" >/dev/null || return 0
+	run mkdir -p "$dest"
+	run_sh "ln -sf \"$src/\"$glob \"$dest/\""
+}
+
 # clone_if_absent <url> <dir> — re-runnable git clone for the omz theme/plugins.
 clone_if_absent() { [ -d "$2" ] && info "$(basename "$2") present" || run git clone --depth=1 "$1" "$2"; }
 

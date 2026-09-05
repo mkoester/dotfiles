@@ -995,6 +995,12 @@ if ask_yn DF_TOPGRADE "topgrade (one-shot 'update everything' umbrella)?"; then
 		*)      info "install topgrade per upstream (cargo/prebuilt binary)." ;;
 	esac
 	stow_pkg "$HOME/.config" topgrade
+	# Per-machine overrides from workstation-private. topgrade reads ~/.config/topgrade.d/*.toml
+	# BEFORE the main topgrade.toml and merges left-wins (merge2 `overwrite_none`, verified in
+	# topgrade v17.9.0 src/config.rs), so an overlay beats the stowed fleet-wide file. The merge is
+	# per FIELD, not per element: an overlay `disable = [...]` REPLACES the shared list rather than
+	# adding to it — repeat anything from topgrade.toml that must still apply on that host.
+	link_overlay_dir "$HOST_DIR/topgrade.d" "$HOME/.config/topgrade.d" '*.toml'
 fi
 
 if ask_yn DF_CADDY "Caddy host (caddy* aliases)?";     then link_omz oh-my-zsh-custom caddy.zsh

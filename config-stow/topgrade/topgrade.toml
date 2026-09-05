@@ -4,6 +4,13 @@
 #   topgrade              # all steps
 #   topgrade --dry-run    # print, don't run
 #   topgrade only pnpm    # a single step
+#
+# THIS FILE IS FLEET-WIDE (stowed to every DF_TOPGRADE machine). Per-machine differences go in
+# ~/.config/topgrade.d/*.toml, which topgrade reads BEFORE this file and merges left-wins — so an
+# overlay key beats the one here. install.sh links those from workstation-private/<host>/topgrade.d.
+# The merge is per FIELD, not per element: an overlay `disable = [...]` REPLACES the list below
+# rather than extending it. (Example: mkMac2017 disables the `system` step, because that Mac is
+# frozen on Sequoia and its OS upgrades are triggered by hand.)
 
 [misc]
 cleanup = false             # topgrade's built-in cleanup is REPLACED by the [commands]

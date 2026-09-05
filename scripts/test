@@ -189,6 +189,74 @@ ok "$([ ! -e "$d/.oh-my-zsh-custom/broken.zsh" ] && [ ! -L "$d/.oh-my-zsh-custom
 	'a broken link into this repo is removed'
 rm -rf "$d"
 
+# ── link_overlay_dir ─────────────────────────────────────────────────────────
+# The per-machine overlay linker (topgrade.d today). Two properties matter: it must be a clean
+# no-op on a machine with no workstation-private clone, and the glob must be able to EXCLUDE
+# files — topgrade parses every file in ~/.config/topgrade.d as TOML and aborts the whole run on
+# one it cannot deserialize, so a linked README.md would read as "topgrade is broken".
+section "link_overlay_dir"
+d="$(work)"; DRYRUN=0
+mkdir -p "$d/src" "$d/dest"
+: >"$d/src/10-macos.toml"; : >"$d/src/20-extra.toml"; : >"$d/src/README.md"
+
+link_overlay_dir "$d/src" "$d/dest" '*.toml' >/dev/null 2>&1
+ok "$([ -L "$d/dest/10-macos.toml" ] && echo 1 || echo 0)" 'a matching overlay file is linked'
+ok "$([ -L "$d/dest/20-extra.toml" ] && echo 1 || echo 0)" '…every one of them, not just the first'
+ok "$([ ! -e "$d/dest/README.md" ] && echo 1 || echo 0)" 'a non-matching file is NOT linked'
+is "$(readlink "$d/dest/10-macos.toml")" "$d/src/10-macos.toml" 'the link points at the overlay'
+
+# Re-running must not fail or nest a link inside the previous one (ln -sf into a dir).
+link_overlay_dir "$d/src" "$d/dest" '*.toml' >/dev/null 2>&1
+is "$(find "$d/dest" -mindepth 1 | wc -l | tr -d ' ')" '2' 'a second run is idempotent'
+
+# The destination is created — a fresh machine has no ~/.config/topgrade.d yet.
+link_overlay_dir "$d/src" "$d/fresh" '*.toml' >/dev/null 2>&1
+ok "$([ -L "$d/fresh/10-macos.toml" ] && echo 1 || echo 0)" 'a missing destination dir is created'
+
+# No private clone, or an overlay dir holding nothing that matches: no dest dir, no error.
+link_overlay_dir "$d/absent" "$d/dest-absent" '*.toml' >/dev/null 2>&1
+is "$?" 0 'an absent source is a clean no-op'
+ok "$([ ! -e "$d/dest-absent" ] && echo 1 || echo 0)" '…and creates no destination'
+mkdir -p "$d/empty"; : >"$d/empty/README.md"
+link_overlay_dir "$d/empty" "$d/dest-empty" '*.toml' >/dev/null 2>&1
+ok "$([ ! -e "$d/dest-empty" ] && echo 1 || echo 0)" 'a source with no matching file creates nothing'
+
+# --dry-run must not link: install.sh's own --dry-run relies on that staying true.
+DRYRUN=1
+link_overlay_dir "$d/src" "$d/dry" '*.toml' >/dev/null 2>&1
+ok "$([ ! -e "$d/dry" ] && echo 1 || echo 0)" '--dry-run links nothing'
+DRYRUN=0
+rm -rf "$d"
+
+# ── mkMac2017 topgrade overlay ───────────────────────────────────────────────
+# The overlay lives in workstation-private, so this only runs where that clone exists. It asserts
+# the two things a typo would silently break: the file is valid TOML with `system` in [misc]
+# disable, and the fleet-wide topgrade.toml does NOT disable `system` (which would make the
+# overlay meaningless and hide a mistake on every Linux host).
+section "topgrade overlay (mkMac2017)"
+PRIV="$(dirname "$REPO")/workstation-private"
+OVL="$PRIV/mkMac2017/topgrade.d/10-macos.toml"
+if [ -f "$OVL" ] && command -v python3 >/dev/null 2>&1; then
+	toml_disable() {  # <file> — the [misc] disable list, one entry per line
+		python3 - "$1" <<-'PYEOF'
+			import sys
+			try: import tomllib
+			except ModuleNotFoundError: sys.exit(0)
+			with open(sys.argv[1], "rb") as f: d = tomllib.load(f)
+			print("\n".join(d.get("misc", {}).get("disable", [])))
+		PYEOF
+	}
+	is "$(toml_disable "$OVL" | grep -cx system)" '1' 'the Mac overlay disables the system step'
+	is "$(toml_disable "$REPO/config-stow/topgrade/topgrade.toml" | grep -cx system)" '0' \
+		'the fleet-wide config does NOT disable it'
+	# Only *.toml is linked, so anything else in that directory is inert by design — but a stray
+	# .toml there IS parsed by topgrade, so keep the directory to files that are meant to load.
+	is "$(find "$PRIV/mkMac2017/topgrade.d" -maxdepth 1 -type f ! -name '*.toml' | wc -l | tr -d ' ')" '0' \
+		'the overlay dir holds only .toml files'
+else
+	skip 'topgrade overlay (mkMac2017)' 'no workstation-private clone here'
+fi
+
 # ── stow_conflicts ───────────────────────────────────────────────────────────
 # The parser has to cope with two stow message shapes; whichever this machine's stow emits, a
 # pre-existing real file must come back as a bare relative path.
