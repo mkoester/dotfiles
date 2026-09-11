@@ -1073,6 +1073,40 @@ end)
 -- about Bitwarden; widen it as its own deliberate change, with the Thunderbird dialog re-measured.
 hl.window_rule({ match = { class = "firefox" }, suppress_event = "maximize" })
 
+-- Decline maximize requests from Thunderbird. Same mechanism as the firefox rule above, added for
+-- a DIFFERENT symptom — and the symptom is worth reading, because nothing about it points here.
+--
+-- REPORTED 2026-09-11 (mkMac2014): the calendar reminder popup was visible, drawn above the main
+-- mail window, and Dismiss could not be clicked. Every instinct says "the reminder rule is wrong".
+-- It was not. Measured with the reminder on screen:
+--
+--   initialTitle         floating  fs/fsClient  size      at
+--   Mozilla Thunderbird  false     0/0          1588x944  6,50     <- AFTER the fix below
+--   Calendar Reminders   true      0/0          800x969   400,38
+--
+-- The reminder floats correctly at 800x969 and always did. What broke it was the MAIN window
+-- sitting at `fs = 1/1`: Hyprland drew the dialog above it but kept pointer input on the maximized
+-- window underneath, so every click on Dismiss landed on the window behind. Clearing
+-- `fullscreenClient` on the main window made it clickable immediately.
+--
+-- This also answers the "UNMEASURED, deliberately left alone: what size it takes once floated"
+-- note on the reminder rule (~line 770): 800x969, NOT the tile size. No `size` rule is needed.
+--
+-- `fs = 1/1` SURVIVES SUPER+F, exactly as the Send-As-Alias comment below predicts — an internal
+-- unset cannot clear a client-asserted maximize. The lever that worked was
+-- `fullscreen_state({ internal = 0, client = 0, action = "set", window = "address:…" })`, and the
+-- `window =` field is not optional: the same call without it returned `ok` and acted on the
+-- TERMINAL that issued it. Both calls printed `ok`. The `fullscreenClient` field afterwards is the
+-- only evidence.
+--
+-- NOT WIDENED to `class = ".*"` (which Hyprland's shipped config uses, and which the firefox
+-- comment above argues is likely right). Kept narrow because how the main window reached `fs = 1/1`
+-- was never established — Thunderbird asserting it unprompted, or re-asserting after a keypress —
+-- so this rule is scoped to the evidence that exists. Widening it is still the better end state and
+-- would probably retire the `fullscreen_state` dispatch in the Send-As-Alias handler; do it as its
+-- own deliberate change, with that dialog re-measured.
+hl.window_rule({ match = { class = "org.mozilla.Thunderbird" }, suppress_event = "maximize" })
+
 -- Float the Bitwarden extension popup (the window a passkey login pops out into).
 --
 -- SECOND worked example of the static-rule limitation, and the reason it is a handler rather than
