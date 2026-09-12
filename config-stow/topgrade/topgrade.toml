@@ -20,6 +20,17 @@ disable = ["hyprpm"]        # `hyprpm update` needs cmake (not installed) and th
                             # does not exist), so the step could only ever fail.
                             # Re-enable + `paru -S cmake` if a plugin is ever installed
                             # (hyprland.lua's hyprshell note is the likely trigger).
+no_self_update = true       # topgrade is installed by a PACKAGE MANAGER on every machine here
+                            # (topgrade-bin from the AUR on Arch; brew on the Mac), so the
+                            # `system` / `brew_formula` step already upgrades it. The built-in
+                            # self-update downloads a GitHub release over the packaged binary —
+                            # root-owned, so it fails, and where it succeeded it would leave
+                            # pacman's file on disk replaced behind its back.
+                            # DELIBERATELY A SEPARATE KEY, NOT `disable = [… "self_update"]`:
+                            # an overlay in ~/.config/topgrade.d/*.toml REPLACES the `disable`
+                            # list per field (see the header), so a host that disables one step
+                            # would silently re-enable self-update. A key of its own survives.
+                            # Equivalents: --no-self-update, TOPGRADE_NO_SELF_UPGRADE=1.
 sudo_loop = true            # keep sudo credentials warm for the whole run (no mid-run
                             # password prompt). Tradeoff: a walk-away Ctrl-C could reuse
                             # the cached sudo session — fine on a personal workstation.
