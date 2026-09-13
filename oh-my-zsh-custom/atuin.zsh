@@ -1,8 +1,13 @@
 #!/usr/bin/env zsh
 
 # atuin — magical shell history, synced to my self-hosted server. https://atuin.sh
-# Sourced last (oh-my-zsh-custom) so atuin's Up / Ctrl-R bindings win over the plugins that
+# Sourced last (oh-my-zsh-custom) so atuin's Ctrl-R binding wins over the plugins that
 # loaded earlier (zsh-autosuggestions / syntax-highlighting).
+#
+# --disable-up-arrow: Up stays zsh's own history-substring/line-up, atuin owns Ctrl-R only.
+# It is an `atuin init` FLAG, not a config.toml key — there is no way to turn the Up binding
+# off from ~/.config/atuin/config.toml, so this line is the only place it can be done
+# (`atuin init --help` lists --disable-ctrl-r / --disable-up-arrow / --disable-ai).
 #
 # Link only where atuin is installed — the installer's "atuin?" question does this, and the
 # guard below keeps a shell from breaking if the binary is missing.
@@ -16,5 +21,5 @@
 # Distro packages (apt/pacman/brew) are already on PATH, so this is a harmless no-op for them.
 [[ -d "$HOME/.atuin/bin" ]] && path=("$HOME/.atuin/bin" $path)
 if command -v atuin >/dev/null 2>&1; then
-  eval "$(atuin init zsh)"
+  eval "$(atuin init zsh --disable-up-arrow)"
 fi
