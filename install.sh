@@ -24,8 +24,8 @@
 #   (Without a workstation-private clone there is nowhere to save — the run says so and still works.)
 #
 # Preseeding (skip prompts): export DF_DESKTOP / DF_NIRI / DF_HYPR / DF_DMS / DF_MESSENGERS /
-#   DF_QUADLET / DF_ATUIN / DF_NODE / DF_DEV / DF_CADDY / DF_GO / DF_WSL / DF_GITA / DF_FRESH /
-#   DF_LESSPIPE / DF_TOPGRADE = 1|0.
+#   DF_QUADLET / DF_ATUIN / DF_SYNCTHING / DF_NODE / DF_DEV / DF_CADDY / DF_GO / DF_WSL / DF_GITA /
+#   DF_FRESH / DF_LESSPIPE / DF_TOPGRADE = 1|0.
 #   An exported DF_* beats the stored host.env answer for that one run and is NOT saved, so
 #   `DF_NIRI=0 ./install.sh` is a one-off override rather than a decision.
 #   DF_STOW_BACKUP=1 answers "move conflicting files aside as *.pre-stow-backup?" up front
@@ -883,6 +883,24 @@ if ask_yn DF_ATUIN "atuin shell-history sync (self-hosted)?"; then
 	info "  atuin import auto && atuin sync"
 else
 	unlink_omz oh-my-zsh-custom atuin.zsh
+fi
+
+# Syncthing: fleet-wide file-sync mesh. Its own question rather than folded into DF_DESKTOP or
+# DF_QUADLET — mkFlur and mkde want it with no desktop and no quadlet host, and a laptop wants it
+# with neither of those necessarily true either. No omz snippet: it needs no shell-rc changes,
+# only a running service.
+if ask_yn DF_SYNCTHING "Syncthing (fleet file-sync mesh)?"; then
+	pm_install syncthing
+	if [ "$PM" = brew ]; then
+		run brew services start syncthing
+	else
+		info "enable + start the service:"
+		info "  systemctl --user enable --now syncthing"
+	fi
+	info "WebUI: 127.0.0.1:8384 (tunnel in with 'ssh -L 8384:127.0.0.1:8384 <host>' on a headless box"
+	info "  — the default GUI has no auth, so don't bind it to a LAN address before setting one)."
+	info "Get this device's ID (WebUI: Actions -> Show ID, or 'syncthing cli show system' once"
+	info "  running) and add it as a remote device on the other fleet members to join the mesh."
 fi
 
 if ask_yn DF_NODE "Node machine (fnm + pnpm)?"; then
