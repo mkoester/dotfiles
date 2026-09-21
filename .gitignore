@@ -12,3 +12,16 @@ config-stow/kanshi/kanshi/config.d/*
 # Bluetooth device MAC binds. Optionally `include`d by the tracked config.kdl skeleton;
 # supplied per-machine (or by the private machine-config repo). Same reasoning as kanshi.
 config-stow/niri/.config/niri/local.kdl
+
+# DMS matugen output. `matugenTemplateKitty: true` in the shared DMS baseline regenerates
+# these from the current theme, and ~/.config/kitty is a SYMLINK to this directory — so DMS
+# writes them straight into the working tree, on every machine, every time the theme changes.
+# Generated machine-local state, not configuration: ignored rather than tracked.
+#
+# NOTHING READS THEM TODAY: kitty.conf has no `include` line at all, so these are generated
+# and then dropped on the floor. Either add `include dank-theme.conf` / `include dank-tabs.conf`
+# to the tracked kitty.conf (the palette follows DMS, and these stay ignored), or set
+# matugenTemplateKitty to false and stop generating them. Leaving it as-is is the one option
+# that keeps producing untracked noise for no benefit.
+config-stow/terminals/.config/kitty/dank-theme.conf
+config-stow/terminals/.config/kitty/dank-tabs.conf
