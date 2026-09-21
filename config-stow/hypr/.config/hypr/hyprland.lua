@@ -214,6 +214,32 @@ local have_dms_binds = want("dms.binds")
 -- alone gets you both behaviours, which reads as "my bind did not work" only if the other one
 -- is visible — a silent second action would just look like a haunted desktop.
 
+-- Security. SUPER+ALT+L goes back to hyprlock, which DMS quietly took over at the niri ->
+-- Hyprland switch. Under niri this key ran hyprlock directly (`config.kdl`); on Hyprland the
+-- bind set is DMS's, and its `dms ipc call lock lock` raises DMS's OWN lock screen — which has
+-- the fingerprint reader disabled (`enableFprint: false` in shared/dms/base.json). So the
+-- reader was simply never engaged and fingerprint unlock "disappeared" in the migration.
+--
+-- WHY THAT LOOKED LIKE A HARDWARE OR PAM FAULT AND IS NEITHER: sudo kept working throughout,
+-- because /etc/pam.d/sudo carries its own `auth sufficient pam_fprintd.so` line and is
+-- untouched by any of this. It is the ONLY file in /etc/pam.d that mentions fprintd — the
+-- hyprlock and swaylock stacks just `include login` -> system-auth, which has none. Working
+-- sudo therefore proves the reader and the enrolled prints are fine, and says nothing at all
+-- about the lock path. Don't read it as evidence.
+--
+-- hyprlock stays the right locker for the reason recorded in config-stow/hyprlock/: it drives
+-- fprintd over D-Bus ITSELF and verifies from the moment the lock appears, rather than waiting
+-- on a PAM conversation that only starts once you type. DMS does expose lockPamPath /
+-- lockPamInlineFprint / customPowerActionLock, but `dms-shell` ships no QML (the shell is
+-- compiled into the binary) and its IPC.md documents none of them, so that route cannot be
+-- verified from the installed package. Not taken on those grounds, not on merit.
+--
+-- THE UNBIND IS REQUIRED, NOT TIDINESS: binds accumulate (see the note above), so without it
+-- one press raises hyprlock AND DMS's lock screen, on top of each other.
+hl.unbind(mod .. " + ALT + L")
+hl.bind(mod .. " + ALT + L", hl.dsp.exec_cmd("pidof hyprlock >/dev/null || hyprlock"),
+    { description = "Lock screen: hyprlock (fingerprint)" })
+
 -- Applications. SUPER+Return is muscle memory from niri; DMS's own SUPER+T stays too.
 --
 -- SUPER+B was "launch firefox" until 2026-08-10, when it became the `browser` workspace focus.
