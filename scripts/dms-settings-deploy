@@ -2,6 +2,7 @@
 """Merge the shared DMS settings baseline and deploy it read-only.
 
     shared/dms/base.json  +  shared/dms/laptop.json (if this machine has a battery)
+                          +  <hostname>/dms/overlay.json (if that file exists)
         -> ~/.config/DankMaterialShell/settings.json, mode 0444
 
 Two decisions worth knowing before changing anything here.
@@ -27,12 +28,30 @@ The widget does NOT self-hide when there is no battery: its root is
 `BatteryService.getBatteryIcon()` returns "power" — a plug glyph — so a desktop
 that keeps it in the bar shows a permanent plug icon. Hence it belongs to the
 laptop class rather than the base.
+
+THE PER-HOST LAYER IS FOR STAGGERED ROLLOUTS, NOT FOR TASTE. The baseline is
+fleet-wide on purpose (97.7% of keys were already identical — see
+shared/dms/README.md), and per-machine tweaks would erode exactly that. It exists
+because some changes cannot land fleet-wide in one step without a window in which
+a machine is misconfigured. The worked example, and the reason it was added:
+disabling DMS's own idle lock (acLockTimeout/batteryLockTimeout/lockBeforeSuspend)
+in favour of swayidle+hyprlock, which is what makes fingerprint unlock work. Flip
+it in base.json and every machine that has not yet had its swayidle unit enabled
+stops locking at all — a security failure, not an inconvenience. So each machine
+gets the overlay as it is migrated, and the whole set folds back into base.json
+once the last one is done.
+
+IT IS `<hostname>/dms/overlay.json`, DELIBERATELY NOT `settings.json`. The
+per-host `settings.json` files are 2026-08-14 SNAPSHOTS with no consumer — the
+README calls them out as reading like deployed config while not being it. Naming
+the overlay the same thing would have made that ambiguity load-bearing.
 """
 
 import argparse
 import json
 import os
 import shutil
+import socket
 import stat
 import sys
 
@@ -51,6 +70,17 @@ def has_battery():
         if entry.startswith("BAT"):
             return True
     return False
+
+
+def hostname(name=None):
+    """The short name, matching `hostname` and the workstation-private directory
+    names. socket.gethostname() can hand back an FQDN depending on how the
+    machine resolves itself, and "<host>.<lan-domain>" would silently match no
+    overlay directory at all — the exact shape of failure this layer must not
+    have, since a missing overlay is indistinguishable from a skipped one. The
+    same trim applies to an explicit --host, so the flag and the detection cannot
+    disagree about what a name means."""
+    return (name or socket.gethostname()).split(".")[0]
 
 
 def load(path):
@@ -77,11 +107,16 @@ def main():
                         help="where to write (default: %(default)s)")
     parser.add_argument("--class", dest="klass", choices=["auto", "desktop", "laptop"],
                         default="auto", help="override hardware detection")
+    parser.add_argument("--host", default=None,
+                        help="override the hostname used to find the per-host overlay")
+    parser.add_argument("--private", default=PRIVATE,
+                        help="workstation-private checkout (default: %(default)s)")
     parser.add_argument("--dry-run", action="store_true",
                         help="print what would be deployed and change nothing")
     args = parser.parse_args()
 
-    base_path = os.path.join(SHARED, "base.json")
+    shared = os.path.join(args.private, "shared", "dms")
+    base_path = os.path.join(shared, "base.json")
     if not os.path.exists(base_path):
         print(f"no baseline at {base_path} — is workstation-private cloned beside dotfiles?",
               file=sys.stderr)
@@ -94,12 +129,21 @@ def main():
     layers = [load(base_path)]
     names = ["base"]
     if klass == "laptop":
-        overlay_path = os.path.join(SHARED, "laptop.json")
+        overlay_path = os.path.join(shared, "laptop.json")
         if not os.path.exists(overlay_path):
             print(f"missing {overlay_path}", file=sys.stderr)
             return 1
         layers.append(load(overlay_path))
         names.append("laptop")
+
+    # Per-host overlay, applied LAST so it wins over both. Absent is the normal case and is
+    # silent: every machine that has not been migrated yet has no overlay, and warning on each
+    # of them would train the warning to be ignored on the one machine where it means something.
+    host = hostname(args.host)
+    host_path = os.path.join(args.private, host, "dms", "overlay.json")
+    if os.path.exists(host_path):
+        layers.append(load(host_path))
+        names.append(host)
 
     settings = merge(*layers)
     rendered = json.dumps(settings, indent=2) + "\n"
@@ -133,7 +177,7 @@ def main():
     print("deployed read-only (0444). Run `dms restart` to pick it up.")
     print("To experiment: change things in the GUI (they apply immediately but do")
     print("not persist), then use the Settings modal's copy button and paste into")
-    print(f"{SHARED}/base.json.")
+    print(f"{shared}/base.json.")
     return 0
 
 

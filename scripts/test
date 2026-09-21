@@ -827,6 +827,78 @@ is "$(python3 -c 'import json,sys;print(",".join(json.load(open(sys.argv[1]))))'
 
 rm -rf "$d"
 
+# ── dms-settings-deploy ──────────────────────────────────────────────────────
+# Every case runs against a fixture --private tree and a --target in a temp dir, so
+# nothing here can read the real workstation-private or touch the real DMS store.
+section "dms-settings-deploy"
+DSD="$REPO/scripts/dms-settings-deploy"
+
+d=$(work)
+mkdir -p "$d/private/shared/dms" "$d/private/mkFixture/dms"
+cat >"$d/private/shared/dms/base.json" <<-'JSON'
+	{ "acLockTimeout": 1800, "onlyInBase": "base", "shared": "base" }
+JSON
+cat >"$d/private/shared/dms/laptop.json" <<-'JSON'
+	{ "acLockTimeout": 300, "shared": "laptop" }
+JSON
+cat >"$d/private/mkFixture/dms/overlay.json" <<-'JSON'
+	{ "acLockTimeout": 0, "shared": "host" }
+JSON
+
+val() { python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))[sys.argv[2]])' "$1" "$2"; }
+dsd() { python3 "$DSD" --private "$d/private" --target "$d/out.json" "$@"; }
+
+# The desktop base case, and the control for everything below: with no laptop class
+# and no host overlay, base must come through untouched.
+dsd --class desktop --host nosuchhost >/dev/null 2>&1
+is "$(val "$d/out.json" acLockTimeout)" '1800' 'base alone deploys base values'
+
+# An absent host overlay is the NORMAL case (every un-migrated machine), so it must
+# be silent and must not appear in the layer line — otherwise the line stops being
+# usable as the record of what was actually applied.
+out=$(dsd --class desktop --host nosuchhost 2>&1)
+ok "$(printf '%s' "$out" | grep -qF 'nosuchhost' && echo 0 || echo 1)" \
+	'an absent host overlay is not named'
+ok "$(printf '%s' "$out" | grep -q 'class: desktop (base)' && echo 1 || echo 0)" \
+	'an absent host overlay leaves the layer line at base'
+
+# The laptop overlay still wins over base — the pre-existing contract, asserted here
+# so the new layer cannot quietly displace it.
+dsd --class laptop --host nosuchhost >/dev/null 2>&1
+is "$(val "$d/out.json" acLockTimeout)" '300' 'the laptop overlay wins over base'
+is "$(val "$d/out.json" onlyInBase)" 'base' 'keys absent from the overlay survive'
+
+# The point of the layer: applied LAST, so it beats base AND laptop. Asserting it
+# against the laptop class is what makes this a real ordering test — against base
+# alone it would pass even if the host layer were applied second.
+dsd --class laptop --host mkFixture >/dev/null 2>&1
+is "$(val "$d/out.json" acLockTimeout)" '0' 'the host overlay wins over the laptop overlay'
+is "$(val "$d/out.json" shared)" 'host' 'the host overlay is applied last'
+is "$(val "$d/out.json" onlyInBase)" 'base' 'the host overlay is shallow, not a replacement'
+
+out=$(dsd --class laptop --host mkFixture 2>&1)
+ok "$(printf '%s' "$out" | grep -q 'class: laptop (base+laptop+mkFixture)' && echo 1 || echo 0)" \
+	'an applied host overlay is named in the layer line'
+
+# An FQDN must find the same overlay as the short name. A machine that resolves
+# itself as "mkFixture.example.com" would otherwise match no directory and deploy
+# the un-migrated config — silently, since an absent overlay is legitimate.
+dsd --class laptop --host mkFixture.example.com >/dev/null 2>&1
+is "$(val "$d/out.json" acLockTimeout)" '0' 'an FQDN --host finds the short-name overlay'
+
+# Read-only is load-bearing (it is what stops the GUI drifting from the repo), and
+# a redeploy must keep one generation of the file it overwrote.
+is "$(stat -c '%a' "$d/out.json")" '444' 'the deployed file is 0444'
+ok "$([ -f "$d/out.json.pre-deploy" ] && echo 1 || echo 0)" 'the previous file is kept'
+
+# --dry-run is what makes it safe to check a machine before changing it.
+rm -f "$d/out.json"
+dsd --class laptop --host mkFixture --dry-run >/dev/null 2>&1
+ok "$([ -f "$d/out.json" ] && echo 0 || echo 1)" '--dry-run writes nothing'
+
+unset -f val dsd
+rm -rf "$d"
+
 # ── dms-settings-lift ────────────────────────────────────────────────────────
 section "dms-settings-lift"
 DSL="$REPO/scripts/dms-settings-lift"
