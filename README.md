@@ -33,7 +33,37 @@ You can still preseed by hand: `DF_DESKTOP`/`DF_QUADLET`/`DF_NODE`/… = `1`/`0`
 
 ---
 
-> **Per-distro commands.** Each install step below is given for **Arch** (`paru`), **Debian** (`apt`), **Fedora** (`dnf`) and **macOS** (`brew`). Pick the one for your system. "Arch" covers CachyOS/EndeavourOS/Manjaro; "Debian" covers Ubuntu/Mint; "Fedora" covers RHEL clones.
+> **Per-distro commands.** Each install step below is given for **Arch** (`paru`), **Debian** (`apt`), **Fedora** (`dnf`) and **macOS** (`port` and/or `brew`). Pick the one for your system. "Arch" covers CachyOS/EndeavourOS/Manjaro; "Debian" covers Ubuntu/Mint; "Fedora" covers RHEL clones.
+
+## macOS: two package managers, and which one owns what
+
+**Apple silicon:** Homebrew for everything. `DOTFILES_PM=brew`. Skip the rest of this section.
+
+**Intel:** MacPorts for formulae, Homebrew for **casks only**. `DOTFILES_PM=port`.
+
+Homebrew 7.0.0 (2026-09-13) moved Intel macOS to **Tier 3** — CI disabled, no new bottles built, and `brew` itself removed from Intel **on or after 2027-09-01**. Homebrew's own guidance to Intel users is to move to MacPorts. Measured 2026-09-21 against this repo's package set:
+
+- `formulae.brew.sh` lists **no `sequoia` (Intel) bottle for anything here**, and none at any version for `atuin`, `topgrade`, `gh` or `syncthing` — so those are Rust and Go builds from source. The few stale `sonoma` Intel bottles that survive (`git`, `eza`, `bat`, `zoxide`) die at each formula's next version bump, because nothing rebuilds them.
+- `packages.macports.org` carries `darwin_24.x86_64` archives for every one of them, plus `darwin_any.noarch` for `stow` and `pipx`.
+
+Two ports compile locally and always will — a licensing rule, not neglect: **`git`** (GPL-2 + OpenSSL) and **`eza`** (EUPL-1.2) may not be redistributed as binaries. Xcode's Command Line Tools already ship a usable `git` if the build is tiresome.
+
+Homebrew stays because the bottle collapse is a **formula** problem. Casks are vendor-built app bundles and are unaffected, and MacPorts packages **no** GUI applications — no Floorp, Firefox, Brave, Signal, Telegram, WhatsApp, VSCodium, or any Nerd Font.
+
+⚠ **Keep Homebrew formula-free on Intel.** `/usr/local/lib` and `/usr/local/include` staying empty is what keeps MacPorts' builds from picking up Homebrew headers, and that failure corrupts *MacPorts'* builds rather than announcing itself. `brew list --formula` should print nothing.
+
+Port names are mostly identical to the formula names. The GNU userland is where they diverge:
+
+| Homebrew formula | MacPorts port |
+|---|---|
+| `gnu-tar` | `gnutar` |
+| `gnu-sed` | `gsed` |
+| `gnu-getopt` | `getopt` |
+| `coreutils`, `grep`, `findutils`, `gawk`, `bash` | same names |
+
+Both install these g-prefixed so they do not shadow the system tools, and both ship a `libexec/gnubin` of unprefixed symlinks — but MacPorts uses **one shared `/opt/local/libexec/gnubin`** where Homebrew gives each formula its own. `oh-my-zsh-custom/macos.zsh` handles both. Do **not** use MacPorts' `+with_default_names` variants: non-default variants are not covered by the prebuilt archives, so they source-build, which defeats the point.
+
+`port` needs `sudo` (`/opt/local` is root-owned by design) and an `xcode-select --install`; full Xcode is not required.
 
 ## Fresh CachyOS install — three defaults to fix first
 
@@ -165,7 +195,8 @@ sudo dnf install -y stow
 ```
 ### macOS
 ```sh
-brew install stow
+sudo port install stow      # MacPorts (Intel) — see § macOS: two package managers
+brew install stow           # Homebrew (Apple silicon)
 ```
 
 ## Stow the config files
@@ -229,7 +260,8 @@ sudo dnf install -y zsh zoxide tmux git git-delta gitk curl wget eza sqlite fzf
 ```
 ### macOS
 ```sh
-brew install zsh zoxide tmux git curl wget eza fzf
+sudo port install zsh zoxide tmux git git-delta curl wget eza fzf   # MacPorts (Intel)
+brew install zsh zoxide tmux git git-delta curl wget eza fzf        # Homebrew (Apple silicon)
 ```
 
 ### paru (Arch only)
@@ -269,7 +301,7 @@ Bare `apt` remains only as a fallback for a distro that doesn't package nala. On
 
 - `sudo usermod -s $(which zsh) $(whoami)` — **Linux only** (shadow-utils; macOS has no `usermod`)
 
-`chsh` only accepts shells listed in `/etc/shells`. Distro zsh packages add themselves; a Homebrew zsh on macOS does **not**, so add it once first:
+`chsh` only accepts shells listed in `/etc/shells`. Distro zsh packages add themselves; neither a Homebrew nor a MacPorts zsh on macOS does, so add it once first:
 
 ```sh
 echo $(which zsh) | sudo tee -a /etc/shells
@@ -332,11 +364,13 @@ ln -sf `pwd`/.zshrc-update-os-nala.zsh $HOME/.zshrc-update-os.zsh && \
   mkdir -p $HOME/.oh-my-zsh-custom && ln -sf `pwd`/oh-my-zsh-custom/nala.zsh $HOME/.oh-my-zsh-custom/
 # Fedora
 ln -sf `pwd`/.zshrc-update-os-dnf.zsh $HOME/.zshrc-update-os.zsh
-# macOS
+# macOS — MacPorts for formulae, Homebrew for casks (Intel)
+ln -sf `pwd`/.zshrc-update-os-port.zsh $HOME/.zshrc-update-os.zsh
+# macOS — Homebrew for everything (Apple silicon)
 ln -sf `pwd`/.zshrc-update-os-brew.zsh $HOME/.zshrc-update-os.zsh
 ```
 
-The brew variant's `update-os` calls `brew cu -y -a`, which needs the [`buo/cask-upgrade`](https://github.com/buo/homebrew-cask-upgrade) tap installed once: `brew tap buo/cask-upgrade`.
+Both macOS variants' `update-os` call `brew cu -y -a`, which needs the [`buo/cask-upgrade`](https://github.com/buo/homebrew-cask-upgrade) tap installed once: `brew tap buo/cask-upgrade`. It covers the casks marked `auto_updates` or `version :latest`, which plain `brew upgrade --cask` skips.
 
 ### Theme
 
@@ -350,7 +384,7 @@ git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${ZSH_CUSTOM:-$
 
 ```sh
 paru -S --needed ttf-meslo-nerd            # Arch
-brew install --cask font-meslo-lg-nerd-font  # macOS
+brew install --cask font-meslo-lg-nerd-font  # macOS — a cask on BOTH Mac managers; MacPorts has no Nerd Font ports
 ```
 
 On Debian/Fedora there's no clean package — download p10k's MesloLGS NF into the **system** font dir so every user gets it (this is what `install.sh` runs):
@@ -467,7 +501,8 @@ ln -sf `pwd`/oh-my-zsh-custom/pnpm.zsh $HOME/.oh-my-zsh-custom/
 
 ```sh
 paru -S --needed fnm pnpm    # Arch
-brew install fnm pnpm        # macOS
+brew install fnm pnpm        # macOS (Homebrew)
+sudo port install fnm pnpm   # macOS (MacPorts)
 ```
 
 On Debian/Fedora there is no distro package — install [fnm](https://github.com/Schniz/fnm#installation) and [pnpm](https://pnpm.io/installation) from upstream.
@@ -546,7 +581,8 @@ Optional tools lesspipe shells out to:
 paru -S --needed 7zip unrar cabextract bat          # Arch (p7zip is named 7zip here)
 sudo nala install -y p7zip-full unrar-free cabextract bat # Debian
 sudo dnf install p7zip p7zip-plugins unrar cabextract bat # Fedora (unrar needs RPM Fusion non-free)
-brew install p7zip unrar cabextract bat             # macOS
+brew install p7zip cabextract bat             # macOS (Homebrew) — no `unrar` formula
+sudo port install p7zip cabextract bat        # macOS (MacPorts)
 ```
 
 Debian ships the binary as `batcat` (the name `bat` collides with another package), which is what `oh-my-zsh-custom/bat.zsh` exists for — symlink it **on Debian only**:
@@ -563,7 +599,7 @@ Recent Fedora dropped `p7zip`/`p7zip-plugins` in favour of a `7zip` package — 
 
 ```sh
 paru -S --needed fresh-editor-bin      # Arch, prebuilt (fresh-editor builds from source)
-brew install fresh-editor              # macOS
+brew install fresh-editor              # macOS (Homebrew only — MacPorts has no such port)
 cargo install --locked fresh-editor    # anywhere with a Rust toolchain
 ```
 
@@ -589,7 +625,8 @@ Install via pipx (Arch names it `python-pipx`, everyone else `pipx`):
 paru -S --needed python-pipx     # Arch
 sudo dnf install -y pipx         # Fedora
 sudo nala install -y pipx        # Debian
-brew install pipx                # macOS
+brew install pipx                # macOS (Homebrew)
+sudo port install pipx           # macOS (MacPorts)
 ```
 
 ```sh
@@ -723,7 +760,9 @@ Install atuin:
 
 ```sh
 paru -S --needed atuin       # Arch
-brew install atuin           # macOS
+brew install atuin           # macOS (Homebrew)
+sudo port install atuin      # macOS (MacPorts) — no Intel bottle exists, so this is the only
+                             #   route that isn't a full Rust build
 sudo nala install -y atuin   # Debian 13+ (trixie) — packaged, on the system PATH
 curl --proto '=https' --tlsv1.2 -LsSf https://setup.atuin.sh | sh -s -- --no-modify-path  # Fedora / older / anywhere
 ```
@@ -1000,9 +1039,9 @@ Three things worth not re-deriving:
 - **Threema Desktop 2.0, not the Flathub `ch.threema.threema-web-desktop`.** The latter is the old Threema-Web-in-Electron, now in maintenance mode, and needs the phone online and reachable. Desktop 2.0 is multi-device (works with the phone off), open source, and installed with the `--from <flatpakref>` form — which adds Threema's own remote as a side effect, so no separate `remote-add` step is needed. It is labelled beta and limited to two linked computers.
 - **On apt/dnf all four come from Flathub.** `telegram-desktop` is packaged there but `signal-desktop` is not (Signal ships its own apt repo), and a guessed package name fails as "not found" rather than as "add the vendor repo" — the same reasoning as ghostty under `DF_DESKTOP`.
 
-### macOS (`brew`) is a genuinely different branch, not a translation
+### macOS (casks) is a genuinely different branch, not a translation
 
-Cask names checked against `formulae.brew.sh`, 2026-08-11:
+These stay **casks on both Mac package managers** — MacPorts packages none of them, so `install.sh` routes them through `lib.sh`'s `cask_install` rather than a `$PM` arm. Cask names checked against `formulae.brew.sh`, 2026-08-11:
 
 ```sh
 brew install --cask signal telegram whatsapp

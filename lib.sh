@@ -32,6 +32,13 @@ run_sh() {
 }
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# is_macos — an OS test, deliberately NOT spelled `[ "$PM" = brew ]`. mkMac2017 runs MacPorts for
+# formulae and Homebrew for casks (2026-09-21), so `$PM` is `port` there and every test that meant
+# "is this macOS" while wearing a package-manager's clothes silently became false. Anything about
+# launchd, /etc/shells, ~/Library paths or the absence of flatpak belongs here; only the arms that
+# actually install packages stay keyed on $PM.
+is_macos() { [ "$(uname -s)" = "Darwin" ]; }
+
 lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
 
 # ── host-class answers ──
@@ -131,7 +138,12 @@ save_answers() {
 # ── package-manager detection ──
 detect_pm() {
 	if [ -n "${DOTFILES_PM:-}" ]; then printf '%s' "$DOTFILES_PM"; return; fi
-	[ "$(uname -s)" = "Darwin" ] && { printf 'brew'; return; }
+	# macOS: MacPorts owns formulae where it is installed, Homebrew otherwise. Probe for the
+	# binary rather than assuming, so a Mac that has not had MacPorts installed yet still works.
+	if [ "$(uname -s)" = "Darwin" ]; then
+		[ -x /opt/local/bin/port ] && { printf 'port'; return; }
+		printf 'brew'; return
+	fi
 	if [ -r /etc/os-release ]; then
 		# shellcheck disable=SC1091
 		. /etc/os-release
@@ -141,7 +153,7 @@ detect_pm() {
 			*" fedora "*|*" rhel "*)   printf 'dnf';     return ;;
 		esac
 	fi
-	local c; for c in pacman apt dnf brew; do have "$c" && { printf '%s' "$c"; return; }; done
+	local c; for c in pacman apt dnf port brew; do have "$c" && { printf '%s' "$c"; return; }; done
 	printf ''
 }
 
@@ -154,7 +166,29 @@ pm_install() {
 		apt)    if have nala; then run sudo nala install -y "$@"; else run sudo apt install -y "$@"; fi ;;
 		dnf)    run sudo dnf install -y "$@" ;;
 		brew)   run brew install "$@" ;;
+		# -N answers MacPorts' own prompts (it asks before pulling in dependencies). sudo is not
+		# optional here and is not the `sudo paru` mistake: /opt/local is root-owned by design,
+		# and `sudo port` is the documented, only way to install.
+		port)   run sudo port -N install "$@" ;;
 	esac
+}
+
+# cask_install <token...> — GUI applications on macOS. A SEPARATE channel from pm_install,
+# because MacPorts has no cask concept at all: it packages nothing for Floorp, Firefox, Brave,
+# Waterfox, Signal, Telegram, WhatsApp, VSCodium, Bitwarden, Obsidian or any Nerd Font (checked
+# against the MacPorts port index, 2026-09-21 — every one returns no such port).
+#
+# This is why mkMac2017 keeps Homebrew even though no formula comes from it. Homebrew moved Intel
+# macOS to Tier 3 on 2026-09-13 and stops running on Intel after 2027-09-01, but that is a BOTTLE
+# problem — casks are vendor-built app bundles and keep working until brew itself is pulled.
+# Keeping brew formula-free also keeps /usr/local/lib and /usr/local/include empty, which is the
+# collision MacPorts warns about when Homebrew is present.
+cask_install() {
+	if have brew; then
+		run brew install --cask "$@"
+	else
+		warn "no Homebrew — install by hand: $*"
+	fi
 }
 
 # rust_lib32_needed — true when this machine BUILDS lib32 packages with a rustup-managed Rust,
@@ -312,7 +346,9 @@ clone_if_absent() { [ -d "$2" ] && info "$(basename "$2") present" || run git cl
 install_nerd_font() {
 	case "$PM" in
 		pacman) pm_install ttf-meslo-nerd ;;
-		brew)   run brew install --cask font-meslo-lg-nerd-font ;;
+		# Both macOS package managers land here: MacPorts has no Nerd Font ports, so the cask is
+		# the only route on a Mac regardless of what $PM says.
+		brew|port) cask_install font-meslo-lg-nerd-font ;;
 		*)      local base='https://github.com/romkatv/powerlevel10k-media/raw/master' style
 		        run sudo mkdir -p /usr/local/share/fonts
 		        for style in Regular Bold Italic "Bold%20Italic"; do

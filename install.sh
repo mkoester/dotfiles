@@ -32,7 +32,7 @@
 #   (unset/0 = skip a conflicting stow package instead of touching anything); it is deliberately
 #   never stored — it is a per-conflict call, not a property of the machine.
 #   Override with
-#   DOTFILES_PM=pacman|apt|dnf|brew. A per-machine host.env in the workstation-private repo
+#   DOTFILES_PM=pacman|apt|dnf|port|brew. A per-machine host.env in the workstation-private repo
 #   (see below) is sourced automatically and can set all of these.
 set -euo pipefail
 
@@ -66,7 +66,7 @@ done
 PM="$(detect_pm)"
 if [ -z "$PM" ]; then
 	warn "could not detect the package manager."
-	read -r -p "    enter one of pacman|apt|dnf|brew: " PM
+	read -r -p "    enter one of pacman|apt|dnf|port|brew: " PM
 fi
 step "Package manager: $PM"
 
@@ -129,6 +129,8 @@ case "$PM" in
 	        if have nala; then run sudo nala install -y stow; else run sudo apt install -y stow; fi ;;
 	dnf)    run sudo dnf install -y stow ;;
 	brew)   run brew install stow ;;
+	# MacPorts ships stow as a darwin_any.noarch archive — no build, on any macOS version.
+	port)   run sudo port -N install stow ;;
 esac
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -157,6 +159,14 @@ case "$PM" in
 	# system sqlite3, and Homebrew's is keg-only (it does not land on PATH), so naming it would
 	# install something that changes nothing.
 	brew)   pm_install zsh zoxide tmux git git-delta curl wget eza fzf ;;
+	# Same list, same names — MacPorts happens to agree with Homebrew on every one of these.
+	#
+	# TWO of them have no prebuilt archive, and the reason is licensing rather than neglect, so
+	# it will not improve: `git` is GPL-2 (no "or later") and links OpenSSL, and `eza` is
+	# EUPL-1.2. MacPorts may not redistribute either binary, so both compile locally. `git` is
+	# the cheap one to drop — Xcode's Command Line Tools already ship a usable git, so if the
+	# build is tiresome on this hardware, check `/usr/bin/git --version` and remove it here.
+	port)   pm_install zsh zoxide tmux git git-delta curl wget eza fzf ;;
 esac
 
 # THE GNU USERLAND ON macOS — the other half of oh-my-zsh-custom/macos.zsh, which was shipping
@@ -173,8 +183,18 @@ esac
 # bash is here for the same reason: macOS still ships 3.2 (2007) at /bin/bash, and the fleet's
 # `#!/usr/bin/env bash` convention only reaches a modern one if brew has installed it.
 # gnu-getopt is keg-only and ships no gnubin, so macos.zsh puts its plain bin/ on PATH instead.
+#
+# MacPorts (mkMac2017, 2026-09-21) does the same thing with three differences, all verified in the
+# Portfiles rather than assumed:
+#   * the port NAMES differ — gnu-tar/gnu-sed/gnu-getopt are gnutar/gsed/getopt there;
+#   * all six GNU ports populate ONE SHARED ${prefix}/libexec/gnubin (plus gnubin/man/man1), where
+#     Homebrew gives each formula its own. macos.zsh therefore needs one PATH entry, not six;
+#   * do NOT reach for the +with_default_names variants, tempting as they look. Non-default
+#     variants are not covered by the prebuilt archives, so they source-build — which defeats the
+#     entire reason this machine is on MacPorts.
 case "$PM" in
 	brew)   pm_install coreutils gnu-tar gnu-sed grep findutils gawk gnu-getopt bash ;;
+	port)   pm_install coreutils gnutar gsed grep findutils gawk getopt bash ;;
 	*)      : ;;
 esac
 
@@ -203,13 +223,13 @@ esac
 # them here changes nothing on a desktop and is the whole point on a headless box, where
 # neither terminal is installed.
 #
-# brew: skipped. macOS ships an ancient ncurses and neither terminfo has a formula; the Mac is
-# an ssh client here, not a target.
+# macOS is skipped on both managers. It ships an ancient ncurses, neither terminfo is packaged by
+# Homebrew or MacPorts, and the Mac is an ssh client here, not a target.
 case "$PM" in
 	pacman) pm_install kitty-terminfo ghostty-terminfo ;;
 	apt)    pm_install kitty-terminfo ;;
 	dnf)    pm_install kitty-terminfo ;;
-	brew)   : ;;
+	brew|port) : ;;
 esac
 
 # 32-BIT RUST STD, for machines that BUILD lib32 packages — also deliberately NOT under a
@@ -269,10 +289,12 @@ VSCODE_SETTINGS="$DOTFILES_REPO/config-stow/vscode/settings.json"
 # once, so an existence guard would make install.sh link nothing, report success, and leave the
 # settings undeployed until someone happened to re-run it — the same silent-skip shape as the
 # `dms setup binds` miss on mkDesktop.
-case "$PM" in
-	brew) VSCODE_PRIMARY="$HOME/Library/Application Support/VSCodium/User" ;;
-	*)    VSCODE_PRIMARY="$HOME/.config/Code - OSS/User" ;;
-esac
+# is_macos, not `$PM = brew`: ~/Library is a property of the OS, and mkMac2017 runs $PM=port.
+if is_macos; then
+	VSCODE_PRIMARY="$HOME/Library/Application Support/VSCodium/User"
+else
+	VSCODE_PRIMARY="$HOME/.config/Code - OSS/User"
+fi
 run mkdir -p "$VSCODE_PRIMARY"
 run ln -sfn "$VSCODE_SETTINGS" "$VSCODE_PRIMARY/settings.json"
 
@@ -316,8 +338,9 @@ run ln -sf "$DOTFILES_REPO/.p10k.zsh" "$HOME/"
 # shell — the runtime half of the file sourced above, which until now only reached the installer.
 # Linked unconditionally and on every host: both files are optional and it no-ops without them.
 link_omz oh-my-zsh-custom host-env.zsh
-# macos.zsh sets up Homebrew's environment and puts the GNU userland (coreutils, gnu-tar, gnu-sed,
-# grep, findutils, gawk) ahead of the BSD one, so scripts written on the Linux boxes behave.
+# macos.zsh sets up MacPorts' and/or Homebrew's environment and puts the GNU userland (coreutils,
+# gnu-tar/gnutar, gnu-sed/gsed, grep, findutils, gawk) ahead of the BSD one, so scripts written on
+# the Linux boxes behave. It handles both managers because mkMac2017 has both installed.
 # Linked unconditionally for the same reason as host-env.zsh: it self-guards on $OSTYPE, so on a
 # Linux host it costs one [[ ]] test and needs no DF_* flag of its own.
 link_omz oh-my-zsh-custom macos.zsh
@@ -329,14 +352,18 @@ case "$PM" in
 	apt)    UPDATE_OS=apt ;;
 	dnf)    UPDATE_OS=dnf ;;
 	brew)   UPDATE_OS=brew ;;
+	port)   UPDATE_OS=port ;;
 esac
 run ln -sf "$DOTFILES_REPO/.zshrc-update-os-$UPDATE_OS.zsh" "$HOME/.zshrc-update-os.zsh"
-# The brew variant's update-os calls `brew cu -y -a`, which is NOT part of Homebrew — it comes
-# from the buo/cask-upgrade tap and is what upgrades casks (plain `brew upgrade` leaves most of
-# them alone). Without the tap, update-os dies partway through on `Unknown command: cu`, after
-# `brew upgrade` has already run, so it looks like a half-finished update rather than a missing
-# tap. Printed rather than run: a tap is a persistent choice about where software comes from.
-if [ "$PM" = brew ]; then
+# Both macOS variants of update-os call `brew cu -y -a`, which is NOT part of Homebrew — it comes
+# from the buo/cask-upgrade tap and is what upgrades casks (plain `brew upgrade --cask` leaves the
+# auto_updates / version:latest ones alone). Without the tap, update-os dies partway through on
+# `Unknown command: cu`, after the earlier steps have already run, so it looks like a half-finished
+# update rather than a missing tap. Printed rather than run: a tap is a persistent choice about
+# where software comes from.
+#
+# is_macos, not `$PM = brew`: on mkMac2017 $PM is `port` and the casks still come from Homebrew.
+if is_macos; then
 	info "update-os needs the cask-upgrade tap once on this machine:"
 	info "  brew tap buo/cask-upgrade"
 fi
@@ -391,7 +418,7 @@ if ask_yn DF_DESKTOP "Wayland desktop (bar, monitor profiles, notifications)?"; 
 		                   wl-clipboard grim slurp brightnessctl ydotool ;;
 		apt)    pm_install libnotify-bin flatpak ;;
 		dnf)    pm_install libnotify flatpak ;;
-		brew)   : ;;
+		brew|port) : ;;
 	esac
 	# The official Flathub remote. Needed because several desktop apps on this fleet have no
 	# distro package at all in their current versions — ZapZap (the WhatsApp client) is
@@ -409,10 +436,11 @@ if ask_yn DF_DESKTOP "Wayland desktop (bar, monitor profiles, notifications)?"; 
 	# The `have` check is NOT redundant with the pm_install above: under --dry-run nothing was
 	# actually installed, and without the DRYRUN arm the preview would silently omit this step
 	# — a dry run that under-reports what a real run does is worse than no preview.
-	if [ "$PM" != brew ] && { have flatpak || [ "$DRYRUN" -eq 1 ]; }; then
+	# is_macos, not a $PM test: macOS has no flatpak whichever manager is in use.
+	if ! is_macos && { have flatpak || [ "$DRYRUN" -eq 1 ]; }; then
 		run sudo flatpak remote-add --if-not-exists --system flathub \
 			https://dl.flathub.org/repo/flathub.flatpakrepo
-	elif [ "$PM" != brew ]; then
+	elif ! is_macos; then
 		warn "flatpak missing after install — Flathub remote not registered"
 	fi
 	clone_if_absent https://github.com/MichaelAquilina/zsh-auto-notify.git "$ZSH_CUSTOM_DIR/plugins/auto-notify"
@@ -512,9 +540,11 @@ fi
 # mirror-image reason — this is about the machine you SIT AT, which is not the same set as the
 # machines running a Wayland compositor.
 #
-# The `brew` arm is what makes that true rather than just intended; a headless Linux box still
-# answers DF_DESKTOP=0 and still gets nothing, which is correct — nobody sits at it.
-if [ "$DF_DESKTOP_ON" -eq 1 ] || [ "$PM" = brew ]; then
+# The macOS arm is what makes that true rather than just intended; a headless Linux box still
+# answers DF_DESKTOP=0 and still gets nothing, which is correct — nobody sits at it. It is spelled
+# is_macos rather than `$PM = brew` because mkMac2017 moved to $PM=port on 2026-09-21, and the old
+# spelling would have silently dropped the Mac's terminal config for the SECOND time.
+if [ "$DF_DESKTOP_ON" -eq 1 ] || is_macos; then
 	stow_pkg "$HOME" terminals
 fi
 
@@ -803,16 +833,21 @@ fi
 #     the download page, and installing the legacy app here would put this machine on a
 #     different Threema from the rest of the fleet.
 if ask_yn DF_MESSENGERS "Messengers (Signal, Telegram, WhatsApp/ZapZap, Threema)?"; then
-	if [ "$PM" = brew ]; then
+	if is_macos; then
 		step "  messengers: signal, telegram, whatsapp (casks); threema by hand"
 	else
 		step "  messengers: signal, telegram, zapzap (flatpak), threema (flatpak)"
 	fi
 	case "$PM" in
 		pacman) pm_install signal-desktop telegram-desktop ;;
-		brew)   run brew install --cask signal telegram whatsapp ;;
 	esac
-	if [ "$PM" = brew ]; then
+	# Casks go through cask_install, not a $PM arm: MacPorts packages none of these three, so on
+	# mkMac2017 ($PM=port) they still come from Homebrew. See lib.sh's cask_install for why brew
+	# is kept on that machine at all.
+	if is_macos; then
+		cask_install signal telegram whatsapp
+	fi
+	if is_macos; then
 		# `uname -m` on the Mac itself, not a guess from the hostname: mkMac2017 is Intel and
 		# mkMac2014 was too, but the next Mac on this fleet will not be.
 		case "$(uname -m)" in
@@ -847,7 +882,7 @@ if ask_yn DF_MESSENGERS "Messengers (Signal, Telegram, WhatsApp/ZapZap, Threema)
 		warn "flatpak missing — skipping ZapZap and Threema (answer DF_DESKTOP=1, or install flatpak)"
 	fi
 	# Linux-only: the grid is a Hyprland window-rule + script arrangement, meaningless on macOS.
-	if [ "$PM" != brew ]; then
+	if ! is_macos; then
 		info "Hyprland users: SUPER+ALT+M opens all four as a 2x2 grid on the \`chat\` workspace."
 		info "  Verify the window classes once with: hypr-messengers probe"
 	fi
@@ -863,8 +898,10 @@ fi
 if ask_yn DF_ATUIN "atuin shell-history sync (self-hosted)?"; then
 	case "$PM" in
 		# packaged (lands on the system PATH, no ~/.atuin/bin, no shell-rc edit): Arch, Debian 13+
-		# trixie (18.x), Homebrew.
-		pacman|apt|brew) pm_install atuin ;;
+		# trixie (18.x), Homebrew, MacPorts. atuin is one of the formulae with NO Intel Homebrew
+		# bottle at any version, so on a 2017 Mac the `port` arm is the difference between a
+		# download and a full Rust build.
+		pacman|apt|brew|port) pm_install atuin ;;
 		# fallback installer: --no-modify-path so it can't append to the repo-symlinked ~/.zshrc
 		# (~/.atuin/bin is put on PATH by oh-my-zsh-custom/atuin.zsh instead).
 		*)               have atuin || run_sh "curl --proto '=https' --tlsv1.2 -LsSf https://setup.atuin.sh | sh -s -- --no-modify-path" ;;
@@ -891,12 +928,14 @@ fi
 # only a running service.
 if ask_yn DF_SYNCTHING "Syncthing (fleet file-sync mesh)?"; then
 	pm_install syncthing
-	if [ "$PM" = brew ]; then
-		run brew services start syncthing
-	else
-		info "enable + start the service:"
-		info "  systemctl --user enable --now syncthing"
-	fi
+	# launchd, via whichever manager provided the package. MacPorts' `port load` writes a
+	# /Library/LaunchDaemons plist and needs sudo; `brew services` is per-user and does not.
+	case "$PM" in
+		brew) run brew services start syncthing ;;
+		port) run sudo port load syncthing ;;
+		*)    info "enable + start the service:"
+		      info "  systemctl --user enable --now syncthing" ;;
+	esac
 	info "WebUI: 127.0.0.1:8384 (tunnel in with 'ssh -L 8384:127.0.0.1:8384 <host>' on a headless box"
 	info "  — the default GUI has no auth, so don't bind it to a LAN address before setting one)."
 	info "Get this device's ID (WebUI: Actions -> Show ID, or 'syncthing cli show system' once"
@@ -906,7 +945,7 @@ fi
 if ask_yn DF_NODE "Node machine (fnm + pnpm)?"; then
 	case "$PM" in
 		pacman) pm_install fnm pnpm ;;
-		brew)   pm_install fnm pnpm ;;
+		brew|port) pm_install fnm pnpm ;;
 		*)      info "install fnm + pnpm per their upstream instructions (no distro package)." ;;
 	esac
 	link_omz oh-my-zsh-custom fnm.zsh
@@ -922,7 +961,8 @@ fi
 if ask_yn DF_DEV "Dev machine (gh + glab forge CLIs)?"; then
 	case "$PM" in
 		pacman) pm_install github-cli glab lazygit ;;
-		brew)   pm_install gh glab lazygit ;;
+		# gh has no Intel Homebrew bottle either; MacPorts has all three prebuilt.
+		brew|port) pm_install gh glab lazygit ;;
 		# lazygit rides on DF_DEV because the herdr config stowed a few lines below BINDS it:
 		# config.toml has `command = "lazygit"`, and its own header lists the dependencies it
 		# assumes — "Also needs: fzf (>= 0.65), GNU find, jq, lazygit, gita". Every other name in
@@ -965,7 +1005,7 @@ if ask_yn DF_DEV "Dev machine (gh + glab forge CLIs)?"; then
 		dnf)    pm_install bubblewrap socat ;;
 		# macOS has its own sandbox implementation — bubblewrap is Linux-only and is neither
 		# needed nor available. Network filters are installed from inside Claude Code.
-		brew)   info "macOS sandbox: run '/sandbox install' inside Claude Code for the network filters." ;;
+		brew|port) info "macOS sandbox: run '/sandbox install' inside Claude Code for the network filters." ;;
 	esac
 
 	# Verify rather than trust the install: this is the one dependency whose absence is
@@ -973,7 +1013,7 @@ if ask_yn DF_DEV "Dev machine (gh + glab forge CLIs)?"; then
 	for tool in bwrap socat; do
 		if have "$tool"; then
 			info "sandbox dep ok: $tool"
-		elif [ "$PM" != brew ]; then
+		elif ! is_macos; then
 			warn "$tool MISSING — Claude Code will run UNSANDBOXED despite sandbox.enabled=true."
 			warn "  Nothing warns you at runtime; check with /sandbox inside Claude Code."
 		fi
@@ -1009,7 +1049,11 @@ if ask_yn DF_TOPGRADE "topgrade (one-shot 'update everything' umbrella)?"; then
 	case "$PM" in
 		# -bin: same upstream version, no Rust toolchain to build it (AUR-only either way).
 		pacman) pm_install topgrade-bin ;;
-		brew)   pm_install topgrade ;;
+		# On macOS this is the step that then silently GAINS a MacPorts action: topgrade's
+		# `macports` step (src/steps/os/macos.rs::run_macports) runs `sudo port selfupdate`,
+		# `sudo port -u upgrade outdated` and, under --cleanup, `sudo port reclaim` — and it
+		# fires automatically the moment `port` is on PATH. Nothing enables it; nothing says so.
+		brew|port) pm_install topgrade ;;
 		*)      info "install topgrade per upstream (cargo/prebuilt binary)." ;;
 	esac
 	stow_pkg "$HOME/.config" topgrade
@@ -1038,7 +1082,7 @@ fi
 if ask_yn DF_GITA "gita multi-repo overview + auto-fetch?"; then
 	case "$PM" in
 		pacman) pm_install python-pipx ;; dnf) pm_install pipx ;;
-		apt)    pm_install pipx ;;         brew) pm_install pipx ;;
+		apt)    pm_install pipx ;;         brew|port) pm_install pipx ;;
 	esac
 	run pipx install gita
 	link_omz oh-my-zsh-custom gita.zsh
@@ -1058,6 +1102,8 @@ fi
 if ask_yn DF_FRESH "fresh terminal editor?"; then
 	case "$PM" in
 		pacman) pm_install fresh-editor-bin ;;
+		# No `port` arm: MacPorts has no fresh-editor port, so a Mac on MacPorts falls through
+		# to the upstream-install message below rather than failing on a guessed name.
 		brew)   pm_install fresh-editor ;;
 		*)      info "install fresh-editor from its releases page or 'cargo install --locked fresh-editor'." ;;
 	esac
@@ -1071,7 +1117,7 @@ if ask_yn DF_LESSPIPE "lesspipe (rich less previews)?"; then
 		pacman) pm_install 7zip unrar cabextract bat ;;
 		apt)    pm_install p7zip-full unrar-free cabextract bat; link_omz oh-my-zsh-custom bat.zsh ;;
 		dnf)    pm_install p7zip p7zip-plugins unrar cabextract bat ;;
-		brew)   pm_install p7zip cabextract bat ;;
+		brew|port) pm_install p7zip cabextract bat ;;
 	esac
 	link_omz oh-my-zsh-custom lesspipe.zsh
 	info "lesspipe itself is a source build — see README § lesspipe (kept manual)."
@@ -1119,7 +1165,9 @@ fi
 step "8/9  Default shell"
 ZSH_BIN="$(command -v zsh || true)"
 if [ -n "$ZSH_BIN" ] && [ "${SHELL:-}" != "$ZSH_BIN" ]; then
-	if [ "$PM" = "brew" ] && ! grep -qxF "$ZSH_BIN" /etc/shells 2>/dev/null; then
+	# is_macos, not a $PM test: neither a Homebrew nor a MacPorts zsh adds itself to /etc/shells,
+	# and chsh only accepts a shell listed there.
+	if is_macos && ! grep -qxF "$ZSH_BIN" /etc/shells 2>/dev/null; then
 		run_sh "echo \"$ZSH_BIN\" | sudo tee -a /etc/shells"
 	fi
 	run chsh -s "$ZSH_BIN"
