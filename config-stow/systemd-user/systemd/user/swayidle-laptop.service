@@ -1,7 +1,14 @@
 [Unit]
+# NO `Requisite=graphical-session.target` — it was here until 2026-09-21 and made this unit
+# unstartable on Hyprland. Only `niri-session` reaches that target; plain Hyprland (no uwsm
+# installed) never does, which is why DMS and kanshi are compositor-spawned too — see the
+# Autostart block in hyprland.lua. Requisite means "fail unless already active", so
+# `systemctl --user enable --now` failed with "Unit graphical-session.target not found".
+# PartOf/After stay: both are inert when the target is not active, and on niri they still give
+# the correct stop-with-the-session behaviour. WantedBy below likewise still autostarts it
+# under niri; on Hyprland the compositor starts it explicitly.
 PartOf=graphical-session.target
 After=graphical-session.target
-Requisite=graphical-session.target
 
 [Service]
 # Laptop idle policy — locks EARLY (mobile; in case I walk away or forget). Tune the seconds.

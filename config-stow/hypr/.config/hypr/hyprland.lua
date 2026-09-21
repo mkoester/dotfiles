@@ -1262,6 +1262,19 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("dms run -d")
     hl.exec_cmd([[sh -c '{ echo "--- hyprland.start"; exec kanshi; } >>$XDG_RUNTIME_DIR/kanshi-start.log 2>&1']])
 
+    -- swayidle — the idle policy (dim -> hyprlock -> DPMS off), and therefore what makes the
+    -- screen lock at all. Same reason as DMS and kanshi above: its unit is WantedBy
+    -- graphical-session.target, which plain Hyprland never reaches, so `enable --now` cannot
+    -- start it here. Starting the UNIT rather than inlining swayidle keeps one definition of
+    -- the idle policy, and keeps hyprlock out of this compositor's process tree — the unit
+    -- launches it via `systemd-run`, for the reason its own comments set out at length.
+    --
+    -- The class is hardware, exactly as dms-settings-deploy decides it: a machine with a
+    -- battery gets the laptop timings. Enable the matching unit once per machine so niri
+    -- machines keep autostarting it via WantedBy; this line is only the Hyprland trigger.
+    -- `start` on an already-running unit is a no-op, so the two paths cannot collide.
+    hl.exec_cmd([[sh -c 'systemctl --user start "swayidle-$(ls /sys/class/power_supply 2>/dev/null | grep -q "^BAT" && echo laptop || echo desktop).service"']])
+
     -- -> name:mail via the thunderbird window rule.
     hl.exec_cmd("thunderbird")
 
