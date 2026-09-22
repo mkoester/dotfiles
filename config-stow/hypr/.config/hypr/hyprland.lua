@@ -214,9 +214,23 @@ local have_dms_binds = want("dms.binds")
 -- alone gets you both behaviours, which reads as "my bind did not work" only if the other one
 -- is visible — a silent second action would just look like a haunted desktop.
 
--- Security. SUPER+ALT+L is DMS's OWN bind (`dms ipc call lock lock`) and is deliberately NOT
--- overridden here any more (2026-09-22). No unbind, no rebind: DMS's lock screen is the locker.
+-- Security. SUPER+ALT+L raises DMS's lock screen. The TARGET is DMS's own — we no longer point
+-- this key at a second locker — but the key is still rebound here for ONE reason: a label.
 --
+-- DMS sets `description` on only 4 of its 118 binds, and its lock bind is not one of them, so
+-- with no bind here `hyprbinds` falls back to parsing the command and prints the cheat-sheet row
+-- as "Lock: lock". hyprbinds also treats "has a description DMS's file does not set" as the
+-- marker for a key we took over (see its --view mine), so this is the supported way to label
+-- one, not a workaround. THE COST, so it is a choice and not an accident: the dispatcher string
+-- below duplicates DMS's own, and will go stale silently if DMS ever changes its lock IPC. The
+-- check for that is `hyprbinds | grep -i lock` looking like this comment says it should.
+--
+-- THE UNBIND IS REQUIRED, NOT TIDINESS: binds accumulate, so without it one press raises the
+-- lock screen twice over.
+hl.unbind(mod .. " + ALT + L")
+hl.bind(mod .. " + ALT + L", hl.dsp.exec_cmd("dms ipc call lock lock"),
+    { description = "Lock screen: DMS (fingerprint)" })
+
 -- It USED to be unbound and re-pointed at hyprlock, because DMS's lock had the fingerprint
 -- reader disabled (`enableFprint: false`), so the reader was never engaged and fingerprint
 -- unlock "disappeared" at the niri -> Hyprland switch. That was one setting, not a missing
