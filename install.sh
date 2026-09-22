@@ -1173,6 +1173,26 @@ fi
 # ══════════════════════════════════════════════════════════════════════════
 step "9/9  Done"
 info "Open a new shell (or 'exec zsh') to load everything."
+
+# PENDING MIGRATIONS. install.sh is idempotent and re-runnable, which is exactly why it cannot
+# carry a step that must happen ONCE, in an order, on a machine that may not be this one —
+# removing something already stowed, or handing a job from one daemon to another. Those live in
+# MIGRATIONS.md, and this block exists so the file is not a thing you have to remember to read:
+# the documented failure mode in this repo is never a missing instruction, it is an instruction
+# that was written somewhere and never ran anywhere.
+#
+# It PRINTS, it does not apply. Anything safe to apply unattended belongs in a step above; what
+# is left here is precisely the class where getting the order wrong is the hazard, and that wants
+# a human. Counting `^## ` headings means an empty file (just its preamble) says nothing at all.
+MIGRATIONS_FILE="$DOTFILES_REPO/MIGRATIONS.md"
+if [ -f "$MIGRATIONS_FILE" ]; then
+	pending=$(grep -c '^## ' "$MIGRATIONS_FILE" || true)
+	if [ "${pending:-0}" -gt 0 ]; then
+		warn "$pending pending per-machine migration(s) — install.sh does NOT apply these:"
+		grep '^## ' "$MIGRATIONS_FILE" | sed 's/^## /    /'
+		warn "  read $MIGRATIONS_FILE before assuming this machine is up to date."
+	fi
+fi
 # Must be an `if`, not `[ … ] && info …`: as the LAST command in the script its status becomes
 # the script's, so the `&&` form made a real (non-dry) run exit 1 after doing everything
 # correctly. Invisible in testing, because --dry-run is exactly the case that makes it true.

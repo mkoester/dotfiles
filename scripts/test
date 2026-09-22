@@ -1170,6 +1170,24 @@ ok "$(printf '%s' "$out" | grep -q 'must be set' && echo 0 || echo 1)" \
 
 rm -rf "$f"
 
+# ── pending migrations ────────────────────────────────────────────────────────
+# install.sh ends by counting `^## ` headings in MIGRATIONS.md and warning about each.
+# The counting is the whole mechanism, so it is tested BOTH WAYS: a suite that only ever
+# checked the populated file would pass identically if the count were hard-wired to 1,
+# and an entry that never prints is the exact failure the file exists to prevent.
+section "pending migrations"
+mig="$REPO/MIGRATIONS.md"
+m="$(mktemp -d "${TMPDIR:?TMPDIR must be set}/migrations.XXXXXX")"
+is "$([ -f "$mig" ] && echo yes || echo no)" "yes" 'MIGRATIONS.md exists'
+printf '# Pending per-machine migrations\n\npreamble only\n' > "$m/empty.md"
+is "$(grep -c '^## ' "$m/empty.md" || true)" "0" 'a file with no entries counts 0'
+printf '# t\n\n## 2026-01-01 a\n\n### not an entry\n\n## 2026-01-02 b\n' > "$m/two.md"
+is "$(grep -c '^## ' "$m/two.md" || true)" "2" 'two entries count 2, and ### is not an entry'
+# An entry that does not say which machines it applies to cannot be closed out -- you would
+# never know when the last one had had it, which is the only way this file ever empties.
+is "$(grep -c '^\*\*Applies to:\*\*' "$mig")" "$(grep -c '^## ' "$mig")" 'every entry has an "Applies to:" line'
+rm -rf "$m"
+
 # ── the repo is PUBLIC ────────────────────────────────────────────────────────
 # Private identifiers reached the tracked tree on 2026-08-20 -- a DynDNS name that
 # resolves to the home WAN IP, plus the home subnet -- and were pushed before anyone

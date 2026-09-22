@@ -13,6 +13,8 @@ mkdir -p "$HOME/src" && git clone https://github.com/mkoester/dotfiles.git "$HOM
 cd "$HOME/src/dotfiles" && ./install.sh
 ```
 
+**After a `git pull`, check [`MIGRATIONS.md`](MIGRATIONS.md).** Re-running `install.sh` applies almost everything, but a few changes need a one-off step per machine in an order that matters — removing something already stowed, or handing a job from one daemon to another. Those are written down there, and an entry stays until every machine has had it. An empty file is the expected steady state.
+
 It detects your distro, installs the base tools, stows the config, sets up oh-my-zsh, and asks a few host-class questions (Wayland desktop? Niri? Quadlet host? Node? Caddy? …) to link only what this machine needs. Niri is its own question, so a desktop that doesn't run it (e.g. a Pi on labwc) is fine. It's **idempotent** — safe to re-run. Preview everything first with:
 
 ```sh
