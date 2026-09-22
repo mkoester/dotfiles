@@ -61,10 +61,9 @@ AUTO_NOTIFY_IGNORE+=(
     # 2026-08-19. It could not have been silenced from here anyway — it expanded to a `&&`
     # chain starting with `date`, and rule 2 splits on "|" only.)
 
-    # ── Session / lock ────────────────────────────────────────────────────────────
-    # hyprlock otherwise fires a notification every single time the screen is unlocked, since
-    # the lock trivially outlives the 10s threshold.
-    "hyprlock"
+    # (A "Session / lock" entry for `hyprlock` lived here until 2026-09-22 — a hand-run lock
+    # trivially outlives the 10s threshold, so it notified on every unlock. hyprlock is gone
+    # and DMS's lock screen is not a shell command, so there is nothing to silence.)
 
     # ── Follow-mode log readers ───────────────────────────────────────────────────
     # `journalctl -f` runs until you quit it. The prefix also covers plain `journalctl`,

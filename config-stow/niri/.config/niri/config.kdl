@@ -50,9 +50,12 @@ binds {
     MOD+RETURN                          hotkey-overlay-title="Open Terminal: ghostty" { spawn-sh "ghostty"; }
     MOD+SPACE                           hotkey-overlay-title="Open App Launcher: wofi" { spawn-sh "wofi"; }
     MOD+B                               hotkey-overlay-title="Open Browser: firefox" { spawn-sh "firefox"; }
-    // hyprlock, not swaylock: it authenticates the fingerprint reader itself over fprintd's
-    // D-Bus API, so it listens from the moment the lock appears. See config-stow/hyprlock/.
-    MOD+ALT+L                           hotkey-overlay-title="Lock Screen: hyprlock" { spawn-sh "pidof hyprlock >/dev/null || hyprlock"; }
+    // DMS's lock screen (hyprlock retired 2026-09-22). DMS runs an fprintd PAM channel in
+    // parallel with the password prompt — `enableFprint` in shared/dms/base.json — so it
+    // listens for a finger from the moment the lock appears, which is what hyprlock was kept
+    // for. Requires DMS to be running in the niri session; it is, on every machine that has
+    // one. See README § "Screen lock and idle".
+    MOD+ALT+L                           hotkey-overlay-title="Lock Screen: DMS" { spawn-sh "dms ipc call lock lock"; }
     MOD+E                                hotkey-overlay-title="File Manager: Nautilus" { spawn-sh "nautilus"; }
 
     // ─── Audio Controls (PipeWire / WirePlumber) ───

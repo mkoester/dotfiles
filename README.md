@@ -939,36 +939,33 @@ dms setup windowrules && dms setup outputs
 
 DMS is started from the compositor (`hl.on("hyprland.start", …)`), **not** via the shipped `dms.service` systemd unit: that unit is `WantedBy`/`Requisite` `graphical-session.target`, and plain Hyprland without uwsm never reaches that target — only `niri-session` does. Spawning it from the compositor works on both.
 
-## hyprlock — screen lock (with fingerprint), driven by swayidle
+## Screen lock and idle — DMS owns both (hyprlock retired 2026-09-22)
+
+There is **nothing to install and nothing to stow**. The lock screen is DMS's own, raised by its `SUPER+ALT+L` bind (`dms ipc call lock lock`) and by its idle timers.
+
+**Fingerprint unlock is one setting**: `enableFprint` in `workstation-private/shared/dms/base.json`. DMS then runs a separate fprintd PAM channel **in parallel with the password prompt**, so the lock listens for a finger from the moment it appears — you just touch the sensor. `dms auth sync -t` writes and maintains `/etc/pam.d/dankshell` for it; don't hand-write that file. The setting is gated on `fprint.available`, so it is inert on a machine with no reader and therefore safe in the fleet-wide baseline rather than a per-host overlay. The deployed `settings.json` is `0444`, so the Settings GUI applies a toggle live but never persists it — change `base.json` and re-deploy.
+
+**`sudo` is a separate stack and stays a manual per-machine edit** — `auth sufficient pam_fprintd.so` ahead of `include system-auth` in `/etc/pam.d/sudo`. Nothing in this repo manages `/etc/pam.d/`, and **working `sudo` proves nothing about the lock screen**: it is the one file that carries its own fprintd line.
+
+**Idle timings are DMS settings too** — `acLockTimeout`, `acPostLockMonitorTimeout`, `acSuspendTimeout` and the `battery*` counterparts, split base/laptop in `shared/dms/`. No unit to enable, and **never add a second idle daemon**: two of them fight over the session lock, which is how `mkMac2014` was locked out three times on 2026-07-30.
+
+**What was removed, and why it could go.** `config-stow/hyprlock/`, `swayidle-laptop.service`, `swayidle-desktop.service` and `screen-blank.sh`. hyprlock was chosen over swaylock on 2026-07-30 for exactly one property: it drives fprintd over D-Bus **itself** instead of waiting for a keystroke to start a PAM conversation ([swaylock#61](https://github.com/swaywm/swaylock/issues/61), where an `--early-pam` flag was proposed and never implemented). DMS reaches the same behaviour through PAM, so the reason to keep a second locker is gone. Verified on `mkDesktop` (2026-09-22) and `mkMac2014` (2026-09-21).
+
+**The Pi 500 is unaffected.** It runs labwc with Pi OS's own patched swaylock and keeps the empty-Enter-then-swipe workaround; it never used any of the removed files, and hyprlock is not packaged for Debian/arm64 anyway.
+
+**Removing them from a machine that already has them is not automatic** — they were stow symlinks, and stow decides what to unlink from the *package contents*, so a `stow -D` after the files are gone silently does nothing and leaves a dangling symlink. Order matters:
 
 ```sh
-paru -S --needed hyprlock swayidle    # Arch
-cd config-stow && stow -t $HOME hyprlock && cd ..
+cd ~/src/dotfiles/config-stow && stow -D -t "$HOME" hyprlock   # BEFORE pulling the deletion
+systemctl --user disable --now swayidle-laptop.service swayidle-desktop.service
+rm -f ~/.config/systemd/user/swayidle-laptop.service \
+      ~/.config/systemd/user/swayidle-desktop.service \
+      ~/.config/systemd/user/screen-blank.sh
+systemctl --user daemon-reload
+paru -Rns hyprlock swayidle
 ```
 
-**Why hyprlock and not swaylock** (switched 2026-07-30): hyprlock authenticates the fingerprint reader **itself**, over fprintd's D-Bus API (`net.reactivated.Fprint`), rather than through PAM. It claims the reader as soon as the lock appears, so unlocking is *just touch the sensor*. swaylock can't do that — its PAM conversation only begins on the first keystroke ([swaylock#61](https://github.com/swaywm/swaylock/issues/61); an `--early-pam` flag was proposed and never implemented), so the flow there was the awkward "press Enter on an empty field, **then** swipe". Password auth still works normally via the `/etc/pam.d/hyprlock` the package ships.
-
-**It is not Hyprland-only.** It locks through `ext-session-lock-v1`, which niri implements, and carries no hyprland-specific protocol; the `hypr*` dependencies are plain libraries.
-
-Verified end-to-end on `mkMac2014` (2026-07-30): hyprlock logs `Running on niri`, binds `ext_session_lock_manager_v1`, and reaches `fprint: claimed device` / `started verifying` **before any keypress** — a failed swipe auto-retries (`retry_delay`) with no input. Two log lines that look alarming and are not:
-
-- **`ERR ]: auth: pam_authenticate failed for hyprlock` after a *successful* fingerprint unlock.** hyprlock runs the password PAM conversation and the fprintd verification in parallel; when the finger wins, the pending PAM attempt is torn down and reports failure. It appears *after* `Unlocking session`. Harmless.
-- **`Gathered all screencopy frames` appears even with a solid `color` set.** hyprlock binds `zwlr_screencopy` and gathers frames at startup regardless, so the line does *not* mean the background is a screenshot — with `color` and no `path`, the lock screen is ✅ black. It was briefly misread as proof of the opposite, and the "fix" — adding `path =` (empty) — **made hyprlock reject the config and stop locking entirely**. Don't re-add it.
-
-Three things to know before relying on it:
-
-- **A missing `~/.config/hypr/hyprlock.conf` makes hyprlock EXIT instead of lock.** For the component guarding an unlocked session that is a security failure, so the config is stowed as its own package and `install.sh` only stows it where the binary exists. Re-test by hand (`hyprlock`, with an SSH session or TTY as the escape hatch) after editing it.
-- **Don't switch to hypridle.** niri doesn't implement `hyprland-lock-notify-v1` ([niri#3459](https://github.com/niri-wm/niri/discussions/3459)) — the fleet stays on swayidle.
-- **Debian keeps swaylock.** hyprlock isn't packaged for Debian/arm64, which is why the Pi 500 is the one machine still on swaylock (and still needs the empty-Enter workaround).
-
-Idle policy lives in the `systemd-user` package — **enable exactly one** per machine:
-
-```sh
-systemctl --user enable --now swayidle-laptop.service    # laptops: dim 120s, lock 300s, DPMS 600s
-systemctl --user enable --now swayidle-desktop.service   # desktops: dim 600s, lock 1800s, DPMS 3600s
-```
-
-Note the `before-sleep` line backgrounds hyprlock with a 1 s guard. hyprlock has no `-f` flag, and swayidle waits for the before-sleep command to *return* while holding the sleep inhibitor — a bare `hyprlock` would block suspend until you unlocked.
+If the deletion is already pulled, `rm` the four symlinks by hand — that is all `stow -D` would have done.
 
 ## terminals — ghostty (default), kitty, alacritty
 

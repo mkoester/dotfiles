@@ -214,31 +214,27 @@ local have_dms_binds = want("dms.binds")
 -- alone gets you both behaviours, which reads as "my bind did not work" only if the other one
 -- is visible — a silent second action would just look like a haunted desktop.
 
--- Security. SUPER+ALT+L goes back to hyprlock, which DMS quietly took over at the niri ->
--- Hyprland switch. Under niri this key ran hyprlock directly (`config.kdl`); on Hyprland the
--- bind set is DMS's, and its `dms ipc call lock lock` raises DMS's OWN lock screen — which has
--- the fingerprint reader disabled (`enableFprint: false` in shared/dms/base.json). So the
--- reader was simply never engaged and fingerprint unlock "disappeared" in the migration.
+-- Security. SUPER+ALT+L is DMS's OWN bind (`dms ipc call lock lock`) and is deliberately NOT
+-- overridden here any more (2026-09-22). No unbind, no rebind: DMS's lock screen is the locker.
 --
--- WHY THAT LOOKED LIKE A HARDWARE OR PAM FAULT AND IS NEITHER: sudo kept working throughout,
--- because /etc/pam.d/sudo carries its own `auth sufficient pam_fprintd.so` line and is
--- untouched by any of this. It is the ONLY file in /etc/pam.d that mentions fprintd — the
--- hyprlock and swaylock stacks just `include login` -> system-auth, which has none. Working
--- sudo therefore proves the reader and the enrolled prints are fine, and says nothing at all
--- about the lock path. Don't read it as evidence.
+-- It USED to be unbound and re-pointed at hyprlock, because DMS's lock had the fingerprint
+-- reader disabled (`enableFprint: false`), so the reader was never engaged and fingerprint
+-- unlock "disappeared" at the niri -> Hyprland switch. That was one setting, not a missing
+-- capability: `enableFprint: true` in shared/dms/base.json makes DMS run a separate fprintd PAM
+-- channel IN PARALLEL with the password prompt, so the lock listens for a finger from the
+-- moment it appears — exactly the property hyprlock was kept for. `dms auth sync` writes and
+-- maintains /etc/pam.d/dankshell for it.
 --
--- hyprlock stays the right locker for the reason recorded in config-stow/hyprlock/: it drives
--- fprintd over D-Bus ITSELF and verifies from the moment the lock appears, rather than waiting
--- on a PAM conversation that only starts once you type. DMS does expose lockPamPath /
--- lockPamInlineFprint / customPowerActionLock, but `dms-shell` ships no QML (the shell is
--- compiled into the binary) and its IPC.md documents none of them, so that route cannot be
--- verified from the installed package. Not taken on those grounds, not on merit.
+-- THE OLD REASONING FAILED IN A CHECKABLE WAY, which is the part worth keeping: it concluded
+-- the DMS route "cannot be verified from the installed package" because dms-shell ships no QML.
+-- The shell is COMPILED INTO /usr/bin/dms — `strings` on the binary yields the settings
+-- definitions and the gating expression. "Not in the package's files" was read as "not
+-- inspectable". Verified on mkDesktop 2026-09-22 and mkMac2014 2026-09-21.
 --
--- THE UNBIND IS REQUIRED, NOT TIDINESS: binds accumulate (see the note above), so without it
--- one press raises hyprlock AND DMS's lock screen, on top of each other.
-hl.unbind(mod .. " + ALT + L")
-hl.bind(mod .. " + ALT + L", hl.dsp.exec_cmd("pidof hyprlock >/dev/null || hyprlock"),
-    { description = "Lock screen: hyprlock (fingerprint)" })
+-- STILL TRUE AND STILL WORTH KNOWING: WORKING `sudo` PROVES NOTHING ABOUT THE LOCK PATH.
+-- /etc/pam.d/sudo carries its own `auth sufficient pam_fprintd.so` and is untouched by any of
+-- this, so working sudo shows the reader and the enrolled prints are fine and says nothing at
+-- all about the lock screen, which authenticates through a different stack entirely.
 
 -- Applications. SUPER+Return is muscle memory from niri; DMS's own SUPER+T stays too.
 --
@@ -1262,18 +1258,13 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("dms run -d")
     hl.exec_cmd([[sh -c '{ echo "--- hyprland.start"; exec kanshi; } >>$XDG_RUNTIME_DIR/kanshi-start.log 2>&1']])
 
-    -- swayidle — the idle policy (dim -> hyprlock -> DPMS off), and therefore what makes the
-    -- screen lock at all. Same reason as DMS and kanshi above: its unit is WantedBy
-    -- graphical-session.target, which plain Hyprland never reaches, so `enable --now` cannot
-    -- start it here. Starting the UNIT rather than inlining swayidle keeps one definition of
-    -- the idle policy, and keeps hyprlock out of this compositor's process tree — the unit
-    -- launches it via `systemd-run`, for the reason its own comments set out at length.
-    --
-    -- The class is hardware, exactly as dms-settings-deploy decides it: a machine with a
-    -- battery gets the laptop timings. Enable the matching unit once per machine so niri
-    -- machines keep autostarting it via WantedBy; this line is only the Hyprland trigger.
-    -- `start` on an already-running unit is a no-op, so the two paths cannot collide.
-    hl.exec_cmd([[sh -c 'systemctl --user start "swayidle-$(ls /sys/class/power_supply 2>/dev/null | grep -q "^BAT" && echo laptop || echo desktop).service"']])
+    -- NO IDLE DAEMON IS STARTED HERE ANY MORE (2026-09-22). swayidle was started from this
+    -- block — it was the whole idle policy (dim -> hyprlock -> DPMS off) and therefore what
+    -- made the screen lock at all. DMS now owns idle AND lock: the timings are settings
+    -- (acLockTimeout / acPostLockMonitorTimeout / acSuspendTimeout and the battery* pair,
+    -- split base/laptop in workstation-private/shared/dms/), and `dms run -d` above brings
+    -- them up. Do not re-add a second idle daemon: two of them fight over the session lock,
+    -- which is how mkMac2014 got locked out three times on 2026-07-30.
 
     -- -> name:mail via the thunderbird window rule.
     hl.exec_cmd("thunderbird")

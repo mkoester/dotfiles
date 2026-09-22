@@ -35,11 +35,16 @@ shared/dms/README.md), and per-machine tweaks would erode exactly that. It exist
 because some changes cannot land fleet-wide in one step without a window in which
 a machine is misconfigured. The worked example, and the reason it was added:
 disabling DMS's own idle lock (acLockTimeout/batteryLockTimeout/lockBeforeSuspend)
-in favour of swayidle+hyprlock, which is what makes fingerprint unlock work. Flip
-it in base.json and every machine that has not yet had its swayidle unit enabled
-stops locking at all — a security failure, not an inconvenience. So each machine
-gets the overlay as it is migrated, and the whole set folds back into base.json
-once the last one is done.
+in favour of swayidle+hyprlock, which was then the only thing that made fingerprint
+unlock work. Flip that in base.json while a machine still had no swayidle unit
+enabled and it stops locking at all — a security failure, not an inconvenience.
+
+THAT ROLLOUT IS FINISHED AND ITS OVERLAY IS GONE (2026-09-22): DMS does fingerprint
+unlock itself via enableFprint, hyprlock and swayidle are removed from dotfiles, and
+mkMac2014/dms/overlay.json — the last overlay, and the one that zeroed those three
+keys — folded back into base.json. The mechanism stays for the next staggered
+change; there is currently no overlay.json in the private repo, which is the
+expected steady state, not a missing file.
 
 IT IS `<hostname>/dms/overlay.json`, DELIBERATELY NOT `settings.json`. The
 per-host `settings.json` files are 2026-08-14 SNAPSHOTS with no consumer — the

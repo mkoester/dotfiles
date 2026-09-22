@@ -152,8 +152,8 @@ case "$PM" in
 	# git-delta was MISSING here until 2026-08-16, and its absence broke git itself: the tracked
 	# config-stow/git/.gitconfig sets `pager = delta` unconditionally, so on a Mac every
 	# `git diff`/`git log` piped into a binary that does not exist. Not a cosmetic divergence —
-	# the config and the package have to arrive together, the same pairing rule as hyprlock's
-	# config in the DF_DESKTOP block.
+	# the config and the package have to arrive together — the pairing rule that applies
+	# wherever a missing binary's config changes behaviour rather than sitting inert.
 	#
 	# sqlite is deliberately NOT here, unlike the three Linux branches: macOS ships a working
 	# system sqlite3, and Homebrew's is keg-only (it does not land on PATH), so naming it would
@@ -383,9 +383,10 @@ if ask_yn DF_DESKTOP "Wayland desktop (bar, monitor profiles, notifications)?"; 
 	DF_DESKTOP_ON=1
 	step "  desktop: notifications, kanshi, waybar unit, idle+lock, ydotool, flatpak"
 	case "$PM" in
-		# hyprlock is the fleet locker (it drives fprintd itself, so the fingerprint works
-		# without a keypress). Arch-family only: it is NOT packaged on Debian/arm64, which is
-		# why the Pi 500 stays on swaylock — don't add it to the apt branch.
+		# NO LOCKER OR IDLE DAEMON IS INSTALLED HERE (hyprlock and swayidle dropped
+		# 2026-09-22). DMS is both: its own lock screen, its own idle timers, and fingerprint
+		# unlock via `enableFprint` in shared/dms/base.json. The Pi 500 is unaffected — it runs
+		# labwc with Pi OS's own swaylock, which this branch never installed anyway.
 		#
 		# ghostty is here because it is the DEFAULT TERMINAL as of 2026-08-10: both
 		# hyprland.lua's `term` and niri's MOD+RETURN spawn it by name, and three class-pinned
@@ -396,16 +397,15 @@ if ask_yn DF_DESKTOP "Wayland desktop (bar, monitor profiles, notifications)?"; 
 		# that fails as "not found" rather than as "set up the vendor repo".
 		#
 		# flatpak is on every branch except brew: it is packaged under that exact name on
-		# Arch, Debian and Fedora, so unlike ghostty/hyprlock above there is no guessing.
+		# Arch, Debian and Fedora, so unlike ghostty above there is no guessing.
 		# kitty added 2026-08-23. The `terminals` stow package has shipped kitty.conf since
 		# 2026-08-10 and install.sh has installed kitty-terminfo since 2026-08-16, but nothing
 		# ever installed kitty itself — measured absent on mkDesktop while its config was deployed
 		# and Workstation-Documentation/desktop/terminal-emulator-comparison.md described its
 		# behaviour in detail. Same config-and-package-arrive-together rule as git-delta above.
 		#
-		# wl-clipboard/grim/slurp/brightnessctl: referenced by tracked config — the stowed
-		# systemd-user units (screen-blank.sh, swayidle-laptop.service) and the niri/hypr
-		# keybinds. All four were explicitly installed by hand on mkDesktop and declared nowhere,
+		# wl-clipboard/grim/slurp/brightnessctl: referenced by tracked config — the niri and
+		# hypr keybinds, and the stowed systemd-user units. All four were explicitly installed by hand on mkDesktop and declared nowhere,
 		# so a fresh compositor machine gets keybinds that silently do nothing.
 		#
 		# ydotool: the systemd-user package stows ydotoold.service to EVERY desktop machine, with a
@@ -414,7 +414,7 @@ if ask_yn DF_DESKTOP "Wayland desktop (bar, monitor profiles, notifications)?"; 
 		# because the unit is already unconditional and ydotool is the general Wayland
 		# input-injection tool. The Stream Deck stack itself (opendeck) is per-machine hardware and
 		# stays undeclared — see Workstation-Documentation/desktop/streamdeck-ydotool.md.
-		pacman) pm_install libnotify kanshi waybar swayidle hyprlock ghostty kitty flatpak \
+		pacman) pm_install libnotify kanshi waybar ghostty kitty flatpak \
 		                   wl-clipboard grim slurp brightnessctl ydotool ;;
 		apt)    pm_install libnotify-bin flatpak ;;
 		dnf)    pm_install libnotify flatpak ;;
@@ -462,12 +462,6 @@ if ask_yn DF_DESKTOP "Wayland desktop (bar, monitor profiles, notifications)?"; 
 	# custom xkb keymap (Caps-Lock -> German umlauts): generic + public, activated
 	# per-machine in niri's local.kdl (or setxkbmap). Just needs to be on disk.
 	stow_pkg "$HOME" xkb
-	# hyprlock config. Stowed only where hyprlock exists — a missing config makes hyprlock
-	# EXIT rather than lock, so the file and the binary must arrive together.
-	if have hyprlock; then
-		run mkdir -p "$HOME/.config/hypr"
-		stow_pkg "$HOME" hyprlock
-	fi
 	# Terminal emulator configs: ghostty (the default since 2026-08-10), kitty (fallback) and
 	# alacritty (previous default, kept working). Tracked since 2026-08-10 — before that all
 	# three were hand-made on mkDell and synced nowhere, so any other machine got a terminal
@@ -478,11 +472,10 @@ if ask_yn DF_DESKTOP "Wayland desktop (bar, monitor profiles, notifications)?"; 
 	# (MesloLGS Nerd Font, Nord, the same clipboard keys), so a fallback stays usable. Their
 	# configs live in three separate directories, so stow folds them with no conflict.
 	#
-	# NO `have` GUARD, unlike hyprlock directly above — and the difference is the point. A
-	# missing hyprlock config makes hyprlock EXIT rather than lock, so file and binary must
-	# arrive together; a config for a terminal that is not installed is simply an inert file.
-	# Guarding here would instead mean a machine that later installs kitty silently gets an
-	# unconfigured one.
+	# NO `have` GUARD: a config for a terminal that is not installed is simply an inert file,
+	# and guarding would mean a machine that later installs kitty silently gets an unconfigured
+	# one. (The pairing rule in this repo is the other way round only where a MISSING binary's
+	# config changes behaviour — git-delta's, for instance, which breaks `git diff` outright.)
 	#
 	# THE STOW ITSELF NOW LIVES BELOW THE BLOCK — see "Terminal emulator configs" after the
 	# compositor questions. Only this reasoning stayed here, next to the packages it is about.
@@ -522,7 +515,7 @@ if ask_yn DF_DESKTOP "Wayland desktop (bar, monitor profiles, notifications)?"; 
 	fi
 	info "enable the user units yourself once logged into the graphical session:"
 	info "  systemctl --user enable --now kanshi.service waybar.service ydotoold.service"
-	info "  plus EXACTLY ONE idle unit: swayidle-laptop.service or swayidle-desktop.service"
+	info "idle and screen lock are DMS settings, not units — nothing to enable."
 	info "ydotool needs a /dev/uinput udev rule (root) — see README § niri/ydotool."
 else
 	unlink_omz oh-my-zsh-plugins-optional auto-notify.zsh
@@ -585,8 +578,10 @@ if ask_yn DF_HYPR "Hyprland compositor (tracked hyprland.lua)?"; then
 		pacman) pm_install hyprland xdg-desktop-portal-hyprland fzf ;;
 		*)      info "install hyprland from its own docs on this distro." ;;
 	esac
-	# Shared with the hyprlock package (~/.config/hypr): mkdir first so stow does not fold the
-	# directory into a single package symlink and then have to unfold it for the second one.
+	# MKDIR FIRST, AND IT IS LOAD-BEARING even though `hypr` is now the only package under
+	# ~/.config/hypr (hyprlock was removed 2026-09-22). Without the real directory, stow folds
+	# ~/.config/hypr into ONE symlink pointing at the package, and the `local.lua` symlink a few
+	# lines below would then be written INTO THE REPO rather than into the home directory.
 	run mkdir -p "$HOME/.config/hypr"
 	stow_pkg "$HOME" hypr
 	# machine-specific overrides (real monitor block, xkb path, which shell to spawn)
@@ -752,7 +747,7 @@ if ask_yn DF_DMS "DankMaterialShell (DMS) desktop shell?"; then
 
 	# CachyOS's Niri and Hyprland editions install NOCTALIA, a second full Quickshell shell —
 	# with its own idle daemon, ext-session-lock client and polkit agent, each of which fights
-	# the DMS/swayidle ones (three lockouts on mkMac2014, 2026-07-30). Warn only when DMS was
+	# DMS's (three lockouts on mkMac2014, 2026-07-30). Warn only when DMS was
 	# chosen: on a machine deliberately running Noctalia there is nothing wrong to report.
 	#
 	# DETECT AND WARN ONLY — never remove. `cachyos-{hypr,niri}-noctalia` is the edition's whole
