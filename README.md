@@ -60,7 +60,7 @@ Port names are mostly identical to the formula names. The GNU userland is where 
 |---|---|
 | `gnu-tar` | `gnutar` |
 | `gnu-sed` | `gsed` |
-| `gnu-getopt` | `getopt` |
+| `gnu-getopt` | `util-linux` (the `getopt` port is obsolete and redirects there) |
 | `coreutils`, `grep`, `findutils`, `gawk`, `bash` | same names |
 
 Both install these g-prefixed so they do not shadow the system tools, and both ship a `libexec/gnubin` of unprefixed symlinks — but MacPorts uses **one shared `/opt/local/libexec/gnubin`** where Homebrew gives each formula its own. `oh-my-zsh-custom/macos.zsh` handles both. Do **not** use MacPorts' `+with_default_names` variants: non-default variants are not covered by the prebuilt archives, so they source-build, which defeats the point.

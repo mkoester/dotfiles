@@ -186,7 +186,9 @@ esac
 #
 # MacPorts (mkMac2017, 2026-09-21) does the same thing with three differences, all verified in the
 # Portfiles rather than assumed:
-#   * the port NAMES differ — gnu-tar/gnu-sed/gnu-getopt are gnutar/gsed/getopt there;
+#   * the port NAMES differ — gnu-tar/gnu-sed are gnutar/gsed there, and gnu-getopt has no GNU
+#     port at all: MacPorts' `getopt` is obsolete, replaced_by util-linux (checked 2026-09-23 on
+#     ports.macports.org), which installs an unprefixed getopt straight into ${prefix}/bin;
 #   * all six GNU ports populate ONE SHARED ${prefix}/libexec/gnubin (plus gnubin/man/man1), where
 #     Homebrew gives each formula its own. macos.zsh therefore needs one PATH entry, not six;
 #   * do NOT reach for the +with_default_names variants, tempting as they look. Non-default
@@ -194,7 +196,7 @@ esac
 #     entire reason this machine is on MacPorts.
 case "$PM" in
 	brew)   pm_install coreutils gnu-tar gnu-sed grep findutils gawk gnu-getopt bash ;;
-	port)   pm_install coreutils gnutar gsed grep findutils gawk getopt bash ;;
+	port)   pm_install coreutils gnutar gsed grep findutils gawk util-linux bash ;;
 	*)      : ;;
 esac
 

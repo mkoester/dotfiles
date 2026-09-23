@@ -90,8 +90,9 @@ if [[ -n $HOMEBREW_PREFIX ]]; then
 
     # gnu-getopt is keg-only and ships no gnubin — its binary sits in the normal bin/. Worth
     # having: BSD getopt has no long options, which breaks any script using --foo=bar parsing.
-    # (MacPorts calls this port `getopt` and puts it straight in /opt/local/bin, so the MacPorts
-    # block above needs no equivalent line.)
+    # (MacPorts has no getopt port of its own — `getopt` is obsolete, replaced by util-linux,
+    # which puts it straight in /opt/local/bin, so the MacPorts block above needs no equivalent
+    # line.)
     d=$HOMEBREW_PREFIX/opt/gnu-getopt/bin
     [[ -d $d ]] && path=($d $path)
 
