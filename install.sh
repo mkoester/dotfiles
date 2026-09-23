@@ -1173,6 +1173,10 @@ fi
 # ══════════════════════════════════════════════════════════════════════════
 step "8/9  Default shell"
 ZSH_BIN="$(command -v zsh || true)"
+# On a MacPorts host, name the port's zsh rather than trusting PATH order: a leftover Homebrew
+# zsh ahead of /opt/local made the first mkMac2017 run chsh to /usr/local/bin/zsh (2026-09-23),
+# which then blocks uninstalling that formula.
+[ "$PM" = port ] && [ -x /opt/local/bin/zsh ] && ZSH_BIN=/opt/local/bin/zsh
 if [ -n "$ZSH_BIN" ] && [ "${SHELL:-}" != "$ZSH_BIN" ]; then
 	# is_macos, not a $PM test: neither a Homebrew nor a MacPorts zsh adds itself to /etc/shells,
 	# and chsh only accepts a shell listed there.

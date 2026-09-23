@@ -33,30 +33,6 @@
 
 [[ $OSTYPE == darwin* ]] || return 0
 
-# ── MacPorts ──
-# Fixed prefix, unlike Homebrew: MacPorts is /opt/local on every Mac, Intel or Apple silicon.
-() {
-  [[ -x /opt/local/bin/port ]] || return 0
-
-  local -a mp
-  mp=(/opt/local/bin /opt/local/sbin)
-
-  # The shared gnubin goes AHEAD of /opt/local/bin so the unprefixed names win over anything
-  # MacPorts put there under the same name, and both go ahead of /usr/bin.
-  [[ -d /opt/local/libexec/gnubin ]] && mp=(/opt/local/libexec/gnubin $mp)
-
-  path=($mp $path)
-
-  # The TRAILING colon matters: without it MANPATH becomes exhaustive and `man ls` would find
-  # the GNU page but `man launchctl` nothing at all. An empty entry means "and the system path".
-  local -a mpman
-  [[ -d /opt/local/libexec/gnubin/man ]] && mpman+=(/opt/local/libexec/gnubin/man)
-  [[ -d /opt/local/share/man ]]          && mpman+=(/opt/local/share/man)
-  (( $#mpman )) && export MANPATH="${(j.:.)mpman}:${MANPATH#:}"
-
-  return 0
-}
-
 # ── Homebrew ──
 # Casks only on mkMac2017, but the formula handling below is kept correct rather than deleted:
 # it costs nothing where no formula is installed (every [[ -d ]] simply fails) and it is still
@@ -101,6 +77,33 @@ if [[ -n $HOMEBREW_PREFIX ]]; then
     return 0
   }
 fi
+
+# ── MacPorts ──
+# Fixed prefix, unlike Homebrew: MacPorts is /opt/local on every Mac, Intel or Apple silicon.
+# Runs AFTER the Homebrew block on purpose: both prepend, so the last one wins, and `brew shellenv`
+# puts /usr/local/bin first unconditionally. In the old order every leftover brew formula shadowed
+# its port (found 2026-09-23 on mkMac2017: git, zsh, eza, atuin ... all resolved to /usr/local).
+() {
+  [[ -x /opt/local/bin/port ]] || return 0
+
+  local -a mp
+  mp=(/opt/local/bin /opt/local/sbin)
+
+  # The shared gnubin goes AHEAD of /opt/local/bin so the unprefixed names win over anything
+  # MacPorts put there under the same name, and both go ahead of /usr/bin.
+  [[ -d /opt/local/libexec/gnubin ]] && mp=(/opt/local/libexec/gnubin $mp)
+
+  path=($mp $path)
+
+  # The TRAILING colon matters: without it MANPATH becomes exhaustive and `man ls` would find
+  # the GNU page but `man launchctl` nothing at all. An empty entry means "and the system path".
+  local -a mpman
+  [[ -d /opt/local/libexec/gnubin/man ]] && mpman+=(/opt/local/libexec/gnubin/man)
+  [[ -d /opt/local/share/man ]]          && mpman+=(/opt/local/share/man)
+  (( $#mpman )) && export MANPATH="${(j.:.)mpman}:${MANPATH#:}"
+
+  return 0
+}
 
 # Drop duplicate PATH entries (a re-sourced rc file would otherwise stack them).
 typeset -U path
