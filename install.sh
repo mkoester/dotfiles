@@ -368,6 +368,9 @@ run ln -sf "$DOTFILES_REPO/.zshrc-update-os-$UPDATE_OS.zsh" "$HOME/.zshrc-update
 if is_macos; then
 	info "update-os needs the cask-upgrade tap once on this machine:"
 	info "  brew tap buo/cask-upgrade"
+	# Homebrew now ignores untrusted taps (docs.brew.sh/Tap-Trust, seen 2026-09-23). Trust only
+	# the one command rather than the whole tap and everything it may add later.
+	info "  brew trust --command buo/cask-upgrade/cu"
 fi
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -925,11 +928,20 @@ fi
 # only a running service.
 if ask_yn DF_SYNCTHING "Syncthing (fleet file-sync mesh)?"; then
 	pm_install syncthing
-	# launchd, via whichever manager provided the package. MacPorts' `port load` writes a
-	# /Library/LaunchDaemons plist and needs sudo; `brew services` is per-user and does not.
+	# launchd, via whichever manager provided the package. The MacPorts port has NO startupitem,
+	# so `port load syncthing` fails ("Launchd plist ... was not found", 2026-09-23). It ships an
+	# example per-user agent instead (`port notes syncthing`), with USERNAME placeholders — so it
+	# becomes a LaunchAgent in ~/Library, no sudo, same shape as `brew services`.
 	case "$PM" in
 		brew) run brew services start syncthing ;;
-		port) run sudo port load syncthing ;;
+		port)
+			st_plist="$HOME/Library/LaunchAgents/net.syncthing.syncthing.plist"
+			run mkdir -p "$HOME/Library/LaunchAgents"
+			run_sh "sed -e 's|/Users/USERNAME|$HOME|g' -e 's|USERNAME|$(id -un)|g' \
+/opt/local/share/examples/syncthing/net.syncthing.syncthing.plist > '$st_plist'"
+			launchctl print "gui/$(id -u)/net.syncthing.syncthing" >/dev/null 2>&1 \
+				|| run launchctl bootstrap "gui/$(id -u)" "$st_plist"
+			;;
 		*)    info "enable + start the service:"
 		      info "  systemctl --user enable --now syncthing" ;;
 	esac
