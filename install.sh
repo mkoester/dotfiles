@@ -1100,10 +1100,17 @@ if ask_yn DF_GITA "gita multi-repo overview + auto-fetch?"; then
 	# than a zsh function; gita-legend is shared with okf's herdr-tab-gita.
 	run mkdir -p "$HOME/.local/bin"
 	stow_pkg "$HOME" gita
-	run mkdir -p "$HOME/.config/systemd/user"
-	stow_pkg "$HOME/.config" systemd-user
-	info "register repos and enable the fetch timer in a fresh shell:"
-	info "  gitar && systemctl --user enable --now gita-fetch.timer"
+	if is_macos; then
+		# No systemd, so no gita-fetch timer (MACOS-BASELINE § 5) — the CLI and panel still
+		# work. macOS has no procps either, and gitaw needs its `watch`.
+		case "$PM" in brew|port) pm_install watch ;; esac
+		info "register repos in a fresh shell:  gitar"
+	else
+		run mkdir -p "$HOME/.config/systemd/user"
+		stow_pkg "$HOME/.config" systemd-user
+		info "register repos and enable the fetch timer in a fresh shell:"
+		info "  gitar && systemctl --user enable --now gita-fetch.timer"
+	fi
 else
 	unlink_omz oh-my-zsh-custom gita.zsh
 fi
