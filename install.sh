@@ -923,7 +923,7 @@ else
 fi
 
 # Syncthing: fleet-wide file-sync mesh. Its own question rather than folded into DF_DESKTOP or
-# DF_QUADLET — mkFlur and mkde want it with no desktop and no quadlet host, and a laptop wants it
+# DF_QUADLET — mkFlur and mkde want it with no desktop (both ARE quadlet hosts), and a laptop wants it
 # with neither of those necessarily true either. No omz snippet: it needs no shell-rc changes,
 # only a running service.
 if ask_yn DF_SYNCTHING "Syncthing (fleet file-sync mesh)?"; then

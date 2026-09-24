@@ -791,7 +791,15 @@ atuin sync
 
 ## quadlet hosts (server-side)
 
-`oh-my-zsh-custom/quadlet.zsh` wraps the repetitive commands for managing rootless-Podman [quadlet](https://github.com/mkoester?tab=repositories&q=quadlet) services, each of which runs as a dedicated user. It collapses the invariant `sudo -u <svc> XDG_RUNTIME_DIR=/run/user/$(id -u <svc>) systemctl --user …` prefix into `qctl`/`qreload`/`qlog`/`qexec`/`qplog`/`qupdate`/`qvalidate`/`qsh`.
+`oh-my-zsh-custom/quadlet.zsh` wraps the repetitive commands for managing rootless-Podman [quadlet](https://github.com/mkoester?tab=repositories&q=quadlet) services, each of which runs as a dedicated user. It collapses the invariant `sudo -u <svc> XDG_RUNTIME_DIR=/run/user/$(id -u <svc>) systemctl --user …` prefix into `qctl`/`qreload`/`qlog`/`qexec`/`qplog`/`qupdate`/`qvalidate`/`qsh`/`qpodman`. On top of those, the helpers below cover what every `quadlet-*` README repeats. `<svc>` tab-completes from the service users, which are the lingering users with a home under `/var/lib`.
+
+| Command | Does |
+|---|---|
+| `qls` | every service's units and timers |
+| `qsetup <svc> [repo-url]` | user (unless it exists), linger, clone to `~<svc>/quadlet-<svc>`, `*.override.env` from its template where missing, `qlink` |
+| `qlink <svc>` | (re)link the repo's `*.container/*.network/*.env` and `*.service/*.timer` into place; idempotent |
+| `qbackup-init <svc>` | `/var/backups/<svc>` (`2750`, `backup-readers`), link + enable `<svc>-backup.timer` |
+| `qpull <svc>` | `git pull --ff-only`, `qlink`, generator check, `daemon-reload`. It never restarts anything |
 
 **Server-side only** — link it on the quadlet *host*, never on the workstation; the functions run privileged commands against local service users. The installer's "Quadlet host?" question does this. Its source of truth is the `quadlet-my-guidelines` Operations section — keep the two in sync. To link by hand:
 

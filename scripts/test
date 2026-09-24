@@ -382,6 +382,61 @@ else
 	skip 'install.sh runs to completion' 'stow not installed'
 fi
 
+# ── quadlet.zsh ──────────────────────────────────────────────────────────────
+# Drives the REAL functions in zsh. The privileged edges are stubbed: _q_run runs the
+# command as yourself (no sudo), getent answers from a fake passwd whose homes live in a
+# temp dir, and sudo only records. What is asserted is what the helpers do to the files.
+section 'quadlet.zsh'
+QZ="$REPO/oh-my-zsh-custom/quadlet.zsh"
+if command -v zsh >/dev/null; then
+	zsh -n "$QZ" 2>/dev/null && r=1 || r=0; ok "$r" 'quadlet.zsh parses'
+
+	d="$(work)"
+	repo="$d/home/a/quadlet-a"; mkdir -p "$repo/.git" "$d/linger"
+	for f in a.container a.network a.env a.override.env a.override.env.template \
+		a-backup.service a-backup.timer README.md; do : >"$repo/$f"; done
+	echo template >"$repo/b.override.env.template"
+	echo mine >"$repo/a.override.env"
+	: >"$d/linger/a"; : >"$d/linger/mk"
+	qz() {  # qz <zsh code> — run with quadlet.zsh sourced and the privileged edges stubbed
+		D="$d" zsh -fc '
+			source "$0"
+			_Q_LINGER_DIR=$D/linger
+			getent() { case $2 in a) print "a:x:1:1::$D/home/a:/usr/sbin/nologin" ;;
+				mk) print "mk:x:2:2::/home/mk:/bin/zsh" ;; *) return 2 ;; esac; }
+			_q_run() { shift; "$@"; }
+			sudo() { print -r -- "sudo $*" >>$D/sudo.log; }
+			'"$1" "$QZ"
+	}
+
+	qz 'qlink a' >/dev/null 2>&1
+	is "$(ls "$d/home/a/.config/containers/systemd" | tr '\n' ' ')" \
+		'a.container a.env a.network a.override.env ' \
+		'qlink links quadlet files, never *.template or README'
+	is "$(ls "$d/home/a/.config/systemd/user" | tr '\n' ' ')" 'a-backup.service a-backup.timer ' \
+		'qlink links .service/.timer into systemd/user'
+	is "$(readlink "$d/home/a/.config/containers/systemd/a.container")" "$repo/a.container" \
+		'links point into the repo'
+	qz 'qlink a' >/dev/null 2>&1 && r=1 || r=0; ok "$r" 'qlink is idempotent'
+
+	qz 'qsetup a' >/dev/null 2>&1
+	is "$(cat "$repo/a.override.env")" 'mine' 'qsetup keeps an existing override.env'
+	is "$(cat "$repo/b.override.env" 2>/dev/null)" 'template' 'qsetup creates a missing override.env from its template'
+	grep -q 'useradd' "$d/sudo.log" 2>/dev/null && r=0 || r=1; ok "$r" 'qsetup skips useradd for an existing user'
+
+	is "$(qz '_q_services')" '' '_q_services drops a lingering user whose home is outside /var/lib'
+	is "$(D="$d" zsh -fc 'source "$0"; _Q_LINGER_DIR=$D/linger
+		getent() { case $2 in a) print "a:x:1:1::/var/lib/a:/usr/sbin/nologin" ;; mk) print "mk:x:2:2::/home/mk:/bin/zsh" ;; esac; }
+		_q_services' "$QZ")" 'a' '_q_services keeps a /var/lib home and drops /home'
+
+	for c in 'qlink' 'qsetup' 'qpull' 'qbackup-init' 'qpodman a' 'qls x'; do
+		qz "$c" >/dev/null 2>&1; is "$?" '2' "usage error: $c"
+	done
+	rm -rf "$d"
+else
+	skip 'quadlet.zsh' 'zsh not installed'
+fi
+
 section 'hyprbinds — keybind cheat sheet'
 HB="$REPO/config-stow/hypr/.local/bin/hyprbinds"
 FX="$REPO/tests/fixtures"
