@@ -811,6 +811,60 @@ else
 	skip "gitar" "zsh not installed"
 fi
 
+# ── gita-branches ────────────────────────────────────────────────────────────
+# Real git repos with real bare remotes: the classification IS git plumbing, so a
+# stubbed git would test nothing. One branch per state, each asserted by name.
+section "gita-branches"
+GB="$REPO/config-stow/gita/.local/bin/gita-branches"
+d="$(work)"
+(
+	export HOME="$d" GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t \
+		GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
+	g() { git -C "$d/fork" "$@" >/dev/null 2>&1; }
+	c() { g commit --allow-empty -m "$1"; }
+	git init -q --bare "$d/up.git" && git init -q --bare "$d/orig.git" && git init -q --bare "$d/o2.git"
+	git init -q -b main "$d/fork"
+	g remote add upstream "$d/up.git"; g remote add origin "$d/orig.git"
+	c base; g push upstream main; g push origin main
+	g switch -c shared; c s; g push upstream shared                       # upstream's branch
+	g switch -c insync main; c i; g push -u origin insync
+	g switch -c ahead main; c a1; g push origin ahead; c a2; c a3
+	g switch -c behind main; c b1; c b2; g push origin behind; g reset --hard HEAD~1
+	g switch -c diverged main; c d1; g push origin diverged; g reset --hard main; c d2
+	g switch -c never main; c n
+	g switch -c tracksup main; c t; g branch -u upstream/main              # the whipper case
+	g switch -c gone main; c x; g push -u origin gone; g push origin --delete gone
+	g switch -c local/rip main; c l
+	g switch main
+	# Not a fork: no upstream remote, so even an unpushed branch is not reported.
+	git init -q -b main "$d/plain"
+	git -C "$d/plain" remote add origin "$d/o2.git"
+	git -C "$d/plain" commit -q --allow-empty -m p
+	git -C "$d/plain" switch -q -c wip
+	mkdir -p "$d/gita"
+	printf '%s\n' "$d/fork,fork,," "$d/plain,plain,," >"$d/gita/repos.csv"
+	printf '%s\n' "ws:fork plain:$d" "other:plain:$d" >"$d/gita/groups.csv"
+) 2>/dev/null
+
+out="$(GITA_PROJECT_HOME="$d" bash "$GB" | sed 's/\x1b\[[0-9;]*m//g')"
+state() { printf '%s\n' "$out" | awk -v b="$1" '$2 == b { print $3 }'; }
+is "$(state ahead)" '↑2' 'unpushed commits on a pushed branch: ↑n'
+is "$(state behind)" '↓1' 'origin ahead of the local branch: ↓n'
+is "$(state diverged)" '⇕' 'diverged from origin: ⇕'
+is "$(state never)" '∅' 'never pushed: ∅'
+is "$(state tracksup)" '∅' 'compared with origin/<b>, not its tracking ref (upstream/main)'
+is "$(state gone)" '✗' 'pushed, then deleted on origin: ✗ (not ∅)'
+is "$(state insync)" '' 'an in-sync branch is not listed'
+is "$(state shared)" '' 'a branch upstream has is not mine, so not listed'
+is "$(state main)" '' 'the default branch (on upstream) is not listed'
+is "$(state local/rip)" '' 'local/* is not listed'
+is "$(state wip)" '' 'a repo without an upstream remote is not a fork, so not listed'
+is "$(printf '%s\n' "$out" | awk '{print $1}' | sort -u)" 'fork' 'every row names its repo'
+is "$(GITA_PROJECT_HOME="$d" bash "$GB" other)" '' 'a group with no fork prints nothing'
+is "$(GITA_PROJECT_HOME="$d" bash "$GB" ws | wc -l | tr -d ' ')" '6' 'a group filter keeps its forks'
+is "$(GITA_PROJECT_HOME="$d/nowhere" bash "$GB"; echo "rc=$?")" 'rc=0' 'no gita config: silent, exit 0'
+rm -rf "$d"
+
 # ── dms-plugin-enable ────────────────────────────────────────────────────────
 # Every case runs against a --target in a temp dir, so nothing here can touch the
 # real DMS store.

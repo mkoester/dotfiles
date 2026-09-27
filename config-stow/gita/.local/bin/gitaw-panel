@@ -278,3 +278,16 @@ echo
 ll_args=(-g)
 [ -n "$group" ] && ll_args+=("$group")
 gita ll "${ll_args[@]}" | grep -v '\[\] '
+
+# ── branches ──────────────────────────────────────────────────────────────────
+# The rows above show only each repo's checked-out branch. gita-branches adds
+# every fork branch not in sync with origin/<same name>. The whole section,
+# rule included, is left out when there is nothing to report or no script.
+if command -v gita-branches >/dev/null 2>&1; then
+	branches="$(gita-branches "$group")"
+	if [ -n "$branches" ]; then
+		echo
+		rule branches "✗ deleted on origin"
+		printf '%s\n' "$branches"
+	fi
+fi

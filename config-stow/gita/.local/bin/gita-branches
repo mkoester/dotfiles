@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+# gita-branches [group] — the fork branches that are NOT in sync with my fork.
+#
+#   whipper  feature/rip-selected-tracks  ∅
+#   whipper  fix/no-drive-clean-exit      ↑2
+#   opengym  i18n/de-ch-locale            ✗
+#
+# `gita ll` shows the checked-out branch only, and its arrows compare against the
+# branch's TRACKING ref — which in a fork is often upstream/<default>, so "↑3"
+# there means "ahead of upstream", not "unpushed". This compares every one of my
+# branches against origin/<same name> instead, whatever it tracks.
+#
+#   fork       = a gita repo with an `upstream` remote (the fork convention)
+#   my branch  = a local branch upstream does not have, minus local/* (never pushed
+#                by design; the gita ll row still shows one while it is checked out)
+#   states     = ↑n to push · ↓n to pull · ⇕ diverged · ∅ not on origin ·
+#                ✗ gone (was pushed, since deleted on origin — usually a merged PR,
+#                safe to delete). In-sync branches are not printed at all.
+#
+# "gone" relies on pruned remote-tracking refs (fetch.prune in the stowed
+# .gitconfig); without pruning a deleted origin branch still reads as in sync.
+#
+# Reads gita's repos.csv / groups.csv directly rather than calling gita per repo,
+# so a 1-second `watch` frame stays cheap. Prints nothing when all is in sync.
+set -uo pipefail # not -e: one unreadable repo must not hide the others
+
+group="${1:-}"
+# gita's own config-dir resolution, as in gitar.
+conf="${GITA_PROJECT_HOME:-${XDG_CONFIG_HOME:-$HOME/.config}}/gita"
+[ -r "$conf/repos.csv" ] || exit 0
+
+# repos.csv rows: path,name,type,flags
+declare -A path_of
+names=()
+while IFS=, read -r rpath name _; do
+	[ -n "$name" ] || continue
+	path_of[$name]="$rpath"
+	names+=("$name")
+done <"$conf/repos.csv"
+
+# groups.csv rows: group:repo repo ...:path — last row wins, as in gita itself.
+if [ -n "$group" ]; then
+	members=""
+	while IFS=: read -r gname repos _; do
+		[ "$gname" = "$group" ] && members="$repos"
+	done <"$conf/groups.csv" 2>/dev/null
+	read -ra names <<<"$members"
+fi
+
+PURPLE=$'\033[35m' YELLOW=$'\033[33m' RED=$'\033[31m' WHITE=$'\033[37m' RESET=$'\033[0m'
+
+# branch_state <repo-path> <branch> — prints the state, or nothing when in sync
+# or not one of my branches.
+branch_state() {
+	local p="$1" b="$2" counts behind ahead
+	case "$b" in local/*) return ;; esac
+	git -C "$p" show-ref -q --verify "refs/remotes/upstream/$b" && return
+	if git -C "$p" show-ref -q --verify "refs/remotes/origin/$b"; then
+		counts="$(git -C "$p" rev-list --left-right --count "refs/remotes/origin/$b...refs/heads/$b")" || return
+		read -r behind ahead <<<"$counts"
+		if [ "$ahead" -gt 0 ] && [ "$behind" -gt 0 ]; then
+			printf '%s' "${RED}⇕${RESET}"
+		elif [ "$ahead" -gt 0 ]; then
+			printf '%s' "${PURPLE}↑${ahead}${RESET}"
+		elif [ "$behind" -gt 0 ]; then
+			printf '%s' "${YELLOW}↓${behind}${RESET}"
+		fi
+	elif [ "$(git -C "$p" config "branch.$b.remote")" = origin ] &&
+		[ "$(git -C "$p" config "branch.$b.merge")" = "refs/heads/$b" ]; then
+		printf '%s' "${WHITE}✗${RESET}"
+	else
+		printf '%s' "${WHITE}∅${RESET}"
+	fi
+}
+
+rows=()
+wr=0 wb=0
+for name in "${names[@]}"; do
+	p="${path_of[$name]:-}"
+	[ -n "$p" ] || continue
+	git -C "$p" remote get-url upstream >/dev/null 2>&1 || continue
+	while read -r b; do
+		s="$(branch_state "$p" "$b")"
+		[ -n "$s" ] || continue
+		rows+=("$name"$'\t'"$b"$'\t'"$s")
+		[ "${#name}" -gt "$wr" ] && wr="${#name}"
+		[ "${#b}" -gt "$wb" ] && wb="${#b}"
+	done < <(git -C "$p" for-each-ref --format='%(refname:short)' refs/heads 2>/dev/null)
+done
+
+for row in "${rows[@]}"; do
+	IFS=$'\t' read -r name b s <<<"$row"
+	printf '  %-*s  %-*s  %s\n' "$wr" "$name" "$wb" "$b" "$s"
+done

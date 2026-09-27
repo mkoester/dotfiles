@@ -5,6 +5,11 @@
 	name = Mirko Köster
 [pull]
 	rebase = false
+[fetch]
+	# Drop origin/<b> once <b> is deleted on the remote. Without this a merged-and-
+	# deleted branch keeps its stale ref, and gita-branches shows it as in sync
+	# instead of ✗. It only affects remote-tracking refs, never local branches.
+	prune = true
 [core]
 	pager = delta
 	excludesFile = ~/.gitignore_global
