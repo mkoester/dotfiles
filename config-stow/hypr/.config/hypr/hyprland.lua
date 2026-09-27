@@ -1010,8 +1010,10 @@ hl.window_rule({ match = { class = "mk.switcher" }, size = { 900, 600 } })
 -- dialogs, this rule does not. Field names checked against `--verify-config` with controls (an
 -- invented effect and an invented match key are each rejected).
 --
--- UNMEASURED: that `center` actually lands on a window that floats of its own accord. If a dialog
--- still maps off-screen, read `floating` off the live window before changing anything.
+-- CONFIRMED 2026-09-27 (mkDell): after `hyprctl reload` the rename dialog mapped centred. So the
+-- rule effect works on a self-floated window even though the DISPATCHER `hl.dsp.window.center()`
+-- acts only on the focused window ("No floating window found" otherwise). Unstuck the original
+-- dialog with focus-by-`address:` then center; a `title:^Rename/cleanup` selector found nothing.
 hl.window_rule({ match = { class = "^org-tinymediamanager-TinyMediaManager$", float = true }, center = true })
 
 -- If login focus-jumping becomes annoying (both autostarted apps open on workspaces you are not
