@@ -495,6 +495,7 @@ ln -sf `pwd`/oh-my-zsh-custom/pnpm.zsh $HOME/.oh-my-zsh-custom/
 | `oh-my-zsh-custom/pnpm.zsh` | `.oh-my-zsh-custom` | `PNPM_HOME`, `p*` aliases, completion | [Node machines](#node-machines-fnm--pnpm) |
 | `oh-my-zsh-custom/atuin.zsh` | `.oh-my-zsh-custom` | `atuin init zsh` — synced shell history | see [atuin](#atuin--shell-history-sync) |
 | `oh-my-zsh-custom/quadlet.zsh` | `.oh-my-zsh-custom` | `qctl`/`qlog`/`qexec`/… Podman-quadlet helpers | see [quadlet hosts](#quadlet-hosts-server-side) |
+| `oh-my-zsh-custom/transfer.zsh` | `.oh-my-zsh-custom` | `rcopy`/`rmove SRC... DEST` — rsync with progress; picks `-a`/`-z` per target, `rmove` removes emptied source dirs | always (`install.sh` links it) |
 | `oh-my-zsh-custom/ssh-shared-authorized_keys.zsh` | `.oh-my-zsh-custom` | `update-ssh-shared-authorized_keys` | hosts using the shared key repo |
 
 ## Node machines (fnm + pnpm)

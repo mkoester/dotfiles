@@ -136,9 +136,9 @@ esac
 # ══════════════════════════════════════════════════════════════════════════
 step "2/9  Base tools"
 case "$PM" in
-	pacman) pm_install zsh zoxide tmux git git-delta curl wget eza sqlite fzf jq ripgrep ;;
-	apt)    pm_install zsh zoxide tmux git git-delta gitk curl wget eza fzf jq ripgrep ;;
-	dnf)    pm_install zsh zoxide tmux git git-delta gitk curl wget eza sqlite fzf jq ripgrep ;;
+	pacman) pm_install zsh zoxide tmux git git-delta curl wget rsync eza sqlite fzf jq ripgrep ;;
+	apt)    pm_install zsh zoxide tmux git git-delta gitk curl wget rsync eza fzf jq ripgrep ;;
+	dnf)    pm_install zsh zoxide tmux git git-delta gitk curl wget rsync eza sqlite fzf jq ripgrep ;;
 	# jq added 2026-08-23 — it is a HARD dependency of this fleet's own committed scripts
 	# (dms-settings-deploy, dms-plugin-enable, claude-local-defaults, fleet-audit,
 	# okf/scripts/obsidian-plugins — 27 call sites), and it was installed on mkDesktop only as a
@@ -158,7 +158,11 @@ case "$PM" in
 	# sqlite is deliberately NOT here, unlike the three Linux branches: macOS ships a working
 	# system sqlite3, and Homebrew's is keg-only (it does not land on PATH), so naming it would
 	# install something that changes nothing.
-	brew)   pm_install zsh zoxide tmux git git-delta curl wget eza fzf ;;
+	#
+	# rsync IS here on macOS, although the system has one: that is openrsync (per-file --progress
+	# only), and oh-my-zsh-custom/transfer.zsh wants GNU's --info=progress2. On Linux it is listed
+	# because minimal installs (Arch base, Debian) do not always ship it — same pairing rule.
+	brew)  pm_install zsh zoxide tmux git git-delta curl wget rsync eza fzf ;;
 	# Same list, same names — MacPorts happens to agree with Homebrew on every one of these.
 	#
 	# TWO of them have no prebuilt archive, and the reason is licensing rather than neglect, so
@@ -166,7 +170,7 @@ case "$PM" in
 	# EUPL-1.2. MacPorts may not redistribute either binary, so both compile locally. `git` is
 	# the cheap one to drop — Xcode's Command Line Tools already ship a usable git, so if the
 	# build is tiresome on this hardware, check `/usr/bin/git --version` and remove it here.
-	port)   pm_install zsh zoxide tmux git git-delta curl wget eza fzf ;;
+	port)   pm_install zsh zoxide tmux git git-delta curl wget rsync eza fzf ;;
 esac
 
 # THE GNU USERLAND ON macOS — the other half of oh-my-zsh-custom/macos.zsh, which was shipping
@@ -346,6 +350,9 @@ link_omz oh-my-zsh-custom host-env.zsh
 # Linked unconditionally for the same reason as host-env.zsh: it self-guards on $OSTYPE, so on a
 # Linux host it costs one [[ ]] test and needs no DF_* flag of its own.
 link_omz oh-my-zsh-custom macos.zsh
+# transfer.zsh adds `rcopy`/`rmove` (rsync with progress). Unconditional: its rsync comes from
+# step 2 on every PM — on macOS that is GNU rsync, ahead of the system openrsync via macos.zsh.
+link_omz oh-my-zsh-custom transfer.zsh
 
 # ══════════════════════════════════════════════════════════════════════════
 step "5/9  update-os alias for this distro"

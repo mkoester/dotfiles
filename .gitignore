@@ -25,3 +25,8 @@ config-stow/niri/.config/niri/local.kdl
 # that keeps producing untracked noise for no benefit.
 config-stow/terminals/.config/kitty/dank-theme.conf
 config-stow/terminals/.config/kitty/dank-tabs.conf
+
+# herdr writes its runtime state (session, logs, sockets, caches) into its config dir,
+# and ~/.config/herdr is a folded stow symlink into this directory.
+config-stow/herdr/.config/herdr/*
+!config-stow/herdr/.config/herdr/config.toml
