@@ -997,6 +997,23 @@ hl.window_rule({ match = { class = "mk.monitors" }, size = { 900, 420 } })
 hl.window_rule({ match = { class = "mk.switcher" }, float = true })
 hl.window_rule({ match = { class = "mk.switcher" }, size = { 900, 600 } })
 
+-- Centre tinyMediaManager's dialogs. MEASURED 2026-09-27 (mkDell), `hyprctl -j clients` with the
+-- rename confirmation open:
+--
+--   title                                           floating  at            size
+--   tinyMediaManager                                false     1726,50       1708x1384
+--   Rename/cleanup selected TV show(s)/episode(s)   true      -2560,0       799x150
+--
+-- The dialog is modal and was mapped a full monitor-width OFF-SCREEN, so tmm looked hung: the
+-- main window ignored input and nothing visible explained why. Both windows share the class, so
+-- the rule matches `float = true` to leave the tiled main window alone — tmm floats its own
+-- dialogs, this rule does not. Field names checked against `--verify-config` with controls (an
+-- invented effect and an invented match key are each rejected).
+--
+-- UNMEASURED: that `center` actually lands on a window that floats of its own accord. If a dialog
+-- still maps off-screen, read `floating` off the live window before changing anything.
+hl.window_rule({ match = { class = "^org-tinymediamanager-TinyMediaManager$", float = true }, center = true })
+
 -- If login focus-jumping becomes annoying (both autostarted apps open on workspaces you are not
 -- on, and `focus_on_activate = true` is set at the top), add `no_initial_focus = true` to these
 -- two rules — verified a valid field. Left off because it also affects manual launches.
