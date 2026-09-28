@@ -531,6 +531,16 @@ Notes worth knowing before debugging an auth problem:
 - **Tokens go to the OS keyring**, not a config file. Nothing on disk holds a credential, so a non-interactive context (timer, hook, script) has none unless given one another way.
 - Completions are **cached** under `$ZSH_CACHE_DIR/completions` rather than `eval`'d per shell (~40 ms each), and regenerate when the cached file is older than the binary — so a package upgrade refreshes them without intervention.
 
+`DF_DEV` also installs the **Python libraries my own CLI tools import** — requests, numpy, beautifulsoup4, python-dotenv:
+
+```sh
+paru -S python-requests python-numpy python-beautifulsoup4 python-dotenv
+```
+
+They are installed rather than left to a per-repo venv because their absence hard-fails: the tool dies on `import requests`, and so does its unit test suite, which then reports an import error where a result should be. On Arch a `pip install` is not the fallback it looks like either — PEP 668 marks the system Python externally-managed, so the distro package is the only system-wide route.
+
+The names are **not** guessable across managers, and two of them are traps (verified 2026-09-28 against each manager's own index): Debian calls beautifulsoup4 `python3-bs4`, and MacPorts calls python-dotenv `py313-python-dotenv`. Homebrew packages only numpy — requests and beautifulsoup4 are no longer formulae — so on an Apple-silicon Mac `install.sh` says so and leaves it to a venv.
+
 ## topgrade — update everything
 
 [topgrade](https://github.com/topgrade-rs/topgrade) is a one-shot "update everything" umbrella — a **superset** of the `update-os` / `s` paru aliases. Where `update-os` is a paru wrapper (system packages only, the fast daily pass), topgrade also sweeps the globals paru never sees: pnpm global packages, rustup, cargo, flatpak, and so on. Its `system` step just calls paru, so running one or the other never double-works; keep both.

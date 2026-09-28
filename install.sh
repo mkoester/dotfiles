@@ -1034,6 +1034,32 @@ if ask_yn DF_DEV "Dev machine (gh + glab forge CLIs)?"; then
 			warn "  Nothing warns you at runtime; check with /sandbox inside Claude Code."
 		fi
 	done
+
+	# The Python libraries my own CLI tools import — requests, numpy, beautifulsoup4 and
+	# python-dotenv. They ride on DF_DEV because the tools that need them live in the AI
+	# workspaces this flag already provisions (linkding-ai-processing, linkding-bulk-edit).
+	#
+	# WHY INSTALLED RATHER THAN LEFT TO A VENV: their absence HARD-FAILS — the tool dies on
+	# `import requests` and, worse, so does its unit test suite, which then reports an import
+	# error instead of a result. That is the manifest README's first discriminator, and it
+	# points here rather than to a manifest row. And on Arch a stray `pip install` is not the
+	# fallback it looks like: PEP 668 marks the system Python externally-managed, so the
+	# distro package is the only system-wide route.
+	#
+	# Names differ per manager and are NOT guessable — verified 2026-09-28 against each
+	# manager's own index, which caught two of them:
+	#   - Debian calls beautifulsoup4 `python3-bs4`; `python3-beautifulsoup4` does not exist there
+	#   - MacPorts calls python-dotenv `py313-python-dotenv`, not `py313-dotenv`
+	case "$PM" in
+		pacman) pm_install python-requests python-numpy python-beautifulsoup4 python-dotenv ;;
+		dnf)    pm_install python3-requests python3-numpy python3-beautifulsoup4 python3-dotenv ;;
+		apt)    pm_install python3-requests python3-numpy python3-bs4 python3-dotenv ;;
+		port)   pm_install py313-requests py313-numpy py313-beautifulsoup4 py313-python-dotenv ;;
+		# Homebrew packages numpy and nothing else of these — requests and beautifulsoup4 were
+		# dropped as formulae. A venv is the honest answer on an Apple-silicon Mac.
+		brew)   info "python libs: brew has only numpy; use a venv for requests/beautifulsoup4/python-dotenv." ;;
+	esac
+
 	# herdr's config rides on the same flag for the same reason: it is the terminal workspace
 	# manager *for* those AI agents. Tracked since 2026-08-10 — it used to be hand-created per
 	# machine, so settings silently differed between hosts (mkMac2014 had only
