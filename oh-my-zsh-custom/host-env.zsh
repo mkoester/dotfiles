@@ -6,11 +6,17 @@
 # preseed its DF_* questions, but nothing sourced it at SHELL time — so `export` lines in it
 # (MUSIC_EXPORT_ROOT and friends) silently never took effect. This file closes that gap.
 #
-# Three files, all optional, sourced in this order so the narrower scope wins:
+# Four files, all optional, sourced in this order so the narrower scope wins:
 #   shared/shell.env         tracked  — private but non-secret, identical on every machine
 #                                       (GITLAB_HOST and friends)
+#   shared/secrets.env       IGNORED  — GENERATED from Vaultwarden by workstation-private's
+#                                       scripts/fleet-secrets. Fleet-wide credentials: the
+#                                       MAPPING (secrets/manifest.tsv) is tracked, the values
+#                                       never are. Before the per-host files, so a host can
+#                                       still override one of them.
 #   <hostname>/host.env      tracked  — DF_* preseeds + non-secret exports
-#   <hostname>/secrets.env   IGNORED  — credentials (ACOUSTID_API_KEY, tokens). Never committed.
+#   <hostname>/secrets.env   IGNORED  — credentials belonging to THIS machine only (and anything
+#                                       not yet migrated into the vault). Never committed.
 #
 # Keep both POSIX-plain (`NAME=value` / `export NAME=value`, `#` comments): host.env is read by
 # bash during install and by zsh here, so anything shell-specific breaks one of the two.
@@ -24,10 +30,12 @@
   local root=${self:h:h:h}/workstation-private
   local private=$root/${(%):-%m}
   local f
-  for f in "$root/shared/shell.env" "$private/host.env" "$private/secrets.env"; do
+  for f in "$root/shared/shell.env" "$root/shared/secrets.env" \
+           "$private/host.env" "$private/secrets.env"; do
     [[ -r $f ]] && source "$f"
   done
-  # Both files are optional: a machine with no workstation-private clone (or no dir of its own)
-  # must load silently. `return 0` so a failed -r test isn't the file's exit status.
+  # Every file is optional: a machine with no workstation-private clone (or no dir of its own,
+  # or one that has never run `fleet-secrets pull`) must load silently. `return 0` so a failed
+  # -r test isn't the file's exit status.
   return 0
 }
