@@ -1079,6 +1079,20 @@ if ask_yn DF_DEV "Dev machine (gh + glab forge CLIs)?"; then
 		brew)   info "python libs: brew has only numpy; use a venv for requests/beautifulsoup4/python-dotenv." ;;
 	esac
 
+	# rbw — the Vaultwarden client workstation-private's scripts/fleet-secrets fetches through.
+	# Rides on DF_DEV because the secrets it materialises (LINKDING_TOKEN, …) are read by the
+	# tools this flag provisions; without it, a fresh machine's `fleet-secrets pull` dies on
+	# "command not found" and those tools die on a missing variable. Installing is all this does:
+	# the per-machine `rbw config` / `rbw login` for the fleet profile needs a human (see the
+	# fleet-secrets header), so that stays a manual step.
+	# Names per okf services/vaultwarden.md; MacPorts has no port, so an Intel Mac takes the
+	# brew formula by hand.
+	case "$PM" in
+		pacman|apt|brew) pm_install rbw ;;
+		dnf)    pm_install rust-rbw ;;
+		port)   info "rbw: MacPorts has no port — 'brew install rbw' for fleet-secrets." ;;
+	esac
+
 	# herdr's config rides on the same flag for the same reason: it is the terminal workspace
 	# manager *for* those AI agents. Tracked since 2026-08-10 — it used to be hand-created per
 	# machine, so settings silently differed between hosts (mkMac2014 had only
