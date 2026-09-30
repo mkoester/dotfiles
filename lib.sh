@@ -357,3 +357,52 @@ install_nerd_font() {
 		        run sudo fc-cache -f ;;
 	esac
 }
+
+# ── default applications (MIME associations) ──
+# desktop_file_exists <id.desktop> — true when a desktop entry by that exact name is installed.
+# Searched where the XDG basedir spec says entries live: $XDG_DATA_HOME/applications, then
+# each $XDG_DATA_DIRS/applications (which is what picks up flatpak's exports/share too).
+#
+# Spelled out rather than shelling out to `gio`, `kreadconfig` or `desktop-file-validate`: each
+# of those is itself desktop- or toolkit-specific, so the check would pass or fail for reasons
+# that have nothing to do with whether the entry is there.
+desktop_file_exists() {
+	local id="$1" dir
+	local -a dirs=("${XDG_DATA_HOME:-$HOME/.local/share}") xdg=()
+	IFS=: read -r -a xdg <<<"${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+	dirs+=("${xdg[@]}")
+	for dir in "${dirs[@]}"; do
+		[ -n "$dir" ] && [ -f "$dir/applications/$id" ] && return 0
+	done
+	return 1
+}
+
+# set_mime_default <id.desktop> <mime-type...> — make that application the default handler for
+# those MIME types. Idempotent: xdg-mime rewrites the same mimeapps.list line, so a re-run is a
+# no-op, which is what lets this sit in the unconditional part of a DF_ block.
+#
+# THE EXISTENCE GUARD IS THE POINT. `xdg-mime default` validates nothing — hand it a typo, or the
+# wrong flavour of a name (`kate.desktop` where the package ships `org.kde.kate.desktop`), and it
+# writes the bad name into mimeapps.list and exits 0. Afterwards the file looks right, the
+# association silently does nothing, and `xdg-mime query default` reads back the name you typed,
+# so even the obvious verification agrees with you. Same shape as every other empty-result trap in
+# this repo: the failure arrives as a plausible success.
+#
+# Writes to ~/.config/mimeapps.list, which is NOT a stow candidate: desktop apps rewrite that file
+# themselves whenever you pick "Open with", so a symlink into this repo would collect churn from
+# every such click and hand it to git. An idempotent call per install is the durable half.
+set_mime_default() {
+	local desktop="$1"; shift
+	is_macos && return 0
+	if ! have xdg-mime; then
+		warn "xdg-mime missing — not making $desktop the default for: $*"
+		return 0
+	fi
+	# Same reasoning as the Flathub remote in install.sh: under --dry-run nothing was actually
+	# installed, so without this arm the preview would silently omit a step a real run performs.
+	if ! desktop_file_exists "$desktop" && [ "$DRYRUN" -eq 0 ]; then
+		warn "$desktop is not installed — leaving the default for '$*' alone"
+		return 0
+	fi
+	run xdg-mime default "$desktop" "$@"
+}

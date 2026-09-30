@@ -426,12 +426,31 @@ if ask_yn DF_DESKTOP "Wayland desktop (bar, monitor profiles, notifications)?"; 
 		# because the unit is already unconditional and ydotool is the general Wayland
 		# input-injection tool. The Stream Deck stack itself (opendeck) is per-machine hardware and
 		# stays undeclared — see Workstation-Documentation/desktop/streamdeck-ydotool.md.
-		pacman) pm_install libnotify kanshi waybar ghostty kitty flatpak \
+		#
+		# kate added 2026-09-30, as the GUI editor for JSON/YAML/TOML config files — the
+		# set_mime_default call below is the other half and is useless without it. Unlike ghostty
+		# above it IS on all three Linux arms: `kate` is the exact package name in Arch's extra,
+		# Debian (sources.debian.org reports an exact match) and Fedora 43 (mdapi: kate 26.04.3,
+		# updates), all three checked 2026-09-30 rather than recalled. Not on brew/port: this is
+		# about xdg MIME associations, which macOS does not have.
+		pacman) pm_install libnotify kanshi waybar ghostty kitty flatpak kate \
 		                   wl-clipboard grim slurp brightnessctl ydotool ;;
-		apt)    pm_install libnotify-bin flatpak ;;
-		dnf)    pm_install libnotify flatpak ;;
+		apt)    pm_install libnotify-bin flatpak kate ;;
+		dnf)    pm_install libnotify flatpak kate ;;
 		brew|port) : ;;
 	esac
+	# JSON opens in a GUI editor rather than in FIREFOX. Measured on one machine 2026-09-30:
+	# application/json resolved to firefox.desktop, so double-clicking any .json file opened a
+	# browser tab, and text/plain resolved to fresh.desktop — a Terminal=true entry, i.e. a
+	# terminal editor launched from a GUI click.
+	#
+	# ONLY application/json is redirected, deliberately. .yaml and .toml carry no MIME type of
+	# their own in shared-mime-info here (both probe as text/plain, checked with `xdg-mime query
+	# filetype`), so claiming text/plain for kate is the only way to catch them — and that would
+	# take plain text away from `fresh`, which is wanted for exactly that job. Giving YAML and TOML
+	# their own handler needs per-format types via a ~/.local/share/mime XML rule; that is a
+	# separate change, not a longer argument list here.
+	set_mime_default org.kde.kate.desktop application/json
 	# The official Flathub remote. Needed because several desktop apps on this fleet have no
 	# distro package at all in their current versions — ZapZap (the WhatsApp client) is
 	# flatpak-first, and Threema Desktop 2.0 ships from Threema AG's own flatpak repo, which

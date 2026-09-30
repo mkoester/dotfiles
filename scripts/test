@@ -311,6 +311,69 @@ is "$(needed pacman "$d/indented.conf" "$P_YES")" '1' 'an indented [multilib] st
 is "$(needed pacman "$d/nonexistent.conf" "$P_YES")" '0' 'a missing pacman.conf is false, not fatal'
 rm -rf "$d"
 
+# ── desktop_file_exists / set_mime_default ───────────────────────────────────
+# The existence guard is the only thing standing between a mistyped desktop-file name and an
+# association that reads back correctly while doing nothing, so it gets a known-positive plus
+# each way of being wrong. Without the positive, a predicate hardwired to false would pass
+# every negative case below and look thoroughly tested.
+section "desktop_file_exists"
+d="$(work)"
+mkdir -p "$d/home/.local/share/applications" "$d/usr/share/applications" "$d/local/share/applications"
+: >"$d/usr/share/applications/org.kde.kate.desktop"
+: >"$d/home/.local/share/applications/user-only.desktop"
+: >"$d/local/share/applications/second-dir.desktop"
+
+dfe() {  # <id> <XDG_DATA_HOME> <XDG_DATA_DIRS>
+	( XDG_DATA_HOME="$2"; XDG_DATA_DIRS="$3"; desktop_file_exists "$1" && echo 1 || echo 0 )
+}
+H="$d/home/.local/share"
+D="$d/local/share:$d/usr/share"
+
+is "$(dfe org.kde.kate.desktop "$H" "$D")" '1' 'an entry in a XDG_DATA_DIRS dir is found'
+is "$(dfe user-only.desktop    "$H" "$D")" '1' 'an entry in XDG_DATA_HOME is found'
+is "$(dfe second-dir.desktop   "$H" "$D")" '1' 'every XDG_DATA_DIRS entry is searched, not just the first'
+is "$(dfe kate.desktop         "$H" "$D")" '0' 'the WRONG flavour of the name is not found'
+is "$(dfe org.kde.kate.desktop "$H" "$d/nowhere/share")" '0' 'not found when no search dir holds it'
+# An empty element in the colon list must not read as the current directory: `[ -f "/applications/x" ]`
+# is harmless, but `[ -f "applications/x" ]` would resolve against cwd and could match anything.
+is "$(dfe org.kde.kate.desktop "$H" "::$d/usr/share")" '1' 'empty XDG_DATA_DIRS elements are skipped'
+
+section "set_mime_default"
+# Drives the REAL function with xdg-mime stubbed to record its argv, so what is asserted is the
+# command that would actually run -- not a re-implementation of it.
+mkdir -p "$d/bin"
+printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >>"%s/called"\n' "$d" >"$d/bin/xdg-mime"
+chmod u+x "$d/bin/xdg-mime"
+
+smd() {  # <XDG_DATA_HOME> <PATH> <DRYRUN> -- args after that go to set_mime_default
+	( XDG_DATA_HOME="$1"; XDG_DATA_DIRS="$D"; PATH="$2"; DRYRUN="$3"
+	  set_mime_default "${@:4}" >/dev/null 2>&1 )
+}
+P_YES="$d/bin:$PATH"
+
+: >"$d/called"
+smd "$H" "$P_YES" 0 org.kde.kate.desktop application/json
+is "$(cat "$d/called")" 'default org.kde.kate.desktop application/json' 'the installed case calls xdg-mime with the id and type'
+
+: >"$d/called"
+smd "$H" "$P_YES" 0 no.such.app.desktop application/json
+is "$(cat "$d/called")" '' 'an UNINSTALLED desktop file is never written to mimeapps.list'
+
+: >"$d/called"
+smd "$H" "$P_YES" 1 no.such.app.desktop application/json
+is "$(cat "$d/called")" '' '--dry-run runs xdg-mime for real on nothing'
+r=0; out="$( XDG_DATA_HOME="$H" XDG_DATA_DIRS="$D" PATH="$P_YES" DRYRUN=1 \
+             set_mime_default no.such.app.desktop application/json 2>&1 )"
+printf '%s' "$out" | grep -q 'dry-run.*xdg-mime default no.such.app.desktop' && r=1
+ok "$r" '--dry-run still PREVIEWS the step for a not-yet-installed app'
+
+# A machine with no xdg-mime at all must warn and carry on, not abort the install.
+: >"$d/called"
+r=0; ( XDG_DATA_HOME="$H" XDG_DATA_DIRS="$D" PATH="$d/nobin-mime" DRYRUN=0 \
+       set_mime_default org.kde.kate.desktop application/json ) >/dev/null 2>&1 && r=1
+ok "$r" 'a host without xdg-mime returns success (warn, do not abort)'
+rm -rf "$d"
+
 # ── syntax ───────────────────────────────────────────────────────────────────
 section "syntax"
 bash -n "$REPO/lib.sh" 2>/dev/null && r=1 || r=0;    ok "$r" 'lib.sh parses'

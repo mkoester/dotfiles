@@ -628,6 +628,40 @@ ln -sf `pwd`/oh-my-zsh-custom/fresh.zsh $HOME/.oh-my-zsh-custom/
 
 That sets `EDITOR`/`VISUAL` and re-points the `nano` alias at fresh. It overrides `.zshrc`'s own `alias nano='nano -c'` because `~/.oh-my-zsh-custom` is sourced *last* — so link it only where fresh is actually installed, or `nano` becomes a broken alias.
 
+## kate — GUI editor for config files (`DF_DESKTOP`)
+
+[kate](https://apps.kde.org/kate/) is installed on every desktop machine as the **GUI** editor for JSON/YAML/TOML, alongside `fresh` in the terminal. Package name is `kate` on all three Linux branches — Arch `extra`, Debian, Fedora — so unlike ghostty there is no per-distro guessing. Not installed on macOS: this exists for the xdg MIME association below, which macOS has no equivalent of.
+
+Why kate rather than something smaller: for these formats the only features that actually help are code folding, bracket matching and JSON/YAML validation, and it is the lightest thing in the repos that has all three. (If folding or error markers don't show up, check **Settings → Configure Kate → Plugins** for the LSP client.) FeatherPad and gnome-text-editor are lighter but are plain text editors; there is **no maintained structured/tree-view JSON editor packaged for Linux** — the nearest thing, Black Fennec on Flathub, is still 0.12 and last saw a release in November 2024.
+
+### `.json` opens in kate, not in a browser
+
+`install.sh` runs, once per install:
+
+```sh
+xdg-mime default org.kde.kate.desktop application/json
+```
+
+Measured on a fresh-ish machine 2026-09-30, `application/json` resolved to **`firefox.desktop`** — so double-clicking any `.json` file opened a browser tab — while `text/plain` resolved to `fresh.desktop`, a `Terminal=true` entry, i.e. a terminal editor launched by a GUI click.
+
+**Only `application/json` is redirected, on purpose.** `.yaml` and `.toml` have no MIME type of their own in shared-mime-info here — both probe as `text/plain`:
+
+```sh
+xdg-mime query filetype some.yaml     # -> text/plain
+```
+
+so the only way to catch them with one line would be to claim `text/plain` for kate, which takes plain text away from `fresh`. Giving YAML and TOML their own handler needs per-format types registered via a `~/.local/share/mime` XML rule; that is a separate change, not a longer argument list. Check what a machine currently does with:
+
+```sh
+xdg-mime query default application/json    # want: org.kde.kate.desktop
+xdg-mime query default text/plain          # want: fresh.desktop
+grep -E 'application/json|text/plain' ~/.config/mimeapps.list
+```
+
+⚠ **`~/.config/mimeapps.list` is deliberately NOT a stow package.** Desktop apps rewrite that file themselves every time you use "Open with", so a symlink into this repo would collect churn from every such click and offer it to git. The idempotent `xdg-mime` call is the tracked half; the file stays local.
+
+⚠ **`xdg-mime default` validates nothing.** Given a name that isn't installed — a typo, or `kate.desktop` where the package ships `org.kde.kate.desktop` — it writes that name into `mimeapps.list` and exits 0. The association then silently does nothing, and `xdg-mime query default` reads back the name you typed, so the obvious verification agrees with you. That is why `set_mime_default` in `lib.sh` checks the desktop entry exists first, and warns instead of writing.
+
 ## gita — multi-repo git overview + auto-fetch
 
 [gita](https://github.com/nosarthur/gita) shows the status of all git repos across every `~/Projects/workspace_*` on one screen. The `oh-my-zsh-custom/gita.zsh` helpers (auto-sourced) add `gitad`/`gitaw`/`gitar` (the `gitaw` live view uses `watch`, part of procps and usually already present); the `config-stow/gita/` package puts `gitaw-panel` + `gita-legend` in `~/.local/bin`; the `systemd-user` stow package runs a periodic `gita fetch` timer.
