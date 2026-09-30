@@ -1082,9 +1082,7 @@ if ask_yn DF_DEV "Dev machine (gh + glab forge CLIs)?"; then
 	# rbw — the Vaultwarden client workstation-private's scripts/fleet-secrets fetches through.
 	# Rides on DF_DEV because the secrets it materialises (LINKDING_TOKEN, …) are read by the
 	# tools this flag provisions; without it, a fresh machine's `fleet-secrets pull` dies on
-	# "command not found" and those tools die on a missing variable. Installing is all this does:
-	# the per-machine `rbw config` / `rbw login` for the fleet profile needs a human (see the
-	# fleet-secrets header), so that stays a manual step.
+	# "command not found" and those tools die on a missing variable.
 	# Names per okf services/vaultwarden.md; MacPorts has no port, so an Intel Mac takes the
 	# brew formula by hand.
 	case "$PM" in
@@ -1092,6 +1090,25 @@ if ask_yn DF_DEV "Dev machine (gh + glab forge CLIs)?"; then
 		dnf)    pm_install rust-rbw ;;
 		port)   info "rbw: MacPorts has no port — 'brew install rbw' for fleet-secrets." ;;
 	esac
+
+	# The fleet profile's config — base_url and the fleet account's email, no secret — is the same
+	# on every machine, so it is linked from workstation-private, leaving only the login (which
+	# needs a human) as a manual step. The link survives `rbw config set`: rbw's Config::save
+	# opens the path with File::create, which writes THROUGH the symlink into the repo, where it
+	# shows up in git status, rather than replacing it. device_id is not in this file — current
+	# rbw keeps it per machine in its data dir. Path per rbw's src/dirs.rs, as in fleet-secrets.
+	if is_macos; then
+		rbw_dir="$HOME/Library/Application Support/rbw-fleet"
+	else
+		rbw_dir="${XDG_CONFIG_HOME:-$HOME/.config}/rbw-fleet"
+	fi
+	if [ -f "$PRIVATE_REPO/shared/rbw-fleet/config.json" ]; then
+		run mkdir -p "$rbw_dir"
+		run ln -sf "$PRIVATE_REPO/shared/rbw-fleet/config.json" "$rbw_dir/config.json"
+		info "rbw: fleet profile linked — finish with: RBW_PROFILE=fleet rbw login"
+	else
+		info "rbw: workstation-private/shared/rbw-fleet/config.json missing — see the fleet-secrets header."
+	fi
 
 	# herdr's config rides on the same flag for the same reason: it is the terminal workspace
 	# manager *for* those AI agents. Tracked since 2026-08-10 — it used to be hand-created per
