@@ -1014,6 +1014,12 @@ hl.window_rule({ match = { class = "mk.switcher" }, size = { 900, 600 } })
 -- rule effect works on a self-floated window even though the DISPATCHER `hl.dsp.window.center()`
 -- acts only on the focused window ("No floating window found" otherwise). Unstuck the original
 -- dialog with focus-by-`address:` then center; a `title:^Rename/cleanup` selector found nothing.
+--
+-- NOT SUFFICIENT on its own (2026-10-01, mkDell): tmm restores each dialog's saved bounds from
+-- `~/.local/share/tinyMediaManager/data/tmm.prop`, and a saved `0,0` put "Search movie" at
+-- -2560,0 with this rule live. So the 09-27 "confirmation" may have been the corrected saved
+-- bounds rather than this rule. Cure: centre by hand, close the dialog, quit tmm cleanly (the file
+-- is written on exit). Details: Homelab-Documentation/Jellyfin-Media.md.
 hl.window_rule({ match = { class = "^org-tinymediamanager-TinyMediaManager$", float = true }, center = true })
 
 -- If login focus-jumping becomes annoying (both autostarted apps open on workspaces you are not
