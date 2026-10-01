@@ -1016,6 +1016,16 @@ if ask_yn DF_DEV "Dev machine (gh + glab forge CLIs)?"; then
 		*)      info "install gh + glab per their upstream instructions (both need a vendor repo on this distro)." ;;
 	esac
 	link_omz oh-my-zsh-custom forge.zsh
+	# lazygit's diff renderer: line-by-line delta (the terminal keeps side-by-side; see the
+	# comment in config-stow/git/.gitconfig). macOS lazygit reads ~/Library/Application Support,
+	# not ~/.config, so it gets an explicit link to the stowed file — same path-is-the-mechanism
+	# trap as the VS Code block above. Not XDG_CONFIG_HOME: that would move every other tool too.
+	stow_pkg "$HOME" lazygit
+	if is_macos; then
+		run mkdir -p "$HOME/Library/Application Support/lazygit"
+		run ln -sfn "$DOTFILES_REPO/config-stow/lazygit/.config/lazygit/config.yml" \
+			"$HOME/Library/Application Support/lazygit/config.yml"
+	fi
 	# agent-cli.zsh rides on the same flag: a machine that files issues is the machine that runs
 	# the AI CLIs. It is a separate file because it owns a separate concern — see its header for
 	# why it exists at all (their installers edit the stow-symlinked ~/.zshrc, i.e. this repo).

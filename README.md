@@ -510,6 +510,14 @@ sudo port install fnm pnpm   # macOS (MacPorts)
 
 On Debian/Fedora there is no distro package — install [fnm](https://github.com/Schniz/fnm#installation) and [pnpm](https://pnpm.io/installation) from upstream.
 
+## git + delta
+
+`config-stow/git/.gitconfig` makes [delta](https://github.com/dandavison/delta) the pager on every host: **side-by-side in the terminal, line-by-line in lazygit** (`config-stow/lazygit`, stowed on `DF_DEV` machines).
+
+The terminal-only options (`side-by-side`, `navigate`) sit in a delta **feature** called `terminal`, not directly in `[delta]`. That is the whole mechanism: a key set directly in `[delta]` cannot be switched off per call (delta has no `--no-side-by-side`, and `--features` does not override such a key), but `--features=lazygit` *replaces* the feature list, so lazygit gets line-by-line. Ad hoc: `DELTA_FEATURES=lazygit git diff` gives you line-by-line once.
+
+⚠ **Testing a delta config with `GIT_CONFIG_GLOBAL` tests nothing** — delta ignores it and reads `~/.gitconfig`. Point `HOME` at a scratch directory instead.
+
 ## dev machines (gh + glab)
 
 The two git-forge CLIs: [`gh`](https://cli.github.com) for GitHub and [`glab`](https://gitlab.com/gitlab-org/cli) for GitLab. `install.sh`'s **"Dev machine?"** question (`DF_DEV`) installs both and links `forge.zsh`.

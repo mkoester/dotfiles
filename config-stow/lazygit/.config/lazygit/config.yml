@@ -1,0 +1,5 @@
+# Line-by-line delta here; side-by-side stays for the terminal. --features=lazygit replaces
+# the `terminal` feature from ~/.gitconfig — see the comment in config-stow/git/.gitconfig.
+git:
+  diffRenderers:
+    - command: delta --paging=never --features=lazygit
