@@ -136,9 +136,12 @@ esac
 # ══════════════════════════════════════════════════════════════════════════
 step "2/9  Base tools"
 case "$PM" in
-	pacman) pm_install zsh zoxide tmux git git-delta curl wget rsync eza sqlite fzf jq ripgrep ;;
-	apt)    pm_install zsh zoxide tmux git git-delta gitk curl wget rsync eza fzf jq ripgrep ;;
-	dnf)    pm_install zsh zoxide tmux git git-delta gitk curl wget rsync eza sqlite fzf jq ripgrep ;;
+	pacman) pm_install zsh zoxide tmux git git-delta curl wget rsync eza sqlite fzf jq ripgrep zip ;;
+	apt)    pm_install zsh zoxide tmux git git-delta gitk curl wget rsync eza fzf jq ripgrep zip ;;
+	dnf)    pm_install zsh zoxide tmux git git-delta gitk curl wget rsync eza sqlite fzf jq ripgrep zip ;;
+	# zip added 2026-10-01 — linkding-extension's build.sh packages with it and dies at the last
+	# step without it. Linux only: macOS ships /usr/bin/zip (Info-ZIP), so brew/port skip it,
+	# same reasoning as sqlite below.
 	# jq added 2026-08-23 — it is a HARD dependency of this fleet's own committed scripts
 	# (dms-settings-deploy, dms-plugin-enable, claude-local-defaults, fleet-audit,
 	# okf/scripts/obsidian-plugins — 27 call sites), and it was installed on mkDesktop only as a
