@@ -18,6 +18,9 @@
 #   <hostname>/secrets.env   IGNORED  — credentials belonging to THIS machine only (and anything
 #                                       not yet migrated into the vault). Never committed.
 #
+# Everything exported here is inherited by any program this shell starts, AI agents included.
+# fleet-vault.zsh wraps claude/codex/agy to unset all of it except the manifest's agent=yes rows.
+#
 # Keep both POSIX-plain (`NAME=value` / `export NAME=value`, `#` comments): host.env is read by
 # bash during install and by zsh here, so anything shell-specific breaks one of the two.
 # Sourcing DF_* here is harmless — they become ordinary non-exported shell variables.

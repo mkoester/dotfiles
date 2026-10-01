@@ -17,6 +17,39 @@ the order is wrong**, because an entry whose steps look independent will be run 
 
 ---
 
+## 2026-10-01 — `fv`, per-machine linkding tokens, and the agent launch guard
+
+**Applies to:** every `DF_DEV` machine. **Pending everywhere**, mkDell first.
+
+`oh-my-zsh-custom/fleet-vault.zsh` adds `fv` and wraps `claude` / `codex` / `agy` so they start
+without the fleet secrets in their environment (except manifest rows marked `agent=yes`). The
+manifest now names three items, `linkding@<hostname>` among them; see
+`workstation-private/secrets/README.md`.
+
+**Order matters twice.** The vault items must exist before step 2, or the pull fails (all or
+nothing — the old file stays, so nothing breaks, but nothing updates either). And the per-host
+`secrets.env` lines go only **after** a successful pull: delete them first and the machine has no
+AcoustID key until the pull; leave them forever and they silently win over the vault.
+
+```sh
+# 0. Once, on any machine: in the fleet vault, rename linkding-api -> linkding@mkDell, create
+#    acoustid once (fv add acoustid). On mkDell and mkMac2014 also: fv add 'vikunja-bot@{host}'
+#    with the value from that host's secrets.env (own services: one key per machine).
+# 1. Link fleet-vault.zsh and pick up the 900 s lock_timeout
+cd ~/src/dotfiles && git pull && ./install.sh          # DF_DEV=1
+cd ~/src/workstation-private && git pull
+RBW_PROFILE=fleet rbw stop-agent                         # the running agent still has 3600 s
+# 2. This machine's linkding token (mint it in linkding -> Settings -> Integrations), then pull
+exec zsh
+fv add 'linkding@{host}'                     # not on mkDell: step 0 already made its item
+fv pull && fv status
+# 3. Paste it into Bookmarks+ and the linkding extension
+fv copy 'linkding@{host}'
+# 4. Only now: drop ACOUSTID_API_KEY / VIKUNJA_BOT_TOKEN from ~/src/workstation-private/$(hostname)/secrets.env
+# 5. Restart any running agent session from a NEW shell, then check inside it:
+#    printenv | grep -c '^LINKDING_TOKEN='     -> 0
+```
+
 ## 2026-09-22 — hyprlock, swayidle and `screen-blank.sh` removed
 
 **Applies to:** every machine that has ever run `install.sh` with `DF_DESKTOP=1`. Done on

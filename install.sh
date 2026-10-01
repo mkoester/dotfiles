@@ -1122,6 +1122,9 @@ if ask_yn DF_DEV "Dev machine (gh + glab forge CLIs)?"; then
 	else
 		info "rbw: workstation-private/shared/rbw-fleet/config.json missing — see the fleet-secrets header."
 	fi
+	# `fv` — the fleet vault from the command line (query, copy, add, pull). Same flag as rbw,
+	# whose fleet profile it fronts.
+	link_omz oh-my-zsh-custom fleet-vault.zsh
 
 	# herdr's config rides on the same flag for the same reason: it is the terminal workspace
 	# manager *for* those AI agents. Tracked since 2026-08-10 — it used to be hand-created per
@@ -1148,6 +1151,7 @@ if ask_yn DF_DEV "Dev machine (gh + glab forge CLIs)?"; then
 else
 	unlink_omz oh-my-zsh-custom forge.zsh
 	unlink_omz oh-my-zsh-custom agent-cli.zsh
+	unlink_omz oh-my-zsh-custom fleet-vault.zsh
 fi
 
 if ask_yn DF_TOPGRADE "topgrade (one-shot 'update everything' umbrella)?"; then

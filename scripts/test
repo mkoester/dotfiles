@@ -1342,6 +1342,33 @@ ok "$(printf '%s' "$out" | grep -q 'must be set' && echo 0 || echo 1)" \
 
 rm -rf "$f"
 
+# ── fleet-vault.zsh: the agent launch guard ─────────────────────────────────
+# The wrapper is the only thing between an agent and every token in the launching shell, and a
+# guard that silently did nothing would look exactly like one that worked — the agent just
+# starts. So a fake agent dumps the environment it actually received. Fake tree, so the real
+# workstation-private clone cannot mask a regression; the fleet-secrets stub stands in for
+# scrub-names (whose own list is tested in workstation-private's scripts/test).
+section "fleet-vault agent guard"
+f="$(mktemp -d "${TMPDIR:?TMPDIR must be set}/fvtree.XXXXXX")"
+mkdir -p "$f/dotfiles/oh-my-zsh-custom" "$f/workstation-private/scripts" "$f/bin"
+cp "$REPO/oh-my-zsh-custom/fleet-vault.zsh" "$f/dotfiles/oh-my-zsh-custom/"
+printf '#!/usr/bin/env sh\n[ "$1" = scrub-names ] && printf "SECRET_A\\nSECRET_B\\n"\n' >"$f/workstation-private/scripts/fleet-secrets"
+printf '#!/usr/bin/env sh\nenv\n' >"$f/bin/claude"
+chmod u+x "$f/workstation-private/scripts/fleet-secrets" "$f/bin/claude"
+fv_env() {  # run the wrapped `claude` and print the env it received
+	PATH="$f/bin:$PATH" SECRET_A=a SECRET_B=b AGENT_OK=c \
+		zsh -fc "source '$f/dotfiles/oh-my-zsh-custom/fleet-vault.zsh'; claude"
+}
+out="$(fv_env)"
+is "$(printf '%s\n' "$out" | grep -cE '^SECRET_(A|B)=')" "0" 'the wrapped agent does not inherit the scrubbed secrets'
+is "$(printf '%s\n' "$out" | grep -c '^AGENT_OK=c$')" "1" '...but does inherit everything else'
+# Fail closed: if the list cannot be produced, the agent must not start at all.
+printf '#!/usr/bin/env sh\nexit 3\n' >"$f/workstation-private/scripts/fleet-secrets"
+out="$(fv_env 2>&1)"
+is "$(printf '%s\n' "$out" | grep -c '^SECRET_A=')" "0" 'a failing scrub-names does not start the agent with the secrets'
+ok "$(printf '%s' "$out" | grep -q 'not starting claude' && echo 1 || echo 0)" '...and says so'
+rm -rf "$f"
+
 # ── pending migrations ────────────────────────────────────────────────────────
 # install.sh ends by counting `^## ` headings in MIGRATIONS.md and warning about each.
 # The counting is the whole mechanism, so it is tested BOTH WAYS: a suite that only ever
