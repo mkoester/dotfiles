@@ -11,7 +11,9 @@
 #   fv copy ITEM [FIELD]                to the clipboard (checked), cleared after 45 s
 #   fv inspect ITEM [FIELD]             print it to stdout
 #                                       ITEM: exact name; a bare `vikunja-bot` -> vikunja-bot@<host>
-#   fv ls | unlock | lock | sync | get | code | edit | rm | history
+#   fv ls [HOST]                        all items; with HOST its own + shared ones, the variable
+#                                       each feeds, and items its next pull would miss
+#   fv unlock | lock | sync | get | code | edit | rm | history
 #                                       straight to rbw, always under RBW_PROFILE=fleet
 #
 # The profile is hard-set here rather than inherited: an EMPTY RBW_PROFILE is rbw's personal
@@ -45,13 +47,13 @@ fv() {
   local cmd=${1:-help}
   (( $# )) && shift
   case $cmd in
-    pull|status|add|copy|inspect|scrub-names)
+    pull|status|add|copy|inspect|ls|list|scrub-names)
       [[ -x $_FV_SCRIPT ]] || { print -u2 "fv: $_FV_SCRIPT not found — clone workstation-private beside dotfiles"; return 1; }
       "$_FV_SCRIPT" $cmd "$@" ;;
-    ls|list|unlock|unlocked|lock|sync|get|code|edit|rm|remove|history|search)
+    unlock|unlocked|lock|sync|get|code|edit|rm|remove|history|search)
       _fv_rbw $cmd "$@" ;;
     help|-h|--help)
-      sed -n '6,15s/^# \{0,1\}//p' $_FV_SELF ;;
+      sed -n '6,17s/^# \{0,1\}//p' $_FV_SELF ;;
     *) print -u2 "fv: unknown command '$cmd' — fv help"; return 2 ;;
   esac
 }
@@ -61,6 +63,11 @@ fv() {
 _fv() {
   if (( CURRENT == 2 )); then
     compadd pull status add copy inspect ls unlock lock sync get code edit rm history help
+  elif (( CURRENT == 3 )) && [[ $words[2] == (ls|list) ]]; then
+    # hosts = the per-machine directories of workstation-private (no vault access needed)
+    local -a hosts
+    hosts=(${_FV_SCRIPT:h:h}/*(/N:t))
+    compadd -a ${hosts:#(scripts|secrets|shared|manifest|browser-config|_template)}
   elif (( CURRENT == 3 )) && [[ $words[2] == (copy|inspect|get|code|edit|rm|history) ]]; then
     RBW_PROFILE=fleet command rbw unlocked 2>/dev/null || return 1
     local -a items

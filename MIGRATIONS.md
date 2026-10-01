@@ -19,7 +19,7 @@ the order is wrong**, because an entry whose steps look independent will be run 
 
 ## 2026-10-01 — `fv`, per-machine linkding tokens, and the agent launch guard
 
-**Applies to:** every `DF_DEV` machine. **Pending everywhere**, mkDell first.
+**Applies to:** every `DF_DEV` machine. **Done on mkDell** (2026-10-01, `fv status` 3/3). Pending everywhere else.
 
 `oh-my-zsh-custom/fleet-vault.zsh` adds `fv` and wraps `claude` / `codex` / `agy` so they start
 without the fleet secrets in their environment (except manifest rows marked `agent=yes`). The
