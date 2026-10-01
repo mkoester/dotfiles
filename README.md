@@ -488,7 +488,7 @@ ln -sf `pwd`/oh-my-zsh-custom/pnpm.zsh $HOME/.oh-my-zsh-custom/
 | `oh-my-zsh-custom/fnm.zsh` | `.oh-my-zsh-custom` | `fnm env --use-on-cd` | [Node machines](#node-machines-fnm--pnpm) |
 | `oh-my-zsh-custom/forge.zsh` | `.oh-my-zsh-custom` | cached `gh`/`glab` completions | [dev machines](#dev-machines-gh--glab) |
 | `oh-my-zsh-custom/agent-cli.zsh` | `.oh-my-zsh-custom` | `~/.local/bin` on `PATH` for `agy`/`codex` | [dev machines](#dev-machines-gh--glab) |
-| `oh-my-zsh-custom/fresh.zsh` | `.oh-my-zsh-custom` | points `EDITOR`/`VISUAL`/`nano` at `fresh` | see [fresh](#fresh--terminal-editor) |
+| `oh-my-zsh-custom/fresh.zsh` | `.oh-my-zsh-custom` | points `EDITOR`/`VISUAL` at `fresh` | see [fresh](#fresh--terminal-editor) |
 | `oh-my-zsh-custom/gita.zsh` | `.oh-my-zsh-custom` | `gitad`/`gitaw`/`gitar`/`gitap`/`gital` | see [gita](#gita--multi-repo-git-overview--auto-fetch) |
 | `oh-my-zsh-custom/lesspipe.zsh` | `.oh-my-zsh-custom` | `LESSOPEN` | see [lesspipe](#lesspipe) |
 | `oh-my-zsh-custom/nala.zsh` | `.oh-my-zsh-custom` | completion setup, `~/.zfunc` on `fpath` | Debian + nala |
@@ -634,7 +634,7 @@ mkdir -p $HOME/.oh-my-zsh-custom && \
 ln -sf `pwd`/oh-my-zsh-custom/fresh.zsh $HOME/.oh-my-zsh-custom/
 ```
 
-That sets `EDITOR`/`VISUAL` and re-points the `nano` alias at fresh. It overrides `.zshrc`'s own `alias nano='nano -c'` because `~/.oh-my-zsh-custom` is sourced *last* — so link it only where fresh is actually installed, or `nano` becomes a broken alias.
+That sets `EDITOR`/`VISUAL` to fresh — link it only where fresh is actually installed, or every `$EDITOR` call (`git commit`, `sudoedit`, …) breaks. `nano` stays plain `nano -c` from `.zshrc`.
 
 ## kate — GUI editor for config files (`DF_DESKTOP`)
 
