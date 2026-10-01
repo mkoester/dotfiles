@@ -10,6 +10,24 @@
 # column so a commit subject with brackets (e.g. "[Save]") isn't read as a flag.
 gitad() { gita ll "$@" | grep -v '\[\] '; }
 
+# gitap / gital [repo|group ...] — `gita push` / `gita pull`, minus the repos
+# that had nothing to do. gita prints each repo's output as "<repo>: <line>"
+# followed by one blank line, so a no-op repo is dropped together with that
+# blank. Anything else (errors, multi-line push output) passes through.
+# PYTHONUNBUFFERED keeps gita streaming per repo instead of dumping it all at
+# the end once its stdout is a pipe. Returns gita's exit status, not awk's.
+_gita_quiet() {
+  local pat=$1; shift
+  PYTHONUNBUFFERED=1 gita "$@" | awk -v pat="^[^ ]+: ($pat)\$" '
+    $0 ~ pat         { skip = 1; next }
+    skip && $0 == "" { skip = 0; next }
+                     { skip = 0; print }'
+  return $pipestatus[1]
+}
+gitap() { _gita_quiet 'Everything up-to-date' push "$@"; }
+# "up.to.date": git said "up-to-date" before 2.17, "up to date" since.
+gital() { _gita_quiet 'Already up.to.date[.]' pull "$@"; }
+
 # gitaw [group] [interval] — live-refreshing gitad, grouped by workspace (-g),
 # under a panel showing Claude Code usage and the status-symbol legend.
 # Args are order-independent. A purely-integer arg is the refresh interval

@@ -489,7 +489,7 @@ ln -sf `pwd`/oh-my-zsh-custom/pnpm.zsh $HOME/.oh-my-zsh-custom/
 | `oh-my-zsh-custom/forge.zsh` | `.oh-my-zsh-custom` | cached `gh`/`glab` completions | [dev machines](#dev-machines-gh--glab) |
 | `oh-my-zsh-custom/agent-cli.zsh` | `.oh-my-zsh-custom` | `~/.local/bin` on `PATH` for `agy`/`codex` | [dev machines](#dev-machines-gh--glab) |
 | `oh-my-zsh-custom/fresh.zsh` | `.oh-my-zsh-custom` | points `EDITOR`/`VISUAL`/`nano` at `fresh` | see [fresh](#fresh--terminal-editor) |
-| `oh-my-zsh-custom/gita.zsh` | `.oh-my-zsh-custom` | `gitad`/`gitaw`/`gitar` | see [gita](#gita--multi-repo-git-overview--auto-fetch) |
+| `oh-my-zsh-custom/gita.zsh` | `.oh-my-zsh-custom` | `gitad`/`gitaw`/`gitar`/`gitap`/`gital` | see [gita](#gita--multi-repo-git-overview--auto-fetch) |
 | `oh-my-zsh-custom/lesspipe.zsh` | `.oh-my-zsh-custom` | `LESSOPEN` | see [lesspipe](#lesspipe) |
 | `oh-my-zsh-custom/nala.zsh` | `.oh-my-zsh-custom` | completion setup, `~/.zfunc` on `fpath` | Debian + nala |
 | `oh-my-zsh-custom/pnpm.zsh` | `.oh-my-zsh-custom` | `PNPM_HOME`, `p*` aliases, completion | [Node machines](#node-machines-fnm--pnpm) |
@@ -664,7 +664,7 @@ grep -E 'application/json|text/plain' ~/.config/mimeapps.list
 
 ## gita — multi-repo git overview + auto-fetch
 
-[gita](https://github.com/nosarthur/gita) shows the status of all git repos across every `~/Projects/workspace_*` on one screen. The `oh-my-zsh-custom/gita.zsh` helpers (auto-sourced) add `gitad`/`gitaw`/`gitar` (the `gitaw` live view uses `watch`, part of procps and usually already present); the `config-stow/gita/` package puts `gitaw-panel` + `gita-legend` in `~/.local/bin`; the `systemd-user` stow package runs a periodic `gita fetch` timer.
+[gita](https://github.com/nosarthur/gita) shows the status of all git repos across every `~/Projects/workspace_*` on one screen. The `oh-my-zsh-custom/gita.zsh` helpers (auto-sourced) add `gitad`/`gitaw`/`gitar`, plus `gitap`/`gital` (`gita push`/`pull` minus the up-to-date repos) (the `gitaw` live view uses `watch`, part of procps and usually already present); the `config-stow/gita/` package puts `gitaw-panel` + `gita-legend` in `~/.local/bin`; the `systemd-user` stow package runs a periodic `gita fetch` timer.
 
 Install via pipx (Arch names it `python-pipx`, everyone else `pipx`):
 
