@@ -13,7 +13,40 @@
 [core]
 	pager = delta
 	excludesFile = ~/.gitignore_global
+[interactive]
+	# delta colours for `git add -p`; --color-only keeps the 1:1 line mapping -p needs.
+	diffFilter = delta --color-only
 [delta]
+	# Terminal-only options live in a FEATURE, not here. A key set directly in [delta] cannot
+	# be switched off per call (no --no-side-by-side, and --features does not override it),
+	# but `--features=lazygit` REPLACES this list — that is how lazygit gets line-by-line.
+	features = terminal
+	line-numbers = true
+[delta "terminal"]
 	side-by-side = true
 	navigate = true
-	line-numbers = true
+	hyperlinks = true
+[delta "lazygit"]
+	# Used by config-stow/lazygit. navigate is left out: it does not work inside lazygit.
+	hyperlinks = true
+	hyperlinks-file-link-format = lazygit-edit://{path}:{line}
+[diff]
+	algorithm = histogram
+	# delta renders moved blocks in their own colour.
+	colorMoved = default
+[merge]
+	# Conflict markers include the common ancestor, not just ours/theirs.
+	conflictStyle = zdiff3
+[rerere]
+	# Remember conflict resolutions and replay them when the same conflict recurs.
+	enabled = true
+[push]
+	autoSetupRemote = true
+[branch]
+	sort = -committerdate
+[tag]
+	sort = version:refname
+[column]
+	ui = auto
+[help]
+	autocorrect = prompt
