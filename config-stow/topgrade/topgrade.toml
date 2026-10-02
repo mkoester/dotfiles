@@ -159,3 +159,5 @@ upgrade = true              # actually apply fwupd firmware updates (default: on
 "cleanup: flatpak unused (system)" = "command -v flatpak >/dev/null || exit 0; flatpak uninstall --system --unused -y"
 "dms: plugin updates" = "command -v dms >/dev/null || exit 0; dms plugins update -a"
 "dms: attention-badges providers" = "p=~/.config/DankMaterialShell/plugins/attentionBadges/scripts/providers; test -x $p || exit 0; $p update"
+# macOS only: Linux hosts run ssh-keys-sync.timer, and macOS has no systemd, so topgrade is its trigger.
+"ssh: fleet authorized_keys (macOS)" = "test \"$(uname -s)\" = Darwin || exit 0; s=~/src/workstation-private/scripts/ssh-keys-sync; test -x $s || exit 0; $s ~/.ssh/authorized_keys"

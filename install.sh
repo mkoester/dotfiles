@@ -278,6 +278,18 @@ if [ -d "$PRIVATE_REPO/shared/ssh" ] && ls "$PRIVATE_REPO/shared/ssh/"*.conf >/d
 else
 	info "  no shared ssh entries yet — put host blocks in workstation-private/shared/ssh/*.conf"
 fi
+# Fleet authorized_keys: a user timer installs workstation-private/shared/ssh/authorized_keys via
+# scripts/ssh-keys-sync. Linked, deliberately NOT enabled: the first run must take over the existing
+# file with --adopt, which lists any hand-added key it would remove. No systemd on macOS — the
+# topgrade step covers it there.
+if ! is_macos && [ -f "$PRIVATE_REPO/shared/systemd/ssh-keys-sync.timer" ]; then
+	run mkdir -p "$HOME/.config/systemd/user"
+	run ln -sf "$PRIVATE_REPO/shared/systemd/ssh-keys-sync.service" \
+		"$PRIVATE_REPO/shared/systemd/ssh-keys-sync.timer" "$HOME/.config/systemd/user/"
+	info "  fleet authorized_keys — take this host's file over once, then enable the timer:"
+	info "    $PRIVATE_REPO/scripts/ssh-keys-sync --adopt ~/.ssh/authorized_keys"
+	info "    systemctl --user enable --now ssh-keys-sync.timer"
+fi
 # VS Code: explicit symlinks, NOT stow. The fleet runs the OPEN-SOURCE build (MK, 2026-08-23),
 # and the three OSS packagings do not agree on a config directory name — `Code - OSS` on Arch,
 # `VSCodium` for the brew cask and the flatpak — so one stow package cannot serve them without
