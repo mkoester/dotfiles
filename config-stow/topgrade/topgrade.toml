@@ -161,3 +161,9 @@ upgrade = true              # actually apply fwupd firmware updates (default: on
 "dms: attention-badges providers" = "p=~/.config/DankMaterialShell/plugins/attentionBadges/scripts/providers; test -x $p || exit 0; $p update"
 # macOS only: Linux hosts run ssh-keys-sync.timer, and macOS has no systemd, so topgrade is its trigger.
 "ssh: fleet authorized_keys (macOS)" = "test \"$(uname -s)\" = Darwin || exit 0; s=~/src/workstation-private/scripts/ssh-keys-sync; test -x $s || exit 0; $s ~/.ssh/authorized_keys"
+# MacPorts, binary archives only. Replaces topgrade's own `macports` step (disabled per host in
+# topgrade.d), whose `port upgrade outdated` falls back to a source build whenever an archive is
+# missing — rust 1.99 took >3.5 h on mkMac2017 and never finished. -b refuses source builds, -p
+# lets the rest proceed past them, -N stops any prompt from stalling the run; the trailing
+# `port outdated` lists what was deferred. Build those by hand: `sudo port -u upgrade outdated`.
+"macports: binary-only upgrade" = "command -v port >/dev/null || exit 0; sudo port selfupdate && sudo port -N -b -p -u upgrade outdated; port outdated"
