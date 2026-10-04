@@ -20,72 +20,80 @@
 # "gone" relies on pruned remote-tracking refs (fetch.prune in the stowed
 # .gitconfig); without pruning a deleted origin branch still reads as in sync.
 #
-# Reads gita's repos.csv / groups.csv directly rather than calling gita per repo,
-# so a 1-second `watch` frame stays cheap. Prints nothing when all is in sync.
+# Repos come from gita-repos (gita's csv files, read directly) and are checked in
+# parallel, with as few git processes as possible: one `git config` per repo, one
+# `for-each-ref` per fork, one `rev-list` per branch that exists on origin. On
+# mkMac2017 every exec costs ~65 ms, and the old per-branch show-ref/config
+# calls made this 6.5 s of a gitaw frame. Prints nothing when all is in sync.
 set -uo pipefail # not -e: one unreadable repo must not hide the others
-
-group="${1:-}"
-# gita's own config-dir resolution, as in gitar.
-conf="${GITA_PROJECT_HOME:-${XDG_CONFIG_HOME:-$HOME/.config}}/gita"
-[ -r "$conf/repos.csv" ] || exit 0
-
-# repos.csv rows: path,name,type,flags
-declare -A path_of
-names=()
-while IFS=, read -r rpath name _; do
-	[ -n "$name" ] || continue
-	path_of[$name]="$rpath"
-	names+=("$name")
-done <"$conf/repos.csv"
-
-# groups.csv rows: group:repo repo ...:path — last row wins, as in gita itself.
-if [ -n "$group" ]; then
-	members=""
-	while IFS=: read -r gname repos _; do
-		[ "$gname" = "$group" ] && members="$repos"
-	done <"$conf/groups.csv" 2>/dev/null
-	read -ra names <<<"$members"
-fi
 
 PURPLE=$'\033[35m' YELLOW=$'\033[33m' RED=$'\033[31m' WHITE=$'\033[37m' RESET=$'\033[0m'
 
-# branch_state <repo-path> <branch> — prints the state, or nothing when in sync
-# or not one of my branches.
-branch_state() {
-	local p="$1" b="$2" counts behind ahead
-	case "$b" in local/*) return ;; esac
-	git -C "$p" show-ref -q --verify "refs/remotes/upstream/$b" && return
-	if git -C "$p" show-ref -q --verify "refs/remotes/origin/$b"; then
-		counts="$(git -C "$p" rev-list --left-right --count "refs/remotes/origin/$b...refs/heads/$b")" || return
-		read -r behind ahead <<<"$counts"
-		if [ "$ahead" -gt 0 ] && [ "$behind" -gt 0 ]; then
-			printf '%s' "${RED}⇕${RESET}"
-		elif [ "$ahead" -gt 0 ]; then
-			printf '%s' "${PURPLE}↑${ahead}${RESET}"
-		elif [ "$behind" -gt 0 ]; then
-			printf '%s' "${YELLOW}↓${behind}${RESET}"
+# repo_rows <name> <path> — "name<TAB>branch<TAB>state" per out-of-sync branch.
+repo_rows() {
+	local name="$1" p="$2" key val ref b counts behind ahead
+	local fork="" ; local -A remote_of merge_of heads on_origin on_upstream
+	# One call answers both "is this a fork" and every branch's tracking config.
+	while read -r key val; do
+		case "$key" in
+			remote.upstream.url) fork=1 ;;
+			branch.*.remote) b="${key#branch.}" remote_of[${b%.remote}]="$val" ;;
+			branch.*.merge) b="${key#branch.}" merge_of[${b%.merge}]="$val" ;;
+		esac
+	done < <(git -C "$p" config --get-regexp '^(remote\.upstream\.url|branch\..*\.(remote|merge))$' 2>/dev/null)
+	[ -n "$fork" ] || return
+
+	local order=()
+	while read -r ref; do
+		case "$ref" in
+			refs/heads/*) b="${ref#refs/heads/}" heads[$b]=1 order+=("$b") ;;
+			refs/remotes/origin/*) on_origin[${ref#refs/remotes/origin/}]=1 ;;
+			refs/remotes/upstream/*) on_upstream[${ref#refs/remotes/upstream/}]=1 ;;
+		esac
+	done < <(git -C "$p" for-each-ref --format='%(refname)' refs/heads refs/remotes/origin refs/remotes/upstream 2>/dev/null)
+
+	for b in "${order[@]}"; do
+		case "$b" in local/*) continue ;; esac
+		[ -n "${on_upstream[$b]:-}" ] && continue
+		local s=""
+		if [ -n "${on_origin[$b]:-}" ]; then
+			counts="$(git -C "$p" rev-list --left-right --count "refs/remotes/origin/$b...refs/heads/$b")" || continue
+			read -r behind ahead <<<"$counts"
+			if [ "$ahead" -gt 0 ] && [ "$behind" -gt 0 ]; then s="${RED}⇕${RESET}"
+			elif [ "$ahead" -gt 0 ]; then s="${PURPLE}↑${ahead}${RESET}"
+			elif [ "$behind" -gt 0 ]; then s="${YELLOW}↓${behind}${RESET}"
+			fi
+		elif [ "${remote_of[$b]:-}" = origin ] && [ "${merge_of[$b]:-}" = "refs/heads/$b" ]; then
+			s="${WHITE}✗${RESET}"
+		else
+			s="${WHITE}∅${RESET}"
 		fi
-	elif [ "$(git -C "$p" config "branch.$b.remote")" = origin ] &&
-		[ "$(git -C "$p" config "branch.$b.merge")" = "refs/heads/$b" ]; then
-		printf '%s' "${WHITE}✗${RESET}"
-	else
-		printf '%s' "${WHITE}∅${RESET}"
-	fi
+		[ -n "$s" ] && printf '%s\t%s\t%s\n' "$name" "$b" "$s"
+	done
 }
+
+out="$(mktemp -d "${TMPDIR:-/tmp}/gita-branches.XXXXXX")" || exit 1
+trap 'rm -rf "$out"' EXIT
+
+# A repo in several groups is listed once per group by gita-repos; check it once.
+declare -A seen
+names=()
+while IFS=$'\t' read -r _ name path; do
+	[ -n "${seen[$name]:-}" ] && continue
+	seen[$name]=1
+	names+=("$name")
+	repo_rows "$name" "$path" >"$out/${#names[@]}" &
+done < <(gita-repos "$@")
+wait
 
 rows=()
 wr=0 wb=0
-for name in "${names[@]}"; do
-	p="${path_of[$name]:-}"
-	[ -n "$p" ] || continue
-	git -C "$p" remote get-url upstream >/dev/null 2>&1 || continue
-	while read -r b; do
-		s="$(branch_state "$p" "$b")"
-		[ -n "$s" ] || continue
+for i in "${!names[@]}"; do
+	while IFS=$'\t' read -r name b s; do
 		rows+=("$name"$'\t'"$b"$'\t'"$s")
 		[ "${#name}" -gt "$wr" ] && wr="${#name}"
 		[ "${#b}" -gt "$wb" ] && wb="${#b}"
-	done < <(git -C "$p" for-each-ref --format='%(refname:short)' refs/heads 2>/dev/null)
+	done <"$out/$((i + 1))"
 done
 
 for row in "${rows[@]}"; do

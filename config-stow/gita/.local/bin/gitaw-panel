@@ -270,14 +270,10 @@ if command -v gita-legend >/dev/null 2>&1; then
 fi
 echo
 
-# The gitad filter, inlined: clean repos render as "[]", and the trailing space
-# anchors on gita's padded status column so a commit subject containing brackets
-# (e.g. "[Save]") is not read as a flag.
-# `-g` always, group name only when given — `gita ll -g` with no name groups all
-# workspaces, which is what an argument-less gitaw showed before.
-ll_args=(-g)
-[ -n "$group" ] && ll_args+=("$group")
-gita ll "${ll_args[@]}" | grep -v '\[\] '
+# What `gitad` shows (gita ll -g, clean repos dropped), rendered by gita-status
+# instead of gita itself: gita spends ~7 git processes per repo, which made a
+# frame take 20 s on mkMac2017 (~65 ms per exec there).
+gita-status "$group"
 
 # ── branches ──────────────────────────────────────────────────────────────────
 # The rows above show only each repo's checked-out branch. gita-branches adds

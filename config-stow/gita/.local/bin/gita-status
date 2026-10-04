@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# gita-status [group] — `gita ll -g [group]` minus the clean repos, i.e. what
+# `gitad` shows, in the same layout and colours:
+#
+#   workspace_homelab:
+#      dotfiles     main       [*?]   ^ install: launchd branch (2 hours ago)
+#
+# One `git status --porcelain=v2 --branch --show-stash` per repo, all repos in
+# parallel, plus one `git log -1` only for the repos that are printed. `gita ll`
+# spends about seven git processes on every repo, clean or not; on mkMac2017,
+# where each exec costs ~65 ms of dyld work, that was 14 s per gitaw frame.
+#
+# Semantics follow gita's info.py: * unstaged, + staged, $ stashed, ? untracked,
+# then ↑ ahead / ↓ behind / ⇕ diverged / ∅ no upstream (or upstream gone), with the
+# bracket coloured by that sync state. One deliberate difference: gita calls a
+# branch in sync when its TREE matches upstream, this compares commits.
+# Assumes gita's default symbols/colours/info items (no symbols.csv, color.csv,
+# info.csv or layout.csv), as gita-legend does.
+set -uo pipefail # not -e: one unreadable repo must not hide the others
+
+RED=$'\033[31m' GREEN=$'\033[32m' YELLOW=$'\033[33m' PURPLE=$'\033[35m'
+WHITE=$'\033[37m' RESET=$'\033[0m'
+
+# repo_line <name-width> <name> <path> — the gita ll line, or nothing when clean.
+repo_line() {
+	local width="$1" name="$2" path="$3" line head="" oid=""
+	local dirty="" staged="" stashed="" untracked="" sync="∅" color="$WHITE"
+	while IFS= read -r line; do
+		case "$line" in
+			'# branch.oid '*) oid="${line#\# branch.oid }" ;;
+			'# branch.head '*) head="${line#\# branch.head }" ;;
+			'# branch.ab '*)
+				local a b
+				read -r _ _ a b <<<"$line"
+				a="${a#+}" b="${b#-}"
+				if [ "$a" -gt 0 ] && [ "$b" -gt 0 ]; then sync="⇕" color="$RED"
+				elif [ "$a" -gt 0 ]; then sync="↑" color="$PURPLE"
+				elif [ "$b" -gt 0 ]; then sync="↓" color="$YELLOW"
+				else sync="" color="$GREEN"
+				fi ;;
+			'# stash '*) stashed='$' ;;
+			'1 '* | '2 '*)
+				[ "${line:2:1}" != . ] && staged=+
+				[ "${line:3:1}" != . ] && dirty='*' ;;
+			'u '*) dirty='*' staged=+ ;;
+			'? '*) untracked='?' ;;
+		esac
+	done < <(git -C "$path" status --porcelain=v2 --branch --show-stash 2>/dev/null)
+
+	local flags="$dirty$staged$stashed$untracked$sync"
+	[ -z "$flags" ] && return
+	# gita shows a tag (or nothing) for a detached HEAD; the short hash is clearer.
+	[ "$head" = "(detached)" ] && head="${oid:0:7}"
+	local subject when
+	IFS=$'\x1f' read -r subject when < <(git -C "$path" log -1 --format='%s%x1f%cd' --date=relative 2>/dev/null)
+	# Padded via ${#…}, not printf widths: bash's printf pads by BYTES, so the
+	# 3-byte ↑/↓/⇕/∅ would come out two columns short of gita's.
+	local info
+	info="$(printf '%-10s' "$head") [$flags]"
+	printf '   %-*s %s%s%*s%s %s (%s)\n' "$((width - 1))" "$name" "$color" "$info" \
+		"$((${#info} < 18 ? 18 - ${#info} : 0))" "" "$RESET" "$subject" "$when"
+}
+
+out="$(mktemp -d "${TMPDIR:-/tmp}/gita-status.XXXXXX")" || exit 1
+trap 'rm -rf "$out"' EXIT
+
+# Pass 1: group order, per-group name width (gita pads to the longest name in
+# the group, clean repos included). Pass 2: one background job per repo.
+mapfile -t rows < <(gita-repos "$@")
+declare -A width
+for row in "${rows[@]}"; do
+	IFS=$'\t' read -r group name _ <<<"$row"
+	[ "$((${#name} + 1))" -gt "${width[$group]:-0}" ] && width[$group]=$((${#name} + 1))
+done
+for i in "${!rows[@]}"; do
+	IFS=$'\t' read -r group name path <<<"${rows[$i]}"
+	repo_line "${width[$group]}" "$name" "$path" >"$out/$i" &
+done
+wait
+
+# A group header is printed even when every repo in it is clean, as with gitad.
+last=""
+for i in "${!rows[@]}"; do
+	IFS=$'\t' read -r group _ <<<"${rows[$i]}"
+	[ "$group" != "$last" ] && printf '%s:\n' "$group" && last="$group"
+	# $(<f) is a bash builtin read, not a `cat` per repo.
+	line="$(<"$out/$i")"
+	[ -n "$line" ] && printf '%s\n' "$line"
+done

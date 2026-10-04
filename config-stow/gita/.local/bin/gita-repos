@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# gita-repos [group] — gita's registry as "group<TAB>name<TAB>path" lines.
+#
+# Groups in groups.csv order, repos within a group in byte order (Python's
+# sorted(), which is what `gita ll -g` uses). A repo in no group is not listed,
+# exactly as `gita ll -g` drops it. With a group argument only that group is
+# printed; an unknown group prints nothing.
+#
+# Reads repos.csv / groups.csv directly instead of asking gita: gita is Python,
+# and its start-up is the dominant cost on a host where launching a process is
+# slow (mkMac2017: ~65 ms per exec, measured 2026-10-04).
+set -uo pipefail
+
+want="${1:-}"
+# gita's own config-dir resolution (common.get_config_dir), as in gitar.
+conf="${GITA_PROJECT_HOME:-${XDG_CONFIG_HOME:-$HOME/.config}}/gita"
+[ -r "$conf/repos.csv" ] && [ -r "$conf/groups.csv" ] || exit 0
+
+# repos.csv rows: path,name,type,flags
+declare -A path_of
+while IFS=, read -r rpath name _; do
+	[ -n "$name" ] && path_of[$name]="$rpath"
+done <"$conf/repos.csv"
+
+# groups.csv rows: group:repo repo ...:path. gita loads them into a dict, so a
+# repeated group keeps its FIRST position but takes its LAST row's members.
+declare -A members_of pos_of
+gi=0
+while IFS=: read -r group members _; do
+	[ -n "$group" ] || continue
+	[ -n "${pos_of[$group]:-}" ] || pos_of[$group]=$((gi += 1))
+	members_of[$group]="$members"
+done <"$conf/groups.csv"
+
+# Each line is prefixed with its group's position so ONE sort orders everything
+# — a sort per group would cost an exec each.
+for group in "${!members_of[@]}"; do
+	[ -n "$want" ] && [ "$group" != "$want" ] && continue
+	read -ra names <<<"${members_of[$group]}"
+	for name in "${names[@]}"; do
+		[ -n "${path_of[$name]:-}" ] && printf '%05d\t%s\t%s\t%s\n' "${pos_of[$group]}" "$name" "$group" "${path_of[$name]}"
+	done
+done | LC_ALL=C sort -t $'\t' -k1,1 -k2,2 |
+	while IFS=$'\t' read -r _ name group rpath; do
+		printf '%s\t%s\t%s\n' "$group" "$name" "$rpath"
+	done
