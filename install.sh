@@ -1213,10 +1213,15 @@ if ask_yn DF_GITA "gita multi-repo overview + auto-fetch?"; then
 	run mkdir -p "$HOME/.local/bin"
 	stow_pkg "$HOME" gita
 	if is_macos; then
-		# No systemd, so no gita-fetch timer (MACOS-BASELINE § 5) — the CLI and panel still
-		# work. macOS has no procps either, and gitaw needs its `watch`.
+		# macOS has no procps, and gitaw needs its `watch`.
 		case "$PM" in brew|port) pm_install watch ;; esac
-		info "register repos in a fresh shell:  gitar"
+		# gita-fetch as a LaunchAgent. Copied, not linked, like the Syncthing agent; loaded
+		# by hand afterwards, like the systemd timer, because it needs repos registered first.
+		gf_plist="$HOME/Library/LaunchAgents/de.mirkokoester.gita-fetch.plist"
+		run mkdir -p "$HOME/Library/LaunchAgents"
+		run install -m 644 "$DOTFILES_REPO/config-stow/launchd/de.mirkokoester.gita-fetch.plist" "$gf_plist"
+		info "register repos and load the fetch agent in a fresh shell:"
+		info "  gitar && launchctl bootstrap gui/\$(id -u) $gf_plist"
 	else
 		run mkdir -p "$HOME/.config/systemd/user"
 		stow_pkg "$HOME/.config" systemd-user
