@@ -647,26 +647,22 @@ fi
 # "which shell" and "which compositor" are separate axes, and a machine may run either without
 # the other.
 #
-# Packaging, read off the repos (2026-08-05) rather than assumed: `dms-shell` lives in **extra**,
-# not the AUR, and depends on a virtual `dms-shell-compositor`. That is provided by the 0-byte
-# metapackages `dms-shell-hyprland` (-> dms-shell + hyprland) and `dms-shell-niri`
-# (-> dms-shell + niri). So installing `dms-shell` alone does not resolve — exactly one variant
-# must come with it, and both may be installed side by side on a machine carrying both sessions.
+# Packaging, read off the repos (2026-10-05) rather than assumed: `dms-shell` lives in **extra**,
+# not the AUR, and is a single package. Until 1.6.2-2 it needed one of the 0-byte metapackages
+# `dms-shell-hyprland` / `dms-shell-niri`; those are gone from the repos (`dms-shell` now
+# Replaces them, without Provides, so `-S dms-shell-hyprland` is `target not found`). DMS no
+# longer pulls in a compositor — the DF_NIRI / DF_HYPR steps above install those.
 if ask_yn DF_DMS "DankMaterialShell (DMS) desktop shell?"; then
-	step "  dms: shell + a variant per enabled compositor"
+	step "  dms: shell"
 	case "$PM" in
 		pacman)
-			dms_pkgs=()
-			if [ "$DF_HYPR_ON" = 1 ]; then dms_pkgs+=(dms-shell-hyprland); fi
-			if [ "$DF_NIRI_ON" = 1 ]; then dms_pkgs+=(dms-shell-niri); fi
-			if [ "${#dms_pkgs[@]}" -eq 0 ]; then
-				# Not an error worth aborting on, but silence here would leave a machine with
-				# a shell answered "yes" and nothing installed, which looks like a broken run.
-				warn "DF_DMS is on but neither Niri nor Hyprland was enabled — no dms-shell-<compositor>"
-				warn "  variant to install. Enable a compositor and re-run, or set DF_DMS=0."
-			else
-				pm_install "${dms_pkgs[@]}"
-			fi ;;
+			if [ "$DF_HYPR_ON" != 1 ] && [ "$DF_NIRI_ON" != 1 ]; then
+				# Not an error worth aborting on, but DMS without a compositor never starts,
+				# which would look like a broken run.
+				warn "DF_DMS is on but neither Niri nor Hyprland was enabled — DMS has no compositor"
+				warn "  to run under. Enable one and re-run, or set DF_DMS=0."
+			fi
+			pm_install dms-shell ;;
 		*)  info "install DankMaterialShell from its own docs on this distro." ;;
 	esac
 	# DMS's config fragments are machine-local and UNTRACKED by design (the GUI writes them), so

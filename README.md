@@ -975,13 +975,10 @@ The Quickshell-based desktop shell: bar, launcher, notifications, settings GUI, 
 
 **Its own install question, `DF_DMS`, not part of `DF_HYPR`.** DMS ships a niri flavour as well as a Hyprland one, so "which shell" and "which compositor" are separate axes: a niri machine can adopt DMS without Hyprland, and a Hyprland machine can skip it.
 
-Packaging is the reason the question has to come *after* the compositor questions. `dms-shell` lives in **`extra`, not the AUR**, and depends on a virtual `dms-shell-compositor` provided by two 0-byte metapackages — so installing the base alone does not resolve, and exactly one variant must come with it. Both may be installed side by side on a machine carrying both sessions:
+The question still comes *after* the compositor questions, because DMS needs one to run under but no longer pulls one in. `dms-shell` lives in **`extra`, not the AUR**, and is a single package since 1.6.2-2 (2026-10): it replaced the old `dms-shell-hyprland` / `dms-shell-niri` metapackages, which no longer exist — `paru -S` on them is `target not found`, and on an upgrade pacman offers to replace them (answer yes; they owned no files).
 
 ```sh
-paru -S --needed dms-shell-hyprland     # pulls dms-shell + hyprland
-```
-```sh
-paru -S --needed dms-shell-niri         # pulls dms-shell + niri
+paru -S --needed dms-shell     # the compositor comes from the DF_HYPR / DF_NIRI steps
 ```
 
 **Nothing here is stowed.** The ownership rule for this setup is *tracked = hand-written, untracked = GUI-written*: `hyprland.lua` is common and public, `local.lua` is per-machine and private, and `~/.config/hypr/dms/*.lua` is machine-local and **untracked**, written by `dms setup` and by the DMS Settings GUI (Shortcuts / Displays / Theme / Window Rules). Nothing DMS writes is a symlink into a repo, so it can never dirty a tracked file or silently replace a stow link. `install.sh` only creates the directory.
