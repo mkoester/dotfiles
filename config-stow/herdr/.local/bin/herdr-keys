@@ -1,0 +1,217 @@
+#!/usr/bin/env python3
+"""herdr-keys — a herdr keybind cheat sheet built from the binary's defaults plus YOUR config.
+
+    herdr-keys [--fzf] [--color] [--herdr-bin PATH] [--config PATH]
+
+For learning the keys while still navigating by mouse: open it, find the thing you were about
+to click, press the key instead. Bound to prefix+alt+k as a herdr popup (config.toml).
+
+WHERE THE BINDINGS COME FROM (herdr 0.9.3, 2026-10-05)
+------------------------------------------------------
+herdr has no command that dumps its keymap (`herdr keys` is an unknown command). Its fully
+commented sample config IS embedded in the executable, though, and its [keys] block lists every
+action with its default, one per line:
+
+    # new_tab = "prefix+c"
+    # open_worktree = ""    # optional, unset by default
+
+So the defaults are read straight out of the binary -- they cannot drift from the installed
+version -- and ~/.config/herdr/config.toml is overlaid on top: a [keys] entry replaces a
+default ("" unbinds it), and every [[keys.command]] is added. Rows that differ from the
+default are marked `*`, which is also how your custom commands show.
+
+Unset actions (default "") are left out: there is no key to learn.
+
+TESTING
+-------
+Both inputs take a path, which is what dotfiles/scripts/test drives with fixtures:
+
+    herdr-keys --herdr-bin tests/fixtures/herdr-sample.txt --config tests/fixtures/herdr.toml
+"""
+
+import argparse
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tomllib
+
+CONFIG = os.path.expanduser("~/.config/herdr/config.toml")
+
+# Action -> (group, label). Render order is GROUPS order, then this dict's order inside a
+# group -- roughly "what you click most" first. An action missing here still shows, under
+# Other, labelled with its own name; that is the tell that a herdr update added one.
+GROUPS = ["Panes", "Tabs", "Spaces", "Navigate mode", "General", "Custom", "Other"]
+ACTIONS = {
+    "focus_pane_left": ("Panes", "focus pane left"),
+    "focus_pane_down": ("Panes", "focus pane down"),
+    "focus_pane_up": ("Panes", "focus pane up"),
+    "focus_pane_right": ("Panes", "focus pane right"),
+    "cycle_pane_next": ("Panes", "next pane"),
+    "cycle_pane_previous": ("Panes", "previous pane"),
+    "last_pane": ("Panes", "last pane (back and forth)"),
+    "split_vertical": ("Panes", "split side by side"),
+    "split_horizontal": ("Panes", "split stacked"),
+    "zoom": ("Panes", "zoom pane (fullscreen toggle)"),
+    "close_pane": ("Panes", "close pane"),
+    "resize_mode": ("Panes", "resize mode (arrows, esc to leave)"),
+    "resize_pane_left": ("Panes", "resize pane left"),
+    "resize_pane_down": ("Panes", "resize pane down"),
+    "resize_pane_up": ("Panes", "resize pane up"),
+    "resize_pane_right": ("Panes", "resize pane right"),
+    "rename_pane": ("Panes", "rename pane"),
+    "edit_scrollback": ("Panes", "open scrollback in $EDITOR"),
+    "clear_pane": ("Panes", "clear pane"),
+    "switch_tab": ("Tabs", "go to tab 1…9"),
+    "next_tab": ("Tabs", "next tab"),
+    "previous_tab": ("Tabs", "previous tab"),
+    "new_tab": ("Tabs", "new tab"),
+    "rename_tab": ("Tabs", "rename tab"),
+    "close_tab": ("Tabs", "close tab"),
+    "move_tab_previous": ("Tabs", "move tab left"),
+    "move_tab_next": ("Tabs", "move tab right"),
+    "workspace_picker": ("Spaces", "space picker"),
+    "goto": ("Spaces", "goto (jump anywhere)"),
+    "switch_workspace": ("Spaces", "go to space 1…9"),
+    "previous_workspace": ("Spaces", "previous space"),
+    "next_workspace": ("Spaces", "next space"),
+    "new_workspace": ("Spaces", "new space"),
+    "rename_workspace": ("Spaces", "rename space"),
+    "close_workspace": ("Spaces", "close space"),
+    "new_worktree": ("Spaces", "new worktree space"),
+    "open_worktree": ("Spaces", "open worktree"),
+    "remove_worktree": ("Spaces", "remove worktree"),
+    "open_notification_target": ("Spaces", "jump to the agent that pinged"),
+    "previous_agent": ("Spaces", "previous agent"),
+    "next_agent": ("Spaces", "next agent"),
+    "focus_agent": ("Spaces", "focus agent 1…9"),
+    "navigate_workspace_up": ("Navigate mode", "space above"),
+    "navigate_workspace_down": ("Navigate mode", "space below"),
+    "navigate_pane_left": ("Navigate mode", "pane left"),
+    "navigate_pane_down": ("Navigate mode", "pane down"),
+    "navigate_pane_up": ("Navigate mode", "pane up"),
+    "navigate_pane_right": ("Navigate mode", "pane right"),
+    "help": ("General", "herdr's own help"),
+    "toggle_sidebar": ("General", "toggle sidebar"),
+    "settings": ("General", "settings"),
+    "detach": ("General", "detach (everything keeps running)"),
+    "reload_config": ("General", "reload config"),
+    "remote_image_paste": ("General", "paste image (herdr --remote only)"),
+}
+
+# The value must end the line (bar a trailing comment): that is what tells `# new_tab = "prefix+c"`
+# apart from prose such as `# type = "popup" opens a session-modal terminal`.
+KEY_LINE = re.compile(r'^#\s*([a-z_]+)\s*=\s*"([^"]*)"\s*(?:#.*)?$')
+
+
+def sample_keys_block(data):
+    """The [keys] section of the embedded sample config, as text.
+
+    It ends at the commented `# [[keys.command]]` example (whose `key = …` lines would
+    otherwise parse as an action called "key") or at the next real section, whichever is first.
+    """
+    start = data.find(b"\n[keys]\n")
+    if start < 0:
+        sys.exit("herdr-keys: no [keys] block in the herdr binary -- sample config format changed?")
+    rest = data[start + len(b"\n[keys]\n"):]
+    ends = [i for i in (rest.find(b"\n# [[keys.command]]"), rest.find(b"\n[")) if i >= 0]
+    return rest[:min(ends)].decode("utf-8", "replace") if ends else rest.decode("utf-8", "replace")
+
+
+def defaults(herdr_bin):
+    """{action: binding} from the binary, including `prefix`."""
+    with open(herdr_bin, "rb") as f:
+        block = sample_keys_block(f.read())
+    return dict(m.groups() for line in block.splitlines() if (m := KEY_LINE.match(line.strip())))
+
+
+def load_config(path):
+    try:
+        with open(path, "rb") as f:
+            return tomllib.load(f).get("keys", {})
+    except FileNotFoundError:
+        return {}
+
+
+def collect(herdr_bin, config):
+    """[(key, label, changed, group)] plus the prefix in effect."""
+    keys = load_config(config)
+    base = defaults(herdr_bin)
+    prefix = keys.get("prefix") or base.pop("prefix", "ctrl+b")
+    base.pop("prefix", None)
+    rows = []
+    for action, default in base.items():
+        binding = keys.get(action, default)
+        if not isinstance(binding, str) or not binding:
+            continue
+        group, label = ACTIONS.get(action, ("Other", action.replace("_", " ")))
+        rows.append((binding, label, binding != default, group, action))
+    for cmd in keys.get("command", []):
+        if cmd.get("key"):
+            label = cmd.get("description") or cmd.get("command", "?")
+            rows.append((cmd["key"], label, True, "Custom", ""))
+    order = list(ACTIONS)
+    # Stable sort: custom commands keep config order, unknown actions keep binary order.
+    rows.sort(key=lambda r: (GROUPS.index(r[3]), order.index(r[4]) if r[4] in order else len(order)))
+    return prefix, [r[:4] for r in rows]
+
+
+def show_key(binding, prefix):
+    """'prefix+shift+n' -> 'ctrl+b → shift+n': the two presses are separate, so say so."""
+    return f"{prefix} → {binding[len('prefix+'):]}" if binding.startswith("prefix+") else binding
+
+
+def render(prefix, rows, color=False):
+    if not rows:
+        return ""
+    dim, grn, cyn, rst = ("\033[2m", "\033[32m", "\033[36m", "\033[0m") if color else ("",) * 4
+    shown = [(show_key(k, prefix), label, changed, grp) for k, label, changed, grp in rows]
+    widths = {}
+    for key, _, _, grp in shown:
+        widths[grp] = max(widths.get(grp, 0), len(key))
+    out, current = [], None
+    for key, label, changed, grp in shown:
+        if grp != current:
+            current = grp
+            note = "  (inside navigate mode, no prefix)" if grp == "Navigate mode" else ""
+            out.append(f"{cyn}── {grp}{note} {'─' * max(0, 58 - len(grp) - len(note))}{rst}")
+        mark = f"{grn}*{rst}" if changed else " "
+        keyc = f"{grn}{key}{rst}" if changed else key
+        out.append(f" {mark} {keyc}{' ' * (widths[grp] - len(key))}  {dim if not changed else ''}{label}{rst}")
+    return "\n".join(out)
+
+
+def main():
+    p = argparse.ArgumentParser(description="herdr keybind cheat sheet")
+    p.add_argument("--fzf", action="store_true", help="interactive, filterable picker")
+    p.add_argument("--color", action="store_true", help="force ANSI colour")
+    p.add_argument("--herdr-bin", help="herdr executable (or a fixture) to read defaults from")
+    p.add_argument("--config", default=CONFIG)
+    a = p.parse_args()
+
+    herdr_bin = a.herdr_bin or shutil.which("herdr")
+    if not herdr_bin:
+        sys.exit("herdr-keys: herdr not on PATH")
+    prefix, rows = collect(herdr_bin, a.config)
+
+    if a.fzf:
+        if not shutil.which("fzf"):
+            sys.exit("herdr-keys: fzf not installed")
+        # Same scroll fix as hyprbinds: fzf's one-line-per-notch wheel is unusable on a long
+        # list -- and this sheet is for someone who scrolls with the mouse.
+        out = subprocess.run(
+            ["fzf", "--ansi", "--reverse", "--no-sort", "--info=inline", "--cycle",
+             "--prompt=herdr keys> ",
+             f"--header=prefix = {prefix}  ·  * = changed/added in your config  ·  ESC closes",
+             "--bind=scroll-up:up+up+up,scroll-down:down+down+down,"
+             "ctrl-u:half-page-up,ctrl-d:half-page-down"],
+            input=render(prefix, rows, color=True), text=True,
+        )
+        sys.exit(out.returncode if out.returncode in (0, 130) else 0)
+
+    print(render(prefix, rows, color=a.color or sys.stdout.isatty()))
+
+
+if __name__ == "__main__":
+    main()

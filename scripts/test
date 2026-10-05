@@ -569,6 +569,43 @@ else
 		'the --color flag colours every line'
 fi
 
+section 'herdr-keys — herdr keybind cheat sheet'
+HK="$REPO/config-stow/herdr/.local/bin/herdr-keys"
+if ! python3 -c 'import tomllib' 2>/dev/null; then
+	skip 'herdr-keys' 'python3 >= 3.11 (tomllib) not installed'
+else
+	# The "binary" fixture is the embedded sample config wrapped in junk bytes, so this needs no
+	# herdr install. Its [keys] block deliberately carries the two lines that must NOT parse: a
+	# prose `# type = "popup" opens …` and the commented [[keys.command]] example.
+	hk() { python3 "$HK" --herdr-bin "$FX/herdr-sample.txt" "$@"; }
+	rows() { hk "$@" | grep -c '^ '; }
+
+	is "$(rows --config /nonexistent)" '5' 'defaults only: prefix and unset actions are not rows'
+	is "$(hk --config /nonexistent | grep -c '^ \*')" '0' 'with no config nothing is marked changed'
+	is "$(hk --config /nonexistent | grep -c 'popup\|alt+g')" '0' 'sample prose and command example are not bindings'
+	grep -q '^   ctrl+b → c  new tab$' < <(hk --config /nonexistent) && r=1 || r=0
+	ok "$r" 'prefix+ is rendered as the real prefix followed by the second key'
+	grep -q '^── Other ' < <(hk --config /nonexistent) && r=1 || r=0
+	ok "$r" 'an action unknown to the label table still shows, under Other'
+
+	# Overlay: close_pane rebound, zoom unbound ("" in config), one custom command added.
+	is "$(rows --config "$FX/herdr.toml")" '5' 'override replaces, "" unbinds, custom command adds'
+	grep -q '^ \* ctrl+b → shift+q  close pane$' < <(hk --config "$FX/herdr.toml") && r=1 || r=0
+	ok "$r" 'an overridden binding shows the new key, marked *'
+	is "$(hk --config "$FX/herdr.toml" | grep -c 'zoom')" '0' 'an action unbound in config is gone'
+	grep -q -A1 '^── Custom ' < <(hk --config "$FX/herdr.toml") && \
+		grep -q '^ \* ctrl+b → alt+g  lazygit$' < <(hk --config "$FX/herdr.toml") && r=1 || r=0
+	ok "$r" 'a [[keys.command]] shows under Custom with its description'
+
+	d="$(work)"; printf '[keys]\nprefix = "ctrl+a"\n' > "$d/c.toml"
+	grep -q '^   ctrl+a → c  new tab$' < <(hk --config "$d/c.toml") && r=1 || r=0
+	ok "$r" 'a configured prefix replaces the default in every row'
+	rm -rf "$d"
+
+	is "$(hk --config "$FX/herdr.toml" | grep -c $'\033')" '0' 'piped output carries no ANSI escapes'
+	is "$(hk --config "$FX/herdr.toml" | grep -c ' $')" '0' 'no line has trailing padding'
+fi
+
 section 'hypr-switcher — MRU window picker'
 HS="$REPO/config-stow/hypr/.local/bin/hypr-switcher"
 if ! command -v python3 >/dev/null 2>&1; then
