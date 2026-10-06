@@ -710,7 +710,8 @@ else
 	# stubbed on PATH. That exercises the REAL script end to end (argument building, output
 	# parsing, branching) rather than a re-implementation of its logic here.
 	sd="$(work)"; mkdir -p "$sd/bin"
-	printf '#!/bin/sh\necho "kanshictl $*" >> "$STUB_LOG"\n' > "$sd/bin/kanshictl"
+	# STUB_RC makes the switch fail the way kanshictl does when no profile matches.
+	printf '#!/bin/sh\necho "kanshictl $*" >> "$STUB_LOG"\nexit "${STUB_RC:-0}"\n' > "$sd/bin/kanshictl"
 	printf '#!/bin/sh\necho "dms $*" >> "$STUB_LOG"\n' > "$sd/bin/dms"
 	# fzf with --print-query --expect prints: query, key, selection.
 	printf '#!/bin/sh\ncat > /dev/null\nprintf "%%s\\n" "$STUB_QUERY" "$STUB_KEY" "$STUB_PICK"\n' \
@@ -720,11 +721,22 @@ else
 		STUB_LOG="$sd/log" STUB_QUERY="$1" STUB_KEY="$2" STUB_PICK="$3" \
 		PATH="$sd/bin:$PATH" python3 "$HM" --fzf \
 			--config "$REPO/tests/fixtures/hypr-monitors-kanshi.conf" \
-			--monitors-json "$REPO/tests/fixtures/hypr-monitors-live.json" 2>&1
+			--monitors-json "$REPO/tests/fixtures/hypr-monitors-live.json" 2>&1 </dev/null
 	}
 
 	: > "$sd/log"; pop '' '' "$(printf 'solo\tx')" >/dev/null
 	is "$(cat "$sd/log")" 'kanshictl switch solo' 'ENTER switches to the highlighted profile'
+
+	# The popup closes when the script exits, so a failed switch must WAIT, or its error
+	# vanishes unread (mkDesktop 2026-10-06: every pick failed silently for weeks).
+	# </dev/null in pop() is what lets the wait return here instead of hanging the suite.
+	is "$(STUB_RC=1 pop '' '' "$(printf 'solo\tx')" | grep -c 'Press Enter')" '1' \
+		'a failed switch keeps the popup open'
+	# Control: the same pick succeeding must close at once, or the assertion above proves nothing.
+	is "$(pop '' '' "$(printf 'solo\tx')" | grep -c 'Press Enter')" '0' \
+		'...and a successful one does not'
+	is "$(python3 "$HM" --save 'bad name' --dry-run --fzf </dev/null 2>&1 | grep -c 'Press Enter')" '1' \
+		'an abort via SystemExit waits as well'
 
 	: > "$sd/log"; pop '' ctrl-e '' >/dev/null
 	# The tab id and the `openWith` verb come from DMS's IPC handler, not from guessing — a
