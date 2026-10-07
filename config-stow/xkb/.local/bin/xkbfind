@@ -1,0 +1,128 @@
+#!/usr/bin/env python3
+"""xkbfind — search XKB models, layouts and options, one line per entry.
+
+    xkbfind [-k model,layout,option] [-s] [--exotic] [TERM...]
+
+Every TERM must match (AND), case-insensitively. By default a term must equal a whole WORD of
+some field — so `de` finds the German layouts, their DE country code and the `de` brief, without
+also matching every description containing "Generic" or "Mode". `-s` switches to substring
+matching for the cases where that is what you want (`-s alu` → the Apple Aluminium models).
+No terms lists everything.
+
+    xkbfind apple          # Apple models and apple: options (mac variants say "Macintosh")
+    xkbfind -k layout en   # every layout whose brief/language/description says "en"
+    xkbfind de nodeadkeys  # the one variant you were after
+
+Why not just YAML: `xkbcli list` LOOKS like YAML and currently parses as such, but descriptions
+are emitted unquoted and unescaped (`TypeMatrix EZ-Reach 2030 USB (102/105:EU mode)`), so it
+parses by luck rather than by contract. This reads it line by line instead: a `- key:` line opens
+an item, an indented `key:` line adds to it, and keys it has never seen are kept rather than
+rejected. Option groups are the one nesting level: an option inherits its group's name.
+"""
+import argparse
+import re
+import subprocess
+import sys
+
+KINDS = ("model", "layout", "option")
+SECTION_KIND = {"models": "model", "layouts": "layout", "option_groups": "group"}
+
+
+def parse_value(raw):
+    """A scalar the way xkbcli writes it: 'quoted' ('' escapes a quote), [list], bool or bare."""
+    raw = raw.strip()
+    if raw.startswith("[") and raw.endswith("]"):
+        return [parse_value(x) for x in re.findall(r"'(?:[^']|'')*'|[^,\s][^,]*", raw[1:-1])]
+    if len(raw) >= 2 and raw[0] == raw[-1] == "'":
+        return raw[1:-1].replace("''", "'")
+    return {"true": True, "false": False}.get(raw, raw)
+
+
+def parse(text):
+    """xkbcli list output -> list of (kind, fields) items, option groups excluded."""
+    items, kind, group, cur = [], None, None, None
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        m = re.match(r"^(\w+):\s*$", line)
+        if m:
+            kind, group, cur = SECTION_KIND.get(m.group(1), m.group(1)), None, None
+            continue
+        m = re.match(r"^(\s*)(- )?([\w-]+):\s*(.*)$", line)
+        if not m or kind is None:
+            continue  # tolerate anything unexpected rather than die on it
+        indent, opens, key, raw = len(m.group(1)), m.group(2), m.group(3), m.group(4)
+        if opens:
+            if kind == "group" and indent == 0:
+                group = cur = {}
+            else:
+                cur = {"group": group.get("name", "")} if kind == "group" and group else {}
+                items.append(("option" if kind == "group" else kind, cur))
+        if cur is not None and raw:
+            cur[key] = parse_value(raw)
+    return items
+
+
+def row(kind, f):
+    """One table row: kind, name, variant, description, info."""
+    if kind == "layout":
+        info = " ".join(
+            f"{k}={','.join(v) if isinstance(v, list) else v}"
+            for k, v in (("brief", f.get("brief")), ("lang", f.get("iso639")), ("country", f.get("iso3166")))
+            if v
+        )
+        return [kind, f.get("layout", ""), f.get("variant", ""), f.get("description", ""), info]
+    if kind == "model":
+        return [kind, f.get("name", ""), "", f.get("description", ""), f"vendor={f.get('vendor', '')}"]
+    info = f"group={f.get('group', '')}" + (" layout-specific" if f.get("layout-specific") is True else "")
+    return [kind, f.get("name", ""), "", f.get("description", ""), info]
+
+
+def matches(fields, terms, substring):
+    """Search the parsed VALUES only — never the rendered row, whose kind column and `brief=`
+    labels would otherwise match (`-s de` hit every model through the word "model")."""
+    values = [x for v in fields.values() for x in (v if isinstance(v, list) else [v]) if isinstance(x, str)]
+    text = " ".join(values).lower()
+    if substring:
+        return all(t in text for t in terms)
+    words = set(re.split(r"[^\w]+", text))
+    return all(t in words for t in terms)
+
+
+def table(rows):
+    if not rows:
+        return ""
+    widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]) - 1)]
+    return "\n".join(
+        "  ".join(c.ljust(w) for c, w in zip(r, widths)) + "  " + r[-1] for r in rows
+    ) + "\n"
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description="Search xkbcli list output, one line per entry.")
+    ap.add_argument("terms", nargs="*", help="all must match (whole words unless -s)")
+    ap.add_argument("-k", "--kind", default=",".join(KINDS), help="comma list of: model,layout,option")
+    ap.add_argument("-s", "--substring", action="store_true", help="match substrings, not whole words")
+    ap.add_argument("--exotic", action="store_true", help="include the exotic (extra) rulesets")
+    ap.add_argument("--input", help="read this file instead of running xkbcli (for tests)")
+    a = ap.parse_args(argv)
+
+    kinds = {k.strip() for k in a.kind.split(",")}
+    if not kinds <= set(KINDS):
+        ap.error(f"--kind takes {','.join(KINDS)}, got {a.kind}")
+    if a.input:
+        with open(a.input, encoding="utf-8") as fh:
+            text = fh.read()
+    else:
+        cmd = ["xkbcli", "list"] + (["--load-exotic"] if a.exotic else [])
+        text = subprocess.run(cmd, check=True, capture_output=True, text=True).stdout
+
+    terms = [t.lower() for t in a.terms]
+    rows = [r for kind, f in parse(text) if kind in kinds
+            if matches(f, terms, a.substring) for r in [row(kind, f)]]
+    sys.stdout.write(table(rows))
+    return 0 if rows else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

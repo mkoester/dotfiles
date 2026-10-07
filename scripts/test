@@ -631,6 +631,36 @@ else
 	ok "$r" 'an empty client list exits cleanly'
 fi
 
+section 'xkbfind — xkbcli list as a table'
+XF="$REPO/config-stow/xkb/.local/bin/xkbfind"
+if ! command -v python3 >/dev/null 2>&1; then
+	skip 'xkbfind' 'python3 not installed'
+else
+	xf() { python3 "$XF" --input "$REPO/tests/fixtures/xkbfind-list.txt" "$@"; }
+	n() { xf "$@" | wc -l; }
+
+	is "$(n)" '10' 'no terms lists every model, layout and option (groups are not rows)'
+	is "$(n -k layout)" '5' '--kind narrows'
+	# Whole-word is the point: `de` must not match "Generic" or "dead", but must match the
+	# Swiss layout through its brief alone.
+	is "$(xf de | awk '{print $2}' | tr '\n' ' ')" 'de ch ' 'de = whole-word match on code fields'
+	# -s adds TypeMatrix via "mode", and nothing else: the kind column "model" must not be
+	# searchable (it was, once, and pulled in every model).
+	is "$(xf -s de | awk '{print $2}' | tr '\n' ' ')" 'TypeMatrixEZ2030USB-102 de ch ' '-s matches substrings of values, not of column labels'
+	is "$(n apple)" '2' 'apple: the model and the apple: option'
+	is "$(n de nodeadkeys)" '1' 'terms are ANDed'
+	is "$(n APPLE)" '2' 'case-insensitive'
+	# Parsing edges that YAML-by-luck would hide.
+	grep -q "TamilNet '99" <<<"$(xf tamil)" && r=1 || r=0; ok "$r" "an unquoted apostrophe survives"
+	grep -q "It's quoted" <<<"$(xf quote)" && r=1 || r=0; ok "$r" "'' inside a quoted value unescapes"
+	grep -q 'lang=deu,gsw country=CH' <<<"$(xf ch)" && r=1 || r=0; ok "$r" 'list fields join with commas'
+	grep -q '102/105:EU mode' <<<"$(xf typematrix)" && r=1 || r=0; ok "$r" 'a colon inside a description is not a key'
+	grep -q 'group=grp layout-specific$' <<<"$(xf alupckeys)" && r=1 || r=0; ok "$r" 'an option inherits its group and flag'
+	grep -q 'group=grp$' <<<"$(xf caps_toggle)" && r=1 || r=0; ok "$r" 'layout-specific: false prints nothing'
+	xf nomatchxyz >/dev/null && r=0 || r=1; ok "$r" 'no match exits non-zero'
+	xf -k bogus >/dev/null 2>&1 && r=0 || r=1; ok "$r" 'an unknown --kind is rejected'
+fi
+
 # ── gitar ────────────────────────────────────────────────────────────────────
 # gitar is a zsh function that rewrites gita's registry, so it cannot be run for
 # real in a test (or from a sandbox — ~/.config/gita is not writable there).
