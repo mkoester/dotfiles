@@ -506,7 +506,8 @@ if ask_yn DF_DESKTOP "Wayland desktop (bar, monitor profiles, notifications)?"; 
 	info "ydotoold is stowed but not enabled; on a machine with a Stream Deck:"
 	info "  systemctl --user enable --now ydotoold.service"
 	# custom xkb keymap (Caps-Lock -> German umlauts): generic + public, activated
-	# per-machine in niri's local.kdl (or setxkbmap). Just needs to be on disk.
+	# per-machine via kb_file in Hyprland's local.lua (niri: local.kdl). Just needs to be on disk.
+	# Also carries xkbfind, a one-line-per-entry search over `xkbcli list`.
 	stow_pkg "$HOME" xkb
 	# Terminal emulator configs: ghostty (the default since 2026-08-10), kitty (fallback) and
 	# alacritty (previous default, kept working). Tracked since 2026-08-10 — before that all

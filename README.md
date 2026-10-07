@@ -892,24 +892,48 @@ If the package ships no unit (`pacman -Ql kanshi | grep systemd`), fall back to 
 
 ## keyboard layout — Caps-Lock → umlauts (xkb)
 
-The `config-stow/xkb/` package carries custom keymaps that repurpose **Caps-Lock as a Level-3 modifier** for the German umlauts (Caps + `A`/`O`/`U`/`S` → ä/ö/ü/ß). Two base variants, both generic and free of hardware identifiers, so they're tracked for **all machines** and stowed on any `DF_DESKTOP` machine — the files just need to be on disk; a machine picks one (or none) in niri:
+The `config-stow/xkb/` package carries custom keymaps that repurpose **Caps-Lock as a Level-3 modifier** for the German umlauts (Caps + `A`/`O`/`U`/`S` → ä/ö/ü/ß). Two base variants, both generic and free of hardware identifiers, so they're tracked for **all machines** and stowed on any `DF_DESKTOP` machine — the files just need to be on disk; a machine picks one (or none) in its compositor config:
 
 ```sh
 cd config-stow && stow -t $HOME xkb && cd ..
-# → ~/.config/xkb/{keymap-us.xkb, keymap-gb.xkb, symbols/custom}
+# → ~/.config/xkb/{keymap-us.xkb, keymap-gb.xkb, symbols/custom}, ~/.local/bin/xkbfind
 ```
 
 - `keymap-us.xkb` — `us(altgr-intl)` base + the umlaut remaps.
 - `keymap-gb.xkb` — `gb` base + the same remaps.
-- `symbols/custom` — an alternative `Mode_switch` variant on the XKB search path (`setxkbmap -I ~/.config/xkb custom`); kept for reference, not used by the niri path.
+- `symbols/custom` — an alternative `Mode_switch` variant on the XKB search path (`setxkbmap -I ~/.config/xkb custom`); kept for reference, not used by the compositor path.
 
-**Which variant — or none — is a per-machine choice, made in that machine's private `local.kdl`** (alongside its real `output` blocks and Bluetooth binds), because it depends on the machine's *physical* keyboard:
+**Which variant — or none — is a per-machine choice, made in that machine's private `hypr/local.lua`** in `workstation-private` (alongside its real monitor block and Bluetooth binds), because it depends on the machine's *physical* keyboard:
 
-```kdl
-input { keyboard { xkb { file "~/.config/xkb/keymap-us.xkb" } } }   // US board → keymap-us
+```lua
+hl.config({
+    input = { kb_file = os.getenv("HOME") .. "/.config/xkb/keymap-us.xkb" },   -- US board → keymap-us
+})
 ```
 
+On the niri fallback the same choice goes in `local.kdl`: `input { keyboard { xkb { file "~/.config/xkb/keymap-us.xkb" } } }`.
+
 The remaps are position-based (`A`/`O`/`U`/`S`), so the umlauts work on any QWERTY board, but the **base** decides the punctuation: use `keymap-us.xkb` on a US keyboard, `keymap-gb.xkb` on a GB one (otherwise `@ " # ~ \ | £` won't match the keycaps). A machine with a **native German keyboard needs neither** — just omit the block. Both keymaps are validated with `xkbcomp` (compile clean).
+
+### Finding and previewing a layout — `xkbfind` + `tecla`
+
+`xkbfind` turns `xkbcli list` into one line per model, layout and option. Terms are ANDed, case-insensitive, and match **whole words** (`-s` for substrings, `-k layout|model|option` to narrow):
+
+```sh
+xkbfind -k layout de          # every German layout, incl. Swiss/Austrian via their `de` brief
+xkbfind de nodeadkeys         # →  layout  de  nodeadkeys  German (no dead keys)  brief=de …
+xkbfind -k option caps        # what Caps Lock can be remapped to
+```
+
+Columns 2 and 3 are the **layout** and **variant**, which is exactly what [`tecla`](https://gitlab.gnome.org/GNOME/tecla) (`paru -S tecla`) takes as `layout+variant`. Look up the name with `xkbfind`, then draw the keyboard to compare it with the keycaps:
+
+```sh
+tecla de+nodeadkeys           # one window per layout, so open several side by side
+tecla gb & tecla us           # e.g. "is this board GB or US?" — compare the  @ " # \ |  keys
+tecla                         # no argument: follows the live session keymap
+```
+
+Same names go into a compositor without a keymap file (Hyprland `kb_layout` / `kb_variant`). Neither tool changes the session layout. To *type-test* one, `sudo xkbcli interactive-evdev --layout de --variant nodeadkeys --short` prints what each key produces (root, or the `input` group, for `/dev/input`).
 
 ## niri — Wayland compositor
 
