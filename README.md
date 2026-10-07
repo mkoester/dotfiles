@@ -901,6 +901,8 @@ cd config-stow && stow -t $HOME xkb && cd ..
 
 - `keymap-us.xkb` — `us(altgr-intl)` base + the umlaut remaps.
 - `keymap-gb.xkb` — `gb` base + the same remaps.
+- `keymap-us-mac.xkb` — `us(mac)` base (Apple ANSI, e.g. a MacBook's built-in board) + the same remaps; Option keeps the rest of the Mac level 3.
+- `keymap-gb-mac.xkb` — `gb(mac)` base (Apple UK ISO: Shift+2 = @, § top left) + the same remaps.
 - `symbols/custom` — an alternative `Mode_switch` variant on the XKB search path (`setxkbmap -I ~/.config/xkb custom`); kept for reference, not used by the compositor path.
 
 **Which variant — or none — is a per-machine choice, made in that machine's private `hypr/local.lua`** in `workstation-private` (alongside its real monitor block and Bluetooth binds), because it depends on the machine's *physical* keyboard:
@@ -911,9 +913,11 @@ hl.config({
 })
 ```
 
+A machine with **two different boards** sets the default above and overrides one by device name — `hl.device({ name = "apple-inc.-apple-keyboard", kb_file = … })` (names from `hyprctl devices`; a name matching nothing is silently ignored, so keep the default on the more common board). mkMac2014 does this.
+
 On the niri fallback the same choice goes in `local.kdl`: `input { keyboard { xkb { file "~/.config/xkb/keymap-us.xkb" } } }`.
 
-The remaps are position-based (`A`/`O`/`U`/`S`), so the umlauts work on any QWERTY board, but the **base** decides the punctuation: use `keymap-us.xkb` on a US keyboard, `keymap-gb.xkb` on a GB one (otherwise `@ " # ~ \ | £` won't match the keycaps). A machine with a **native German keyboard needs neither** — just omit the block. Both keymaps are validated with `xkbcomp` (compile clean).
+The remaps are position-based (`A`/`O`/`U`/`S`), so the umlauts work on any QWERTY board, but the **base** decides the punctuation: use `keymap-us.xkb` on a US keyboard, `keymap-gb.xkb` on a GB one (the `-mac` twins for Apple keyboards) (otherwise `@ " # ~ \ | £` won't match the keycaps). A machine with a **native German keyboard needs neither** — just omit the block. Both keymaps are validated with `xkbcomp` (compile clean).
 
 ### Finding and previewing a layout — `xkbfind` + `tecla`
 

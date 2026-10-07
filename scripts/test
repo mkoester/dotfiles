@@ -651,6 +651,25 @@ else
 	ok "$r" 'an empty client list exits cleanly'
 fi
 
+section 'xkb keymaps'
+if ! command -v xkbcli >/dev/null 2>&1; then
+	skip 'xkb keymaps' 'xkbcli not installed'
+else
+	for km in "$REPO"/config-stow/xkb/.config/xkb/keymap-*.xkb; do
+		b=$(basename "$km")
+		xkbcli compile-keymap --keymap "$km" --test >/dev/null 2>&1 && r=1 || r=0
+		ok "$r" "$b compiles"
+		# The point of every one of them: ä on the a key at level 3, which is Caps (Mod5).
+		grep -qE '^38 +AC01 .* 3 +\[ Mod5 LevelThree \]' <<<"$(xkbcli how-to-type --keymap="$km" ä 2>/dev/null)" && r=1 || r=0
+		ok "$r" "$b: Caps+A gives ä"
+	done
+	# Control: a keymap with an unknown variant must NOT compile, or "compiles" proves nothing.
+	d=$(work); sed 's/include "pc+gb+inet(evdev)"/include "pc+gb(nosuchvariant)+inet(evdev)"/' \
+		"$REPO/config-stow/xkb/.config/xkb/keymap-gb.xkb" >"$d/bad.xkb"
+	xkbcli compile-keymap --keymap "$d/bad.xkb" --test >/dev/null 2>&1 && r=0 || r=1
+	rm -rf "$d"; ok "$r" 'a keymap with a bogus variant is rejected (control)'
+fi
+
 section 'xkbfind — xkbcli list as a table'
 XF="$REPO/config-stow/xkb/.local/bin/xkbfind"
 if ! command -v python3 >/dev/null 2>&1; then
