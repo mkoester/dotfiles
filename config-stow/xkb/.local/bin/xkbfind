@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """xkbfind — search XKB models, layouts and options, one line per entry.
 
-    xkbfind [-k model,layout,option] [-s] [--exotic] [TERM...]
+    xkbfind [-k model,layout,option] [-s] [-H] [--exotic] [TERM...]
 
 Every TERM must match (AND), case-insensitively. By default a term must equal a whole WORD of
 some field — so `de` finds the German layouts, their DE country code and the `de` brief, without
@@ -25,6 +25,7 @@ import subprocess
 import sys
 
 KINDS = ("model", "layout", "option")
+HEADER = ["KIND", "NAME", "VARIANT", "DESCRIPTION", "INFO"]
 SECTION_KIND = {"models": "model", "layouts": "layout", "option_groups": "group"}
 
 
@@ -103,6 +104,7 @@ def main(argv=None):
     ap.add_argument("terms", nargs="*", help="all must match (whole words unless -s)")
     ap.add_argument("-k", "--kind", default=",".join(KINDS), help="comma list of: model,layout,option")
     ap.add_argument("-s", "--substring", action="store_true", help="match substrings, not whole words")
+    ap.add_argument("-H", "--no-header", action="store_true", help="omit the column header line")
     ap.add_argument("--exotic", action="store_true", help="include the exotic (extra) rulesets")
     ap.add_argument("--input", help="read this file instead of running xkbcli (for tests)")
     a = ap.parse_args(argv)
@@ -120,7 +122,8 @@ def main(argv=None):
     terms = [t.lower() for t in a.terms]
     rows = [r for kind, f in parse(text) if kind in kinds
             if matches(f, terms, a.substring) for r in [row(kind, f)]]
-    sys.stdout.write(table(rows))
+    # No header on an empty result: a lone header line would read as a match.
+    sys.stdout.write(table(rows if a.no_header or not rows else [HEADER] + rows))
     return 0 if rows else 1
 
 

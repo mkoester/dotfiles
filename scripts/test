@@ -636,7 +636,9 @@ XF="$REPO/config-stow/xkb/.local/bin/xkbfind"
 if ! command -v python3 >/dev/null 2>&1; then
 	skip 'xkbfind' 'python3 not installed'
 else
-	xf() { python3 "$XF" --input "$REPO/tests/fixtures/xkbfind-list.txt" "$@"; }
+	# -H everywhere below, so counts and column picks see data rows only; the header has its own cases.
+	xfh() { python3 "$XF" --input "$REPO/tests/fixtures/xkbfind-list.txt" "$@"; }
+	xf() { xfh -H "$@"; }
 	n() { xf "$@" | wc -l; }
 
 	is "$(n)" '10' 'no terms lists every model, layout and option (groups are not rows)'
@@ -659,6 +661,12 @@ else
 	grep -q 'group=grp$' <<<"$(xf caps_toggle)" && r=1 || r=0; ok "$r" 'layout-specific: false prints nothing'
 	xf nomatchxyz >/dev/null && r=0 || r=1; ok "$r" 'no match exits non-zero'
 	xf -k bogus >/dev/null 2>&1 && r=0 || r=1; ok "$r" 'an unknown --kind is rejected'
+	is "$(xfh de | head -1 | tr -s ' ')" 'KIND NAME VARIANT DESCRIPTION INFO' 'the header is on by default'
+	is "$(xfh de | wc -l)" '3' 'header + the two data rows'
+	is "$(xfh nomatchxyz | wc -l)" '0' 'no header on an empty result'
+	# Aligned with the data: DESCRIPTION starts in the same column as the descriptions do.
+	is "$(xfh de | awk 'NR==1{print index($0,"DESCRIPTION")}')" "$(xfh de | awk 'NR==2{print index($0,"German")}')" \
+		'the header aligns with its columns'
 fi
 
 # ── gitar ────────────────────────────────────────────────────────────────────

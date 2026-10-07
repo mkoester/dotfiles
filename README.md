@@ -917,7 +917,7 @@ The remaps are position-based (`A`/`O`/`U`/`S`), so the umlauts work on any QWER
 
 ### Finding and previewing a layout — `xkbfind` + `tecla`
 
-`xkbfind` turns `xkbcli list` into one line per model, layout and option. Terms are ANDed, case-insensitive, and match **whole words** (`-s` for substrings, `-k layout|model|option` to narrow):
+`xkbfind` turns `xkbcli list` into one line per model, layout and option. Terms are ANDed, case-insensitive, and match **whole words** (`-s` for substrings, `-k layout|model|option` to narrow, `-H` to drop the header line for piping):
 
 ```sh
 xkbfind -k layout de          # every German layout, incl. Swiss/Austrian via their `de` brief
