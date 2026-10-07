@@ -902,7 +902,10 @@ cd config-stow && stow -t $HOME xkb && cd ..
 - `keymap-us.xkb` — `us(altgr-intl)` base + the umlaut remaps.
 - `keymap-gb.xkb` — `gb` base + the same remaps.
 - `keymap-us-mac.xkb` — `us(mac)` base (Apple ANSI, e.g. a MacBook's built-in board) + the same remaps; Option keeps the rest of the Mac level 3.
-- `keymap-gb-mac.xkb` — `gb(mac)` base (Apple UK ISO: Shift+2 = @, § top left) + the same remaps.
+- `keymap-us-mac-iso.xkb` — `us(mac-iso)` base (Apple "English, ABC, ISO": ISO shape, Shift+3 = #, § top left, ` beside left Shift) + the same remaps.
+- `keymap-gb-mac.xkb` — `gb(mac)` base (Apple UK ISO: Shift+3 = £, # on Option+3) + the same remaps.
+
+**Telling the two Apple ISO boards apart:** they differ visibly only on the `3` key — `#` printed → `us-mac-iso`, `£` → `gb-mac`. tecla's picture of either looks right at a glance.
 - `symbols/custom` — an alternative `Mode_switch` variant on the XKB search path (`setxkbmap -I ~/.config/xkb custom`); kept for reference, not used by the compositor path.
 
 **Which variant — or none — is a per-machine choice, made in that machine's private `hypr/local.lua`** in `workstation-private` (alongside its real monitor block and Bluetooth binds), because it depends on the machine's *physical* keyboard:
