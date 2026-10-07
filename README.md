@@ -892,11 +892,11 @@ If the package ships no unit (`pacman -Ql kanshi | grep systemd`), fall back to 
 
 ## keyboard layout — Caps-Lock → umlauts (xkb)
 
-The `config-stow/xkb/` package carries custom keymaps that repurpose **Caps-Lock as a Level-3 modifier** for the German umlauts (Caps + `A`/`O`/`U`/`S` → ä/ö/ü/ß). Two base variants, both generic and free of hardware identifiers, so they're tracked for **all machines** and stowed on any `DF_DESKTOP` machine — the files just need to be on disk; a machine picks one (or none) in its compositor config:
+The `config-stow/xkb/` package carries custom keymaps that repurpose **Caps-Lock as a Level-3 modifier** for the German umlauts (Caps + `A`/`O`/`U`/`S` → ä/ö/ü/ß). Several base variants (one per physical keyboard type), all generic and free of hardware identifiers, so they're tracked for **all machines** and stowed on any `DF_DESKTOP` machine — the files just need to be on disk; a machine picks one (or none) in its compositor config:
 
 ```sh
 cd config-stow && stow -t $HOME xkb && cd ..
-# → ~/.config/xkb/{keymap-us.xkb, keymap-gb.xkb, symbols/custom}, ~/.local/bin/xkbfind
+# → ~/.config/xkb/{keymap-*.xkb, symbols/custom}, ~/.local/bin/xkbfind
 ```
 
 - `keymap-us.xkb` — `us(altgr-intl)` base + the umlaut remaps.
@@ -905,8 +905,9 @@ cd config-stow && stow -t $HOME xkb && cd ..
 - `keymap-us-mac-iso.xkb` — `us(mac-iso)` base (Apple "English, ABC, ISO": ISO shape, Shift+3 = #, § top left, ` beside left Shift) + the same remaps.
 - `keymap-gb-mac.xkb` — `gb(mac)` base (Apple UK ISO: Shift+3 = £, # on Option+3) + the same remaps.
 
-**Telling the two Apple ISO boards apart:** they differ visibly only on the `3` key — `#` printed → `us-mac-iso`, `£` → `gb-mac`. tecla's picture of either looks right at a glance.
 - `symbols/custom` — an alternative `Mode_switch` variant on the XKB search path (`setxkbmap -I ~/.config/xkb custom`); kept for reference, not used by the compositor path.
+
+**Telling the two Apple ISO boards apart:** they differ visibly only on the `3` key — `#` printed → `us-mac-iso`, `£` → `gb-mac`. tecla's picture of either looks right at a glance.
 
 **Which variant — or none — is a per-machine choice, made in that machine's private `hypr/local.lua`** in `workstation-private` (alongside its real monitor block and Bluetooth binds), because it depends on the machine's *physical* keyboard:
 
@@ -920,7 +921,7 @@ A machine with **two different boards** sets the default above and overrides one
 
 On the niri fallback the same choice goes in `local.kdl`: `input { keyboard { xkb { file "~/.config/xkb/keymap-us.xkb" } } }`.
 
-The remaps are position-based (`A`/`O`/`U`/`S`), so the umlauts work on any QWERTY board, but the **base** decides the punctuation: use `keymap-us.xkb` on a US keyboard, `keymap-gb.xkb` on a GB one (the `-mac` twins for Apple keyboards) (otherwise `@ " # ~ \ | £` won't match the keycaps). A machine with a **native German keyboard needs neither** — just omit the block. Both keymaps are validated with `xkbcomp` (compile clean).
+The remaps are position-based (`A`/`O`/`U`/`S`), so the umlauts work on any QWERTY board, but the **base** decides the punctuation: use `keymap-us.xkb` on a US keyboard, `keymap-gb.xkb` on a GB one (the `-mac` twins for Apple keyboards) (otherwise `@ " # ~ \ | £` won't match the keycaps). A machine with a **native German keyboard needs none** — just omit the block. `scripts/test` compiles every `keymap-*.xkb` and checks Caps+A → ä, so a new one is covered by dropping it in.
 
 ### Finding and previewing a layout — `xkbfind` + `tecla`
 
@@ -941,6 +942,31 @@ tecla                         # no argument: follows the live session keymap
 ```
 
 Same names go into a compositor without a keymap file (Hyprland `kb_layout` / `kb_variant`). Neither tool changes the session layout. To *type-test* one, `sudo xkbcli interactive-evdev --layout de --variant nodeadkeys --short` prints what each key produces (root, or the `input` group, for `/dev/input`).
+
+### Setting up another keyboard — the procedure
+
+How mkMac2014's two Apple boards were matched (2026-10-07); repeat it per keyboard. The order matters: **identify from the keycaps, not from a picture.**
+
+1. **Read the board itself.** Three tells settle most cases:
+   - **Shape** — a key between left Shift and `Z` means **ISO**; none means **ANSI**.
+   - **The `3` key** — `#` above it is US-family, `£` is UK. On Apple ISO boards this is the *only* visible difference between ABC ISO (`us(mac-iso)`) and UK (`gb(mac)`).
+   - **The `2` key and top-left key** — `@` vs `"` on Shift+2; `` ` `` vs `§` top left. Apple boards also have Option/Command where a PC has Alt/Win.
+2. **List candidates** — `xkbfind -k layout macintosh`, `xkbfind -k layout gb`, `xkbfind -k layout en` (whole-word match, so short codes work).
+3. **Compare in tecla** — `tecla us+mac-iso & tecla gb+mac`. Use it for *symbols* only: tecla always draws the `pc105` model, so **every layout gets the ISO extra key**, and there is no Fn key on any of them. A layout can look right at a glance and still be wrong on one key — `gb+mac` passed this step for a board whose `3` shows `#`.
+4. **Pick or make a keymap.** If a `keymap-*.xkb` above fits, use it. Otherwise copy the closest one, change only the `include "pc+<layout>(<variant>)+inet(evdev)"` line and its comment, and check the tell keys offline before deploying:
+   ```sh
+   xkbcli how-to-type --keymap=config-stow/xkb/.config/xkb/keymap-NEW.xkb '#'   # which key + level
+   ./scripts/test                                                                # compiles + Caps+A → ä
+   ```
+5. **Wire it up** in that machine's `workstation-private/<host>/hypr/local.lua`: the `kb_file` default goes on the most-used board, and every other board gets an `hl.device` override. Device names come from `hyprctl devices`. **One physical keyboard can be several devices** — mkMac2014's external board is `…-apple-keyboard` *and* `…-apple-keyboard-1`, and naming only the first changed nothing — so name all of them (a loop is fine). A name that matches nothing is silently ignored. Validate offline with `Hyprland --verify-config` (recipe in the homelab workspace, `Workstation-Documentation/desktop/hyprland-dms-handoff.md`).
+6. **Deploy and confirm per device**, not just by typing on one board:
+   ```sh
+   stow -R -t ~ -d ~/src/dotfiles/config-stow xkb && hyprctl reload
+   hyprctl -j devices | jq -r '.keyboards[] | "\(.name)\t\(.active_keymap)"'
+   ```
+   then type the tell keys (Shift+2, Shift+3, top-left, Caps+A) on each board.
+
+Untested so far: some Apple ISO boards report `§` and `` ` `` swapped (the kernel's `hid_apple` `iso_layout` parameter). mkMac2014's external board was not checked for it specifically; if a board does, the fix belongs in the kernel parameter, not in a keymap.
 
 ## niri — Wayland compositor
 
