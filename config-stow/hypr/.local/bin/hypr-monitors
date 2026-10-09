@@ -449,5 +449,30 @@ def main():
     return subprocess.run(["kanshictl", "switch", name]).returncode
 
 
+def hold_on_failure(run, interactive):
+    """Run main(); on failure in the popup, keep the terminal open until a keypress.
+
+    The popup is a ghostty that closes the moment this script exits, so without this every
+    error -- above all a refused `kanshictl switch` -- vanishes unread and the keybind looks
+    like it did nothing. That hid a broken kanshi config on mkDesktop (2026-10-06): the make
+    string no longer matched, and every pick failed silently.
+    """
+    try:
+        rc = run()
+    except SystemExit as exc:          # save_profile & co. abort via SystemExit("ERROR: ...")
+        if isinstance(exc.code, str):
+            print(exc.code, file=sys.stderr)
+            rc = 1
+        else:
+            rc = exc.code or 0
+    if rc and interactive:
+        print(f"\nhypr-monitors failed (exit {rc}). Press Enter to close.", file=sys.stderr)
+        try:
+            input()
+        except EOFError:
+            pass
+    return rc
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(hold_on_failure(main, "--fzf" in sys.argv[1:]))

@@ -892,24 +892,81 @@ If the package ships no unit (`pacman -Ql kanshi | grep systemd`), fall back to 
 
 ## keyboard layout — Caps-Lock → umlauts (xkb)
 
-The `config-stow/xkb/` package carries custom keymaps that repurpose **Caps-Lock as a Level-3 modifier** for the German umlauts (Caps + `A`/`O`/`U`/`S` → ä/ö/ü/ß). Two base variants, both generic and free of hardware identifiers, so they're tracked for **all machines** and stowed on any `DF_DESKTOP` machine — the files just need to be on disk; a machine picks one (or none) in niri:
+The `config-stow/xkb/` package carries custom keymaps that repurpose **Caps-Lock as a Level-3 modifier** for the German umlauts (Caps + `A`/`O`/`U`/`S` → ä/ö/ü/ß). Several base variants (one per physical keyboard type), all generic and free of hardware identifiers, so they're tracked for **all machines** and stowed on any `DF_DESKTOP` machine — the files just need to be on disk; a machine picks one (or none) in its compositor config:
 
 ```sh
 cd config-stow && stow -t $HOME xkb && cd ..
-# → ~/.config/xkb/{keymap-us.xkb, keymap-gb.xkb, symbols/custom}
+# → ~/.config/xkb/{keymap-*.xkb, symbols/custom}, ~/.local/bin/xkbfind
 ```
 
 - `keymap-us.xkb` — `us(altgr-intl)` base + the umlaut remaps.
 - `keymap-gb.xkb` — `gb` base + the same remaps.
-- `symbols/custom` — an alternative `Mode_switch` variant on the XKB search path (`setxkbmap -I ~/.config/xkb custom`); kept for reference, not used by the niri path.
+- `keymap-us-mac.xkb` — `us(mac)` base (Apple ANSI, e.g. a MacBook's built-in board) + the same remaps; Option keeps the rest of the Mac level 3.
+- `keymap-us-mac-iso.xkb` — `us(mac-iso)` base (Apple "English, ABC, ISO": ISO shape, Shift+3 = #, § top left, ` beside left Shift) + the same remaps.
+- `keymap-gb-mac.xkb` — `gb(mac)` base (Apple UK ISO: Shift+3 = £, # on Option+3) + the same remaps.
 
-**Which variant — or none — is a per-machine choice, made in that machine's private `local.kdl`** (alongside its real `output` blocks and Bluetooth binds), because it depends on the machine's *physical* keyboard:
+- `symbols/custom` — an alternative `Mode_switch` variant on the XKB search path (`setxkbmap -I ~/.config/xkb custom`); kept for reference, not used by the compositor path.
 
-```kdl
-input { keyboard { xkb { file "~/.config/xkb/keymap-us.xkb" } } }   // US board → keymap-us
+**Telling the two Apple ISO boards apart:** they differ visibly only on the `3` key — `#` printed → `us-mac-iso`, `£` → `gb-mac`. tecla's picture of either looks right at a glance.
+
+**Which variant — or none — is a per-machine choice, made in that machine's private `hypr/local.lua`** in `workstation-private` (alongside its real monitor block and Bluetooth binds), because it depends on the machine's *physical* keyboard:
+
+```lua
+hl.config({
+    input = { kb_file = os.getenv("HOME") .. "/.config/xkb/keymap-us.xkb" },   -- US board → keymap-us
+})
 ```
 
-The remaps are position-based (`A`/`O`/`U`/`S`), so the umlauts work on any QWERTY board, but the **base** decides the punctuation: use `keymap-us.xkb` on a US keyboard, `keymap-gb.xkb` on a GB one (otherwise `@ " # ~ \ | £` won't match the keycaps). A machine with a **native German keyboard needs neither** — just omit the block. Both keymaps are validated with `xkbcomp` (compile clean).
+A machine with **two different boards** sets the default above and overrides one by device name — `hl.device({ name = "apple-inc.-apple-keyboard", kb_file = … })` (names from `hyprctl devices`; a name matching nothing is silently ignored, so keep the default on the more common board). mkMac2014 does this.
+
+On the niri fallback the same choice goes in `local.kdl`: `input { keyboard { xkb { file "~/.config/xkb/keymap-us.xkb" } } }`.
+
+The remaps are position-based (`A`/`O`/`U`/`S`), so the umlauts work on any QWERTY board, but the **base** decides the punctuation: use `keymap-us.xkb` on a US keyboard, `keymap-gb.xkb` on a GB one (the `-mac` twins for Apple keyboards) (otherwise `@ " # ~ \ | £` won't match the keycaps). A machine with a **native German keyboard needs none** — just omit the block. `scripts/test` compiles every `keymap-*.xkb` and checks Caps+A → ä, so a new one is covered by dropping it in.
+
+### Finding and previewing a layout — `xkbfind` + `tecla`
+
+`xkbfind` turns `xkbcli list` into one line per model, layout and option. Terms are ANDed, case-insensitive, and match **whole words** (`-s` for substrings, `-k layout|model|option` to narrow, `-H` to drop the header line for piping):
+
+```sh
+xkbfind -k layout de          # every German layout, incl. Swiss/Austrian via their `de` brief
+xkbfind de nodeadkeys         # →  layout  de  nodeadkeys  German (no dead keys)  brief=de …
+xkbfind -k option caps        # what Caps Lock can be remapped to
+```
+
+Columns 2 and 3 are the **layout** and **variant**, which is exactly what [`tecla`](https://gitlab.gnome.org/GNOME/tecla) (`paru -S tecla`) takes as `layout+variant`. Look up the name with `xkbfind`, then draw the keyboard to compare it with the keycaps:
+
+```sh
+tecla de+nodeadkeys           # one window per layout, so open several side by side
+tecla gb & tecla us           # e.g. "is this board GB or US?" — compare the  @ " # \ |  keys
+tecla                         # no argument: follows the live session keymap
+```
+
+Same names go into a compositor without a keymap file (Hyprland `kb_layout` / `kb_variant`). Neither tool changes the session layout. To *type-test* one, `sudo xkbcli interactive-evdev --layout de --variant nodeadkeys --short` prints what each key produces (root, or the `input` group, for `/dev/input`).
+
+### Setting up another keyboard — the procedure
+
+How mkMac2014's two Apple boards were matched (2026-10-07); repeat it per keyboard. The order matters: **identify from the keycaps, not from a picture.**
+
+1. **Read the board itself.** Three tells settle most cases:
+   - **Shape** — a key between left Shift and `Z` means **ISO**; none means **ANSI**.
+   - **The `3` key** — `#` above it is US-family, `£` is UK. On Apple ISO boards this is the *only* visible difference between ABC ISO (`us(mac-iso)`) and UK (`gb(mac)`).
+   - **The `2` key and top-left key** — `@` vs `"` on Shift+2; `` ` `` vs `§` top left. Apple boards also have Option/Command where a PC has Alt/Win.
+2. **List candidates** — `xkbfind -k layout macintosh`, `xkbfind -k layout gb`, `xkbfind -k layout en` (whole-word match, so short codes work).
+3. **Compare in tecla** — `tecla us+mac-iso & tecla gb+mac`. Use it for *symbols* only: tecla always draws the `pc105` model, so **every layout gets the ISO extra key**, and there is no Fn key on any of them. A layout can look right at a glance and still be wrong on one key — `gb+mac` passed this step for a board whose `3` shows `#`.
+4. **Pick or make a keymap.** If a `keymap-*.xkb` above fits, use it. Otherwise copy the closest one, change only the `include "pc+<layout>(<variant>)+inet(evdev)"` line and its comment, and check the tell keys offline before deploying:
+   ```sh
+   xkbcli how-to-type --keymap=config-stow/xkb/.config/xkb/keymap-NEW.xkb '#'   # which key + level
+   ./scripts/test                                                                # compiles + Caps+A → ä
+   ```
+5. **Wire it up** in that machine's `workstation-private/<host>/hypr/local.lua`: the `kb_file` default goes on the most-used board, and every other board gets an `hl.device` override. Device names come from `hyprctl devices`. **One physical keyboard can be several devices** — mkMac2014's external board is `…-apple-keyboard` *and* `…-apple-keyboard-1`, and naming only the first changed nothing — so name all of them (a loop is fine). A name that matches nothing is silently ignored. Validate offline with `Hyprland --verify-config` (recipe in the homelab workspace, `Workstation-Documentation/desktop/hyprland-dms-handoff.md`).
+6. **Deploy and confirm per device**, not just by typing on one board:
+   ```sh
+   stow -R -t ~ -d ~/src/dotfiles/config-stow xkb && hyprctl reload
+   hyprctl -j devices | jq -r '.keyboards[] | "\(.name)\t\(.active_keymap)"'
+   ```
+   then type the tell keys (Shift+2, Shift+3, top-left, Caps+A) on each board.
+
+Untested so far: some Apple ISO boards report `§` and `` ` `` swapped (the kernel's `hid_apple` `iso_layout` parameter). mkMac2014's external board was not checked for it specifically; if a board does, the fix belongs in the kernel parameter, not in a keymap.
 
 ## niri — Wayland compositor
 
@@ -975,13 +1032,10 @@ The Quickshell-based desktop shell: bar, launcher, notifications, settings GUI, 
 
 **Its own install question, `DF_DMS`, not part of `DF_HYPR`.** DMS ships a niri flavour as well as a Hyprland one, so "which shell" and "which compositor" are separate axes: a niri machine can adopt DMS without Hyprland, and a Hyprland machine can skip it.
 
-Packaging is the reason the question has to come *after* the compositor questions. `dms-shell` lives in **`extra`, not the AUR**, and depends on a virtual `dms-shell-compositor` provided by two 0-byte metapackages — so installing the base alone does not resolve, and exactly one variant must come with it. Both may be installed side by side on a machine carrying both sessions:
+The question still comes *after* the compositor questions, because DMS needs one to run under but no longer pulls one in. `dms-shell` lives in **`extra`, not the AUR**, and is a single package since 1.6.2-2 (2026-10): it replaced the old `dms-shell-hyprland` / `dms-shell-niri` metapackages, which no longer exist — `paru -S` on them is `target not found`, and on an upgrade pacman offers to replace them (answer yes; they owned no files).
 
 ```sh
-paru -S --needed dms-shell-hyprland     # pulls dms-shell + hyprland
-```
-```sh
-paru -S --needed dms-shell-niri         # pulls dms-shell + niri
+paru -S --needed dms-shell     # the compositor comes from the DF_HYPR / DF_NIRI steps
 ```
 
 **Nothing here is stowed.** The ownership rule for this setup is *tracked = hand-written, untracked = GUI-written*: `hyprland.lua` is common and public, `local.lua` is per-machine and private, and `~/.config/hypr/dms/*.lua` is machine-local and **untracked**, written by `dms setup` and by the DMS Settings GUI (Shortcuts / Displays / Theme / Window Rules). Nothing DMS writes is a symlink into a repo, so it can never dirty a tracked file or silently replace a stow link. `install.sh` only creates the directory.
