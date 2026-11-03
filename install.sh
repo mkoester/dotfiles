@@ -1137,6 +1137,10 @@ if ask_yn DF_DEV "Dev machine (gh + glab forge CLIs)?"; then
 	# whose fleet profile it fronts.
 	link_omz oh-my-zsh-custom fleet-vault.zsh
 
+	# Codex's shared sandbox policy is managed as a stow package. The existing local
+	# config, if any, is backed up by stow's conflict handler before this link is created.
+	stow_pkg "$HOME" codex
+
 	# herdr's config rides on the same flag for the same reason: it is the terminal workspace
 	# manager *for* those AI agents. Tracked since 2026-08-10 — it used to be hand-created per
 	# machine, so settings silently differed between hosts (mkMac2014 had only

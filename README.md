@@ -523,6 +523,8 @@ The two git-forge CLIs: [`gh`](https://cli.github.com) for GitHub and [`glab`](h
 
 Its own question rather than part of `DF_NODE`: *writes JavaScript* and *files issues / creates repos* are different machine classes — the NAS is the standing counter-example (Node yes, forge CLIs no).
 
+When `DF_DEV=1`, `install.sh` also stows `config-stow/codex/` to install Codex's shared `workspace-write` policy: approval on request, shell network disabled, temporary directories excluded, and the OKF vault as the one additional writable root. The machine's model and trusted-project entries are intentionally not in the public dotfiles repo.
+
 ```sh
 paru -S github-cli glab          # brew: gh glab
 gh auth login                    # GitHub
