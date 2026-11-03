@@ -107,17 +107,10 @@ sudo ufw allow from <lan-v4-cidr> to any port 22 proto tcp
 sudo ufw allow from <lan-v6-prefix>::/64 to any port 22 proto tcp
 ```
 
-If you open port 22 unscoped on a laptop that leaves the house, the hardening drop-in stops being optional. Get your pubkey into `~/.ssh/authorized_keys` and **verify a key login before restarting sshd**, or you lock yourself out of a machine you only reach over the network:
+The sshd drop-in itself is a per-fleet policy, not part of this repo: mine allows `root` by **password only** (long, random, unique per host — a break-glass account, never a key) and my user by key or password, with a short PIN for `sudo` and `pam_faillock` behind it. The private overlay's server baseline carries the exact drop-in and its checks. Whatever policy you pick, **keep one session open and verify a login from a second one before closing it**, or you lock yourself out of a machine you only reach over the network:
 
 ```sh
-sudo tee /etc/ssh/sshd_config.d/10-hardening.conf <<'EOF'
-PermitRootLogin no
-PasswordAuthentication no
-KbdInteractiveAuthentication no
-EOF
-```
-```sh
-sudo sshd -T | grep -iE 'passwordauthentication|permitrootlogin'
+sudo sshd -t && sudo sshd -T | grep -iE 'passwordauthentication|permitrootlogin|authenticationmethods'
 ```
 
 **3. The Niri edition drops a shell config into `/etc/skel`, and it blocks `stow`.** Installing Niri as the desktop pulls in a complete Quickshell-based shell (Noctalia), whose `config.kdl` is copied into your home at user creation. `install.sh` then aborts stowing the `niri` package with *"cannot stow … over existing target … since neither a link nor a directory"*. `pacman -Qo` reports **no package owns** the file — it came from `/etc/skel`, so moving it aside is safe and nothing will restore it:
