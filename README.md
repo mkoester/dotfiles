@@ -516,7 +516,7 @@ The two git-forge CLIs: [`gh`](https://cli.github.com) for GitHub and [`glab`](h
 
 Its own question rather than part of `DF_NODE`: *writes JavaScript* and *files issues / creates repos* are different machine classes — the NAS is the standing counter-example (Node yes, forge CLIs no).
 
-When `DF_DEV=1`, `install.sh` also stows `config-stow/codex/` to install Codex's shared `workspace-write` policy: approval on request, shell network disabled, temporary directories excluded, and the OKF vault as the one additional writable root. The machine's model and trusted-project entries are intentionally not in the public dotfiles repo.
+When `DF_DEV=1`, `install.sh` also installs Codex's shared `workspace-write` policy as **`/etc/codex/config.toml`** (from `system/codex/`, copied as root): approval on request, shell network disabled, temporary directories excluded, the OKF vault as the additional writable root, and the vault's hooks. It is Codex's *system* layer, not a stowed `~/.codex/config.toml`, because Codex writes that user file itself (project trust, hook hashes) — stowed, every write dirtied this repo. The user file stays machine-local and untracked, holding the model and trusted projects. Codex merges the layers per key, but **an array in the user file replaces the shared one whole**, so don't repeat shared keys there — `writable_roots` in particular.
 
 ```sh
 paru -S github-cli glab          # brew: gh glab

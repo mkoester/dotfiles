@@ -1137,9 +1137,22 @@ if ask_yn DF_DEV "Dev machine (gh + glab forge CLIs)?"; then
 	# whose fleet profile it fronts.
 	link_omz oh-my-zsh-custom fleet-vault.zsh
 
-	# Codex's shared sandbox policy is managed as a stow package. The existing local
-	# config, if any, is backed up by stow's conflict handler before this link is created.
-	stow_pkg "$HOME" codex
+	# Codex's shared sandbox policy and hooks go in its SYSTEM layer, copied as root. Not
+	# stowed: Codex writes ~/.codex/config.toml itself (trust, hook hashes), so a stowed
+	# user file dirtied this public repo. That file stays machine-local and untracked; the
+	# reasoning and the layer-merge rules are in system/codex/config.toml.
+	CODEX_SYS_SRC="$DOTFILES_REPO/system/codex/config.toml"
+	CODEX_SYS_DST=/etc/codex/config.toml
+	if cmp -s "$CODEX_SYS_SRC" "$CODEX_SYS_DST" 2>/dev/null; then
+		info "  codex: system policy already current"
+	else
+		run_sh "sudo install -d -m 0755 /etc/codex && sudo install -m 0644 \"$CODEX_SYS_SRC\" \"$CODEX_SYS_DST\""
+	fi
+	# A leftover link from the old stow package dangles once that package is gone.
+	if [ -L "$HOME/.codex/config.toml" ] && [ ! -e "$HOME/.codex/config.toml" ]; then
+		warn "~/.codex/config.toml is a dangling link from the old codex stow package —"
+		warn "  remove it; Codex recreates the file on its next write."
+	fi
 
 	# herdr's config rides on the same flag for the same reason: it is the terminal workspace
 	# manager *for* those AI agents. Tracked since 2026-08-10 — it used to be hand-created per
