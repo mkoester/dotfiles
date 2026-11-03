@@ -263,6 +263,16 @@ usage_block() {
 
 usage_block
 
+# ── codex usage ───────────────────────────────────────────────────────────────
+# The helper caches its App Server snapshot, so watch's per-second redraw does
+# not start a new authenticated request each time.
+codex_usage_helper="${BASH_SOURCE[0]%/*}/gitaw-codex-usage"
+if [ -x "$codex_usage_helper" ]; then
+	"$codex_usage_helper" "$width"
+elif command -v gitaw-codex-usage >/dev/null 2>&1; then
+	gitaw-codex-usage "$width"
+fi
+
 # ── repos ─────────────────────────────────────────────────────────────────────
 rule repos
 if command -v gita-legend >/dev/null 2>&1; then

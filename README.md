@@ -735,6 +735,13 @@ It **never writes anything Claude Code owns**, and it **cannot renew the token**
 
 Every part degrades on its own: without `python3`, without any cached figures, or without `gita-legend`, that block is simply omitted and the repo list still renders.
 
+**Codex figures** come from Codex's App Server `account/rateLimits/read` method, using the local
+Codex login without reading or copying its credentials. `gitaw-codex-usage` caches the response
+for five minutes because `watch` redraws the panel every second; failed refreshes keep the last
+snapshot and are also rate-limited. The bars show **remaining** usage (`100 - usedPercent`) for
+the primary and secondary Codex windows, with the server-provided reset timestamps. If Codex is
+not installed, logged in, or able to refresh, the block is omitted when there is no cached data.
+
 ### Rebuilding the groups
 
 `gita add` is **add-only**: it skips repos already in `~/.config/gita/repos.csv` ("No new repos found!"), and a repo's group is assigned only as a side effect of *adding* it. So an add-only `gitar` could neither re-group a registered repo nor forget one whose directory is gone — on an established machine it was a pure no-op.
