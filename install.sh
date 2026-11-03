@@ -648,11 +648,13 @@ fi
 # "which shell" and "which compositor" are separate axes, and a machine may run either without
 # the other.
 #
-# Packaging, read off the repos (2026-10-05) rather than assumed: `dms-shell` lives in **extra**,
-# not the AUR, and is a single package. Until 1.6.2-2 it needed one of the 0-byte metapackages
-# `dms-shell-hyprland` / `dms-shell-niri`; those are gone from the repos (`dms-shell` now
-# Replaces them, without Provides, so `-S dms-shell-hyprland` is `target not found`). DMS no
-# longer pulls in a compositor — the DF_NIRI / DF_HYPR steps above install those.
+# Packaging, read off the repos (2026-11-03) rather than assumed: at 2.0.0 the package was renamed
+# `dux-shell` (in **extra** and cachyos-extra-v3, not the AUR). It Provides `dms-shell=2.0.0` and
+# Conflicts/Replaces `dms-shell`, `dms-shell-hyprland`, `dms-shell-niri`. INSTALL IT BY THE NEW
+# NAME: the `cachyos` repo still carries a stale literal `dms-shell` 2.0.0-1, so
+# `-S --needed dms-shell` resolves to that package instead of the installed provider and aborts on
+# the conflict. The binary is still `dms` and the unit still `dms.service`. DMS no longer pulls in
+# a compositor — the DF_NIRI / DF_HYPR steps above install those.
 if ask_yn DF_DMS "DankMaterialShell (DMS) desktop shell?"; then
 	step "  dms: shell"
 	case "$PM" in
@@ -663,7 +665,7 @@ if ask_yn DF_DMS "DankMaterialShell (DMS) desktop shell?"; then
 				warn "DF_DMS is on but neither Niri nor Hyprland was enabled — DMS has no compositor"
 				warn "  to run under. Enable one and re-run, or set DF_DMS=0."
 			fi
-			pm_install dms-shell ;;
+			pm_install dux-shell ;;
 		*)  info "install DankMaterialShell from its own docs on this distro." ;;
 	esac
 	# DMS's config fragments are machine-local and UNTRACKED by design (the GUI writes them), so
