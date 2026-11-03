@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  macOS counterpart of systemd-user/.../gita-fetch.{service,timer}. install.sh COPIES this into
+  ~/Library/LaunchAgents rather than linking it, like the Syncthing agent and `brew services`.
+
+  launchd expands neither ~ nor $HOME in a plist, so the command runs through /bin/sh -c to keep
+  the home path out of this file. PATH is launchd's minimal default otherwise: ~/.local/bin for
+  pipx's gita, then MacPorts and Homebrew for git. The log keeps the last run only.
+
+  Interval mirrors the timer: RunAtLoad for OnStartupSec (at login, without the 2 min delay),
+  StartInterval for OnUnitActiveSec=5min. A run missed during sleep fires on wake, like
+  Persistent=true. launchd has nothing like RandomizedDelaySec or TimeoutStartSec.
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>de.mirkokoester.gita-fetch</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/bin/sh</string>
+		<string>-c</string>
+		<string>PATH="$HOME/.local/bin:/opt/local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH" exec gita fetch &gt;"$HOME/Library/Logs/gita-fetch.log" 2&gt;&amp;1</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StartInterval</key>
+	<integer>300</integer>
+	<key>ProcessType</key>
+	<string>Background</string>
+</dict>
+</plist>

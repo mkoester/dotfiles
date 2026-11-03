@@ -165,5 +165,11 @@ upgrade = true              # actually apply fwupd firmware updates (default: on
 # topgrade.d), whose `port upgrade outdated` falls back to a source build whenever an archive is
 # missing — rust 1.99 took >3.5 h on mkMac2017 and never finished. -b refuses source builds, -p
 # lets the rest proceed past them, -N stops any prompt from stalling the run; the trailing
-# `port outdated` lists what was deferred. Build those by hand: `sudo port -u upgrade outdated`.
-"macports: binary-only upgrade" = "command -v port >/dev/null || exit 0; sudo port selfupdate && sudo port -N -b -p -u upgrade outdated; port outdated"
+# `port outdated` lists what was deferred. Build those by hand: `sudo port upgrade outdated`.
+# NO -u HERE: combined with -p, a port whose new archive 404'd still had its old version
+# uninstalled (pnpm 12.10.1 -> 12.15.0, 2026-10-25), leaving no pnpm at all. Without -u the
+# old version stays on disk. Clear inactive versions by hand once nothing is half-upgraded:
+# `port installed inactive`, then `sudo port uninstall inactive`.
+# The exit code is the upgrade's, not the listing's — before, `; port outdated` reported OK
+# over a failed upgrade.
+"macports: binary-only upgrade" = "command -v port >/dev/null || exit 0; sudo port selfupdate && sudo port -N -b -p upgrade outdated; rc=$?; port outdated; exit $rc"

@@ -1092,9 +1092,18 @@ hl.window_rule({ match = { class = "^org-tinymediamanager-TinyMediaManager$", fl
 -- address while a third window (the terminal) held focus moved the right one. Worth having checked
 -- — every earlier probe had targeted the focused window, so "the field works" and "dispatchers act
 -- on the active window" fit the evidence equally until that test.
+--
+-- MATCH ONLY THE "…?" PROMPTS, never the bare "Send As Alias" prefix. The extension's options page
+-- opens as a TAB, and the main window wears the active tab's title — `Send As Alias - Settings -
+-- Mozilla Thunderbird`. The old `find("Send As Alias")` matched that, floated the MAIN window and
+-- cleared its maximize, leaving it a 252x304 float (caught 2026-10-07 by logging every client-state
+-- change against the event socket). The three titles, from the extension's HTML:
+--   options/options.html          Send As Alias - Settings            <- a tab, must NOT match
+--   popup/alias-prompt.html       Send As Alias - Use Alias?
+--   popup/identity-prompt.html    Send As Alias - Create Identity?
 hl.on("window.title", function(w)
     if w == nil or w.class ~= "org.mozilla.Thunderbird" then return end
-    if w.title == nil or not w.title:find("Send As Alias", 1, true) then return end
+    if w.title == nil or not w.title:find("^Send As Alias %- [^-]*%?") then return end
     -- window.title fires on every title change; bail once the window is in the target state.
     -- Both conditions, not just `floating` — the first pass leaves it floating AND maximized, so
     -- guarding on `floating` alone would return early and never clear the maximize.

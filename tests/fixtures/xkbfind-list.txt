@@ -1,0 +1,57 @@
+models:
+- name: pc105
+  vendor: Generic
+  description: Generic 105-key PC
+- name: applealu_iso
+  vendor: Apple
+  description: Apple Aluminium (ISO)
+- name: TypeMatrixEZ2030USB-102
+  vendor: TypeMatrix
+  description: TypeMatrix EZ-Reach 2030 USB (102/105:EU mode)
+
+layouts:
+- layout: 'us'
+  variant: ''
+  brief: 'en'
+  description: English (US)
+  iso639: ['eng']
+  iso3166: ['US']
+- layout: 'de'
+  variant: 'nodeadkeys'
+  brief: 'de'
+  description: German (no dead keys)
+  iso639: ['deu']
+  iso3166: ['DE']
+  future-key: 'kept, not fatal'
+- layout: 'ch'
+  variant: ''
+  brief: 'de'
+  description: German (Switzerland)
+  iso639: ['deu', 'gsw']
+  iso3166: ['CH']
+- layout: 'in'
+  variant: 'tamilnet'
+  brief: 'ta'
+  description: Tamil (TamilNet '99)
+  iso639: ['tam']
+  iso3166: ['IN']
+- layout: 'xx'
+  variant: 'quote'
+  brief: ''
+  description: 'It''s quoted'
+  iso639: []
+  iso3166: []
+
+option_groups:
+- name: 'grp'
+  description: Switching to another layout
+  allows_multiple: true
+  options:
+  - name: 'grp:caps_toggle'
+    brief: ''
+    description: 'Caps Lock'
+    layout-specific: false
+  - name: 'apple:alupckeys'
+    brief: ''
+    description: 'Apple Aluminium emulates Pause, PrtSc, Scroll Lock'
+    layout-specific: true
