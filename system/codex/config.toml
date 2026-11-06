@@ -22,9 +22,13 @@ writable_roots = ["~/Projects/okf"]
 # land in the USER file, keyed by this file's path.
 # publish-guard needs --deny: Codex treats "ask" as a failed hook and runs the
 # command. Its matcher must stay Bash, since apply_patch text is not a command.
+# self-kill-guard always denies (a pkill -f / pgrep -f that matches its own shell).
 [[hooks.PreToolUse]]
 matcher = "Bash"
-hooks = [{ type = "command", command = "$HOME/Projects/okf/scripts/hooks/publish-guard --deny" }]
+hooks = [
+  { type = "command", command = "$HOME/Projects/okf/scripts/hooks/publish-guard --deny" },
+  { type = "command", command = "$HOME/Projects/okf/scripts/hooks/self-kill-guard" },
+]
 
 [[hooks.PreToolUse]]
 matcher = "Bash|apply_patch"
