@@ -595,7 +595,7 @@ Optional tools lesspipe shells out to:
 ```sh
 paru -S --needed 7zip unrar cabextract bat          # Arch (p7zip is named 7zip here)
 sudo nala install -y p7zip-full unrar-free cabextract bat # Debian
-sudo dnf install p7zip p7zip-plugins unrar cabextract bat # Fedora (unrar needs RPM Fusion non-free)
+sudo dnf install 7zip unrar cabextract bat             # Fedora 43+ (unrar here is the free unrar-free build)
 brew install p7zip cabextract bat             # macOS (Homebrew) — no `unrar` formula
 sudo port install p7zip cabextract bat        # macOS (MacPorts)
 ```
@@ -606,7 +606,7 @@ Debian ships the binary as `batcat` (the name `bat` collides with another packag
 mkdir -p $HOME/.oh-my-zsh-custom && ln -sf `pwd`/oh-my-zsh-custom/bat.zsh $HOME/.oh-my-zsh-custom/
 ```
 
-Recent Fedora dropped `p7zip`/`p7zip-plugins` in favour of a `7zip` package — if the dnf line errors on "No match", that is why.
+Fedora 43 introduced `7zip` (it obsoletes `p7zip-plugins`), and Fedora 44 no longer ships `p7zip` at all, so a `p7zip` install there fails with "No match" (checked against Fedora's package index, 2026-11-08). Fedora 42 has only `p7zip`.
 
 ## fresh — terminal editor
 

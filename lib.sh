@@ -352,6 +352,8 @@ install_nerd_font() {
 		*)      local base='https://github.com/romkatv/powerlevel10k-media/raw/master' style
 		        run sudo mkdir -p /usr/local/share/fonts
 		        for style in Regular Bold Italic "Bold%20Italic"; do
+		            # wget -P never overwrites: a re-run would add "… .ttf.1" duplicates.
+		            [ -f "/usr/local/share/fonts/MesloLGS NF ${style//%20/ }.ttf" ] && continue
 		            run sudo wget -q -P /usr/local/share/fonts "$base/MesloLGS%20NF%20$style.ttf"
 		        done
 		        run sudo fc-cache -f ;;
