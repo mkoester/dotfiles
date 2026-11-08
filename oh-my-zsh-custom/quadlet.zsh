@@ -205,13 +205,14 @@ qsetup() {
   print -r -- "next: the README's service-specific steps, then qreload $svc && qctl $svc start"
 }
 
-# qbackup-init <svc> — /var/backups/<svc> (owned <svc>:backup-readers, 2750), link the
+# qbackup-init <svc> — /var/backups/<svc> (<svc>:backup-readers, 2750, default ACL g:backup-readers:rX), link the
 # repo's units, enable <svc>-backup.timer. Needs the one-time server setup (backup-readers
 # group, backupuser) from quadlet-my-guidelines § Backup.
 qbackup-init() {
   if (( $# != 1 )); then print -u2 "usage: qbackup-init <svc>"; return 2; fi
   local svc=$1 dir=/var/backups/$1
-  sudo mkdir -p "$dir" && sudo chown "$svc:backup-readers" "$dir" && sudo chmod 2750 "$dir" || return 1
+  sudo mkdir -p "$dir" && sudo chown "$svc:backup-readers" "$dir" && sudo chmod 2750 "$dir" \
+    && sudo setfacl -m g:backup-readers:rX,d:g:backup-readers:rX "$dir" || return 1
   qlink "$svc" && qreload "$svc" && qctl "$svc" enable --now "$svc-backup.timer"
 }
 
