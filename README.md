@@ -606,7 +606,7 @@ Debian ships the binary as `batcat` (the name `bat` collides with another packag
 mkdir -p $HOME/.oh-my-zsh-custom && ln -sf `pwd`/oh-my-zsh-custom/bat.zsh $HOME/.oh-my-zsh-custom/
 ```
 
-Fedora 43 introduced `7zip` (it obsoletes `p7zip-plugins`), and Fedora 44 no longer ships `p7zip` at all, so a `p7zip` install there fails with "No match" (checked against Fedora's package index, 2026-11-08). Fedora 42 has only `p7zip`.
+Fedora 43 and 44 ship `7zip` (it obsoletes `p7zip-plugins`), and Fedora 44 no longer ships `p7zip` at all, so a `p7zip` install there fails with "No match" (checked against Fedora's package index, 2026-11-08). (Fedora 42 and older can't be checked there: mdapi answers `400` for any release past end of life.)
 
 ## fresh — terminal editor
 

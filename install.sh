@@ -1265,7 +1265,7 @@ if ask_yn DF_LESSPIPE "lesspipe (rich less previews)?"; then
 	case "$PM" in
 		pacman) pm_install 7zip unrar cabextract bat ;;
 		apt)    pm_install p7zip-full unrar-free cabextract bat; link_omz oh-my-zsh-custom bat.zsh ;;
-		dnf)    pm_install 7zip unrar cabextract bat ;;   # 7zip replaced p7zip in Fedora 43 (absent before)
+		dnf)    pm_install 7zip unrar cabextract bat ;;   # Fedora 43+: 7zip; F44 has no p7zip
 		brew|port) pm_install p7zip cabextract bat ;;
 	esac
 	link_omz oh-my-zsh-custom lesspipe.zsh
