@@ -36,3 +36,12 @@ hooks = [{ type = "command", command = "$HOME/Projects/okf/scripts/hooks/workspa
 
 [[hooks.Stop]]
 hooks = [{ type = "command", command = "$HOME/Projects/okf/scripts/hooks/vault-gate" }]
+
+# newline-restore puts back the trailing newline tools drop when they rewrite tracked files
+# (the Stellaris launcher's descriptor.mod, Obsidian's .obsidian/*.json); at session start it
+# also names watched files changed for real.
+[[hooks.SessionStart]]
+hooks = [{ type = "command", command = "$HOME/Projects/okf/scripts/hooks/newline-restore" }]
+
+[[hooks.UserPromptSubmit]]
+hooks = [{ type = "command", command = "$HOME/Projects/okf/scripts/hooks/newline-restore" }]
