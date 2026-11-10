@@ -24,6 +24,25 @@ end)
 swayimg.viewer.on_key("kp_add", function()
   swayimg.viewer.scale = swayimg.viewer.scale + swayimg.viewer.scale / 10
 end)
+-- Mouse wheel zooms (around the pointer); Ctrl+wheel pans. The default is the other way round.
+-- on_scroll REPLACES the built-in handler (src/defaults.cpp), so both halves are restated here
+-- with the default's own factors (scale step /10, pan step 50). Horizontal scrolling (touchpad,
+-- tilt wheel) keeps panning without a modifier. Setting `scale` zooms around the mouse pointer
+-- (luaengine.cpp). `mods` is "" without a modifier, else e.g. "Ctrl" or "Ctrl+Shift".
+swayimg.viewer.on_scroll(function(mods, dh, dv)
+  if mods == "" then
+    if dv ~= 0 then
+      swayimg.viewer.scale = swayimg.viewer.scale - swayimg.viewer.scale * dv / 10
+    end
+    dv = 0
+  end
+  if dh ~= 0 or dv ~= 0 then
+    -- read after any zoom above, which moves the image to keep the pointer spot fixed
+    local pos = swayimg.viewer.get_position()
+    swayimg.viewer.set_abs_position(math.floor(pos.x + dh * 50), math.floor(pos.y + dv * 50))
+  end
+end)
+
 swayimg.gallery.on_key("kp_add", function()
   swayimg.gallery.thumb_size = swayimg.gallery.thumb_size + 10
 end)

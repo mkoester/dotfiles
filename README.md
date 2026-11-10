@@ -666,7 +666,7 @@ grep -E 'application/json|text/plain' ~/.config/mimeapps.list
 
 ### Images open in swayimg
 
-Photo and screenshot types (`jpeg png gif webp avif heif jxl bmp`) go to **`swayimg.desktop`**. It replaced feh (X11-only, so it ran through XWayland). `image/tiff` and SVG are left as they are. The `config-stow/swayimg` package (stowed on `DF_DESKTOP` machines) changes only two defaults: `imagelist.adjacent = true`, so opening one file from Nautilus also loads the rest of its folder, and **Left/Right switch images** instead of moving the image (PgUp/PgDn still work too). The default scale `optimal` already fits large images to the window. The full defaults are in `/usr/share/swayimg/example.lua`.
+Photo and screenshot types (`jpeg png gif webp avif heif jxl bmp`) go to **`swayimg.desktop`**. It replaced feh (X11-only, so it ran through XWayland). `image/tiff` and SVG are left as they are. The `config-stow/swayimg` package (stowed on `DF_DESKTOP` machines) changes a few defaults: `imagelist.adjacent = true`, so opening one file from Nautilus also loads the rest of its folder; **Left/Right switch images** instead of moving the image (PgUp/PgDn still work too); keypad `+` zooms in; and **the mouse wheel zooms** while Ctrl+wheel pans, the reverse of the default. The default scale `optimal` already fits large images to the window. The full defaults are in `/usr/share/swayimg/example.lua`.
 
 ```sh
 xdg-mime query default image/jpeg    # want: swayimg.desktop
