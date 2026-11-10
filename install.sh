@@ -448,8 +448,12 @@ if ask_yn DF_DESKTOP "Wayland desktop (bar, monitor profiles, notifications)?"; 
 		# Debian (sources.debian.org reports an exact match) and Fedora 43 (mdapi: kate 26.04.3,
 		# updates), all three checked 2026-09-30 rather than recalled. Not on brew/port: this is
 		# about xdg MIME associations, which macOS does not have.
+		#
+		# swayimg added 2026-11-10 as the image viewer, replacing feh (X11-only, so XWayland).
+		# Pacman arm only: its name on Debian/Fedora was not checked, and the rule above is to
+		# check, not recall. Its config (stowed below) and the MIME default arrive together.
 		pacman) pm_install libnotify kanshi waybar ghostty kitty flatpak kate \
-		                   wl-clipboard grim slurp brightnessctl ydotool ;;
+		                   wl-clipboard grim slurp brightnessctl ydotool swayimg ;;
 		apt)    pm_install libnotify-bin flatpak kate ;;
 		dnf)    pm_install libnotify flatpak kate ;;
 		brew|port) : ;;
@@ -466,6 +470,11 @@ if ask_yn DF_DESKTOP "Wayland desktop (bar, monitor profiles, notifications)?"; 
 	# their own handler needs per-format types via a ~/.local/share/mime XML rule; that is a
 	# separate change, not a longer argument list here.
 	set_mime_default org.kde.kate.desktop application/json
+	# Photos and screenshots open in swayimg. image/tiff is left alone on purpose (multi-page
+	# scans read better in a document viewer), and so is SVG. set_mime_default warns and skips
+	# where swayimg is not installed (the apt/dnf arms above).
+	set_mime_default swayimg.desktop image/jpeg image/png image/gif image/webp \
+	                 image/avif image/heif image/jxl image/bmp
 	# The official Flathub remote. Needed because several desktop apps on this fleet have no
 	# distro package at all in their current versions — ZapZap (the WhatsApp client) is
 	# flatpak-first, and Threema Desktop 2.0 ships from Threema AG's own flatpak repo, which
@@ -509,6 +518,9 @@ if ask_yn DF_DESKTOP "Wayland desktop (bar, monitor profiles, notifications)?"; 
 	# per-machine via kb_file in Hyprland's local.lua (niri: local.kdl). Just needs to be on disk.
 	# Also carries xkbfind, a one-line-per-entry search over `xkbcli list`.
 	stow_pkg "$HOME" xkb
+	# swayimg: opens images fitted to the window, loads the rest of the folder, Left/Right
+	# flip images. Inert where swayimg is not installed, so no `have` guard (same as terminals).
+	stow_pkg "$HOME" swayimg
 	# Terminal emulator configs: ghostty (the default since 2026-08-10), kitty (fallback) and
 	# alacritty (previous default, kept working). Tracked since 2026-08-10 — before that all
 	# three were hand-made on mkDell and synced nowhere, so any other machine got a terminal

@@ -664,6 +664,14 @@ grep -E 'application/json|text/plain' ~/.config/mimeapps.list
 
 ⚠ **`xdg-mime default` validates nothing.** Given a name that isn't installed — a typo, or `kate.desktop` where the package ships `org.kde.kate.desktop` — it writes that name into `mimeapps.list` and exits 0. The association then silently does nothing, and `xdg-mime query default` reads back the name you typed, so the obvious verification agrees with you. That is why `set_mime_default` in `lib.sh` checks the desktop entry exists first, and warns instead of writing.
 
+### Images open in swayimg
+
+Photo and screenshot types (`jpeg png gif webp avif heif jxl bmp`) go to **`swayimg.desktop`**. It replaced feh (X11-only, so it ran through XWayland). `image/tiff` and SVG are left as they are. The `config-stow/swayimg` package (stowed on `DF_DESKTOP` machines) changes only two defaults: `imagelist.adjacent = true`, so opening one file from Nautilus also loads the rest of its folder, and **Left/Right switch images** instead of moving the image (PgUp/PgDn still work too). The default scale `optimal` already fits large images to the window. The full defaults are in `/usr/share/swayimg/example.lua`.
+
+```sh
+xdg-mime query default image/jpeg    # want: swayimg.desktop
+```
+
 ## gita — multi-repo git overview + auto-fetch
 
 [gita](https://github.com/nosarthur/gita) shows the status of all git repos across every `~/Projects/workspace_*` on one screen. The `oh-my-zsh-custom/gita.zsh` helpers (auto-sourced) add `gitad`/`gitaw`/`gitar`, plus `gitap`/`gital` (`gita push`/`pull` minus the up-to-date repos) (the `gitaw` live view uses `watch`, part of procps and usually already present); the `config-stow/gita/` package puts `gitaw-panel` + `gita-legend` in `~/.local/bin`; the `systemd-user` stow package runs a periodic `gita fetch` timer.
