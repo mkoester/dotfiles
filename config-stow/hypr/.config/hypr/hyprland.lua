@@ -288,8 +288,14 @@ hl.bind(mod .. " + ALT + L", hl.dsp.exec_cmd("dms ipc call lock lock"),
 -- the workspace and window-rule sections below): a browser window opens wherever you are, and
 -- this key is what makes that convenient again. SUPER+B is then "go where the browsing lives",
 -- which is a different question from "give me a window", and the two no longer fight.
+--
+-- Nautilus is the opposite of Firefox: it is a single-instance GApplication, and a bare
+-- `nautilus` hands off to the running instance, which may reuse its existing window (new tab)
+-- — and `focus_on_activate` (misc block above) then drags you to that window's workspace. It
+-- only happens while some Nautilus window is open, which is why it looked intermittent.
+-- `--new-window` ("Always open a new window", per `nautilus --help`) makes it explicit.
 hl.bind(mod .. " + Return",  hl.dsp.exec_cmd(term),                     { description = "Terminal" })
-hl.bind(mod .. " + E",       hl.dsp.exec_cmd("nautilus"),               { description = "File manager" })
+hl.bind(mod .. " + E",       hl.dsp.exec_cmd("nautilus --new-window"),  { description = "File manager" })
 hl.bind(mod .. " + ALT + B", hl.dsp.exec_cmd("firefox"),                { description = "New browser window" })
 
 -- Named workspaces — SUPER+<mnemonic letter> to focus, +SHIFT to move a window there.
