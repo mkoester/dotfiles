@@ -18,3 +18,12 @@ end)
 swayimg.viewer.on_key("right", function()
   swayimg.viewer.open("next")
 end)
+
+-- Keypad + zooms in. The defaults bind zoom-in to "equal" only (the unshifted +/= key), so
+-- KP_Add reported "unhandled" while keypad - already worked. Same step size as the defaults.
+swayimg.viewer.on_key("kp_add", function()
+  swayimg.viewer.scale = swayimg.viewer.scale + swayimg.viewer.scale / 10
+end)
+swayimg.gallery.on_key("kp_add", function()
+  swayimg.gallery.thumb_size = swayimg.gallery.thumb_size + 10
+end)
