@@ -294,6 +294,10 @@ hl.bind(mod .. " + ALT + L", hl.dsp.exec_cmd("dms ipc call lock lock"),
 -- — and `focus_on_activate` (misc block above) then drags you to that window's workspace. It
 -- only happens while some Nautilus window is open, which is why it looked intermittent.
 -- `--new-window` ("Always open a new window", per `nautilus --help`) makes it explicit.
+-- UNBIND FIRST: dms-shell 2.x's stock binds.lua binds SUPER+Return to the terminal picked at
+-- `dms setup` (ghostty) — 1.5.x did not. Without the unbind one press opened TWO terminals
+-- (mkTuxedoCachy, 2026-11-13).
+hl.unbind(mod .. " + Return")
 hl.bind(mod .. " + Return",  hl.dsp.exec_cmd(term),                     { description = "Terminal" })
 hl.bind(mod .. " + E",       hl.dsp.exec_cmd("nautilus --new-window"),  { description = "File manager" })
 hl.bind(mod .. " + ALT + B", hl.dsp.exec_cmd("firefox"),                { description = "New browser window" })
@@ -325,9 +329,14 @@ hl.bind(mod .. " + ALT + B", hl.dsp.exec_cmd("firefox"),                { descri
 --     now be launched from spotlight (SUPER+space). SUPER+Return opens `term` (ghostty since
 --     2026-08-10), so a plain ghostty window is in fact still one keypress away.
 --
--- `takes_dms_key` marks the two entries whose key DMS already binds. Without the unbind, BOTH
--- actions fire on one press — that is not theory, it is what SUPER+M did: focused the mail
--- workspace and opened the process list together.
+-- EVERY key below is unbound before it is bound — both the focus and the move key. Without the
+-- unbind, BOTH actions fire on one press: SUPER+M focused mail and opened the process list.
+-- This was a hand-kept `takes_dms_key` flag on M and T until 2026-11-13, and the list went
+-- stale the moment DMS's stock set changed: dms-shell 2.x (first seen on mkTuxedoCachy) binds
+-- SUPER+A control-center, SUPER+S / SUPER+SHIFT+S the special workspace and SUPER+SHIFT+C the
+-- colour picker, so switching to herdr/social opened a DMS panel. Unbinding unconditionally
+-- makes the next DMS release unable to do that again. (The "was free" notes above describe
+-- dms-shell 1.5.x.)
 --
 -- `no_move` — SUPER+SHIFT+T is DMS's FLOAT TOGGLE, which is genuinely useful and has no second
 -- binding, unlike the processlist behind SUPER+M. So `term` gets a focus bind only rather than
@@ -363,21 +372,22 @@ hl.bind(mod .. " + ALT + B", hl.dsp.exec_cmd("firefox"),                { descri
 -- 19 IS RESERVED for `git`, which is machine-specific and lives in mkDell's local.lua. Do not
 -- claim it here.
 local named_workspaces = {
-    { id = 11, key = "M", ws = "mail",    label = "mail",         takes_dms_key = true },
+    { id = 11, key = "M", ws = "mail",    label = "mail"         },
     { id = 12, key = "B", ws = "browser", label = "browser"      },
     { id = 13, key = "A", ws = "herdr",   label = "herdr"        },
     { id = 14, key = "C", ws = "code",    label = "code"         },
     { id = 15, key = "G", ws = "google",  label = "google"       },
     { id = 16, key = "S", ws = "social",  label = "social media" },
-    { id = 17, key = "T", ws = "term",    label = "terminal", no_move = true, takes_dms_key = true },
+    { id = 17, key = "T", ws = "term",    label = "terminal", no_move = true },
 }
 for _, w in ipairs(named_workspaces) do
     -- Remove DMS's binding first, or both actions fire on the same press.
-    if w.takes_dms_key then hl.unbind(mod .. " + " .. w.key) end
+    hl.unbind(mod .. " + " .. w.key)
     hl.bind(mod .. " + " .. w.key,
             hl.dsp.focus({ workspace = w.id }),
             { description = "Workspace: " .. w.label })
     if not w.no_move then
+        hl.unbind(mod .. " + SHIFT + " .. w.key)
         hl.bind(mod .. " + SHIFT + " .. w.key,
                 hl.dsp.window.move({ workspace = w.id }),
                 { description = "Move to " .. w.label })
