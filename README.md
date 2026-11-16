@@ -851,6 +851,8 @@ atuin sync
 
 `atuin sync` runs automatically after commands (`auto_sync`); the daemon is off by default, so sync happens in-shell. If you later enable the atuin daemon, keep `sync_address` in `config.toml` (the daemon doesn't read the shell environment).
 
+**Ctrl-R hides the `(cd ~/repo && ga … && gcmsg …)` commit hand-overs.** atuin has no setting that hides commands from search only — `history_filter` and `cwd_filter` stop them being *recorded*. So `atuin.zsh` rebinds Ctrl-R to open with `!(cd ` already in the query (fuzzy syntax: "doesn't contain `(cd`"); the commands stay in history, and deleting the token shows everything. It needs `search_mode = fuzzy` (the default). Separately, `.zshrc` trims leading/trailing newlines from any paste that contains one, so an over-selected copy no longer lands in history as `^J(cd …`.
+
 ## quadlet hosts (server-side)
 
 `oh-my-zsh-custom/quadlet.zsh` wraps the repetitive commands for managing rootless-Podman [quadlet](https://github.com/mkoester?tab=repositories&q=quadlet) services, each of which runs as a dedicated user. It collapses the invariant `sudo -u <svc> XDG_RUNTIME_DIR=/run/user/$(id -u <svc>) systemctl --user …` prefix into `qctl`/`qreload`/`qlog`/`qexec`/`qplog`/`qupdate`/`qvalidate`/`qsh`/`qpodman`. On top of those, the helpers below cover what every `quadlet-*` README repeats. `<svc>` tab-completes from the service users, which are the lingering users with a home under `/var/lib`.
