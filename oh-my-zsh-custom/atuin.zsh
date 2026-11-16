@@ -22,4 +22,23 @@
 [[ -d "$HOME/.atuin/bin" ]] && path=("$HOME/.atuin/bin" $path)
 if command -v atuin >/dev/null 2>&1; then
   eval "$(atuin init zsh --disable-up-arrow)"
+
+  # Ctrl-R opens with `!(cd ` already in the query: fuzzy-syntax "doesn't contain (cd", which
+  # hides the `(cd ~/repo && ga … && gcmsg …)` commit hand-overs from the list while keeping
+  # them in history. Not `!^(cd`: older pastes start with a newline (^J) and would slip past a
+  # prefix match. Delete the token to see everything; vicmd `/` stays unfiltered.
+  # Needs search_mode = fuzzy (the default). On Esc/Ctrl-C atuin hands back the query, so the
+  # token is stripped again and the line returns to what was typed before Ctrl-R.
+  _atuin_search_hide_handover() {
+    local orig=$BUFFER filter='!(cd '
+    BUFFER="$filter$orig"
+    "$@"
+    [[ $BUFFER == "$filter"* ]] && { BUFFER=$orig; CURSOR=$#BUFFER; }
+  }
+  _atuin_search_quiet()       { _atuin_search_hide_handover _atuin_search }
+  _atuin_search_quiet_viins() { _atuin_search_hide_handover _atuin_search_viins }
+  zle -N atuin-search-quiet _atuin_search_quiet
+  zle -N atuin-search-quiet-viins _atuin_search_quiet_viins
+  bindkey -M emacs '^r' atuin-search-quiet
+  bindkey -M viins '^r' atuin-search-quiet-viins
 fi
