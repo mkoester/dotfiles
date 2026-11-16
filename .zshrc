@@ -181,6 +181,23 @@ typeset -U path
 
 [[ -d /opt/bin ]] && export PATH="/opt/bin:$PATH"
 
+# Pasting a selection that caught the previous line's end ran `\n(cd …)` and stored the newline
+# in history (atuin shows it as ^J). Trim leading/trailing whitespace from a paste, but only when
+# it contains a newline: a deliberate single leading space still keeps a command out of history.
+# Hooks oh-my-zsh's bracketed-paste-magic (lib/misc.zsh); inert under DISABLE_MAGIC_FUNCTIONS.
+_paste_trim_newlines() {
+  local lead=${PASTED%%[^[:space:]]*}
+  [[ $lead == *$'\n'* ]] && PASTED=${PASTED#"$lead"}
+  local trail=${PASTED##*[^[:space:]]}
+  [[ $trail == *$'\n'* ]] && PASTED=${PASTED%"$trail"}
+  return 0
+}
+() {
+  local -a finish
+  zstyle -a :bracketed-paste-magic paste-finish finish
+  zstyle :bracketed-paste-magic paste-finish ${finish:#_paste_trim_newlines} _paste_trim_newlines
+}
+
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
