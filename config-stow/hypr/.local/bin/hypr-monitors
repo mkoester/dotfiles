@@ -39,8 +39,13 @@ because "no profiles" and "kanshi is not running" need different fixes.
 
 ORDER MATTERS AND IS PRESERVED. kanshi applies the FIRST profile whose outputs all match, so a
 name defined in config.d/ (parsed first) shadows a same-named one in the skeleton. The menu lists
-them in kanshi's own order and keeps the first definition of each name, so what you see is what
-kanshi would pick.
+them in kanshi's own order and keeps the first definition of each name.
+
+A SAME-NAMED PROFILE IS NOT DEAD, though: `kanshictl switch <name>` tries EVERY profile with that
+name in parse order and applies the first whose outputs match the connected screens (kanshi
+1.9.0, ipc.c handle_switch). Machines use this deliberately -- one name, one variant per set of
+plugged-in screens, because a profile only matches when it accounts for every connected screen.
+The menu shows one entry per name, so its summary describes the first variant only.
 """
 
 import argparse
@@ -121,7 +126,8 @@ def parse_profiles(path=KANSHI_CONFIG):
             pos = POSITION_RE.search(rest)
             current[2].append((output, enabled, f"{pos.group(1)},{pos.group(2)}" if pos else None))
 
-    # kanshi applies the first match, so a shadowed redefinition is unreachable -- drop it.
+    # One menu entry per name: `kanshictl switch <name>` itself picks whichever same-named
+    # variant matches the connected screens (see the docstring), so listing each is noise.
     seen, unique = set(), []
     for name, source, outputs in profiles:
         if name in seen:
