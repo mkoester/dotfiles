@@ -177,17 +177,42 @@ def is_temp(source):
     return os.path.basename(source).startswith(TEMP_PREFIX)
 
 
-def render(profiles, color=False):
+def render(profiles, color=False, current=None):
     """One row per profile. Temporary ones are marked, so a throwaway is never mistaken for
-    a committed per-machine profile."""
+    a committed per-machine profile; the active one is marked so you can see where you are.
+
+    The marks go AFTER the summary, never into the name field: field 1 is what a pick is parsed
+    back into, and a marker there would become part of the `kanshictl switch` argument."""
     if not color:
-        return "".join(f"{n}\t{summarise(o)}{' [temp]' if is_temp(src) else ''}\n"
+        return "".join(f"{n}\t{summarise(o)}{' [temp]' if is_temp(src) else ''}"
+                       f"{' [active]' if n == current else ''}\n"
                        for n, src, o in profiles)
     lines = []
     for name, src, outputs in profiles:
         tag = " \x1b[33m[temp]\x1b[0m" if is_temp(src) else ""
+        if name == current:
+            tag += " \x1b[1;36m● active\x1b[0m"
         lines.append(f"\x1b[1;32m{name}\x1b[0m\t\x1b[2m{summarise(outputs)}\x1b[0m{tag}\n")
     return "".join(lines)
+
+
+def current_profile():
+    """The profile kanshi last applied, or None.
+
+    `kanshictl status` prints `Current profile: <name>` or `Current profile: (none)`, then a
+    `Pending profile:` line only while a switch is in flight (kanshi 1.9.0 ctl.c). Any failure
+    -- kanshi not running, no kanshictl -- is None: the menu still works, just unmarked.
+    The timeout keeps a wedged socket from stalling the popup before it ever draws.
+    """
+    try:
+        r = subprocess.run(["kanshictl", "status"], capture_output=True, text=True, timeout=2)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+    for line in r.stdout.splitlines() if r.returncode == 0 else []:
+        if line.startswith("Current profile: "):
+            name = line[len("Current profile: "):].strip()
+            return None if name == "(none)" else name
+    return None
 
 
 def kanshi_running():
@@ -399,6 +424,13 @@ def main():
     #
     # --print-query returns what was TYPED, which is how CTRL-S names a new profile without a
     # second prompt: type the name, press CTRL-S. --expect reports which key ended the session.
+    #
+    # Only the popup asks kanshi what is active: --list stays a pure function of the config,
+    # so its output (and the tests on it) does not depend on which machine runs it.
+    # pos() is 1-based and counts rows in input order, which --no-sort keeps.
+    current = current_profile()
+    names = [n for n, _, _ in profiles]
+    start_on = [f"--bind=load:pos({names.index(current) + 1})"] if current in names else []
     out = subprocess.run(
         ["fzf", "--ansi", "--reverse", "--no-sort", "--info=inline", "--cycle",
          "--with-nth=1,2", "--delimiter=\t",
@@ -410,8 +442,9 @@ def main():
          # wider too, but the header must survive a narrow window on its own, since the rule
          # lives in a different file and a machine may not have it.
          "--header=ENTER apply · CTRL-S save as typed name · CTRL-X delete\n"
-         "CTRL-E arrange screens · ESC close"],
-        input=render(profiles, color=True), text=True, capture_output=True,
+         "CTRL-E arrange screens · ESC close"]
+        + start_on,
+        input=render(profiles, color=True, current=current), text=True, capture_output=True,
     )
     # fzf with both flags prints: query, then the expect key (empty for ENTER), then selection.
     lines = out.stdout.split("\n")

@@ -804,14 +804,23 @@ else
 	# parsing, branching) rather than a re-implementation of its logic here.
 	sd="$(work)"; mkdir -p "$sd/bin"
 	# STUB_RC makes the switch fail the way kanshictl does when no profile matches.
-	printf '#!/bin/sh\necho "kanshictl $*" >> "$STUB_LOG"\nexit "${STUB_RC:-0}"\n' > "$sd/bin/kanshictl"
+	# `status` answers in kanshi 1.9.0's exact format (ctl.c) and is NOT logged, so the log
+	# still records only the commands that change something.
+	cat > "$sd/bin/kanshictl" <<-'EOF'
+		#!/bin/sh
+		if [ "$1" = status ]; then echo "Current profile: ${STUB_CURRENT:-(none)}"; exit 0; fi
+		echo "kanshictl $*" >> "$STUB_LOG"
+		exit "${STUB_RC:-0}"
+	EOF
 	printf '#!/bin/sh\necho "dms $*" >> "$STUB_LOG"\n' > "$sd/bin/dms"
-	# fzf with --print-query --expect prints: query, key, selection.
-	printf '#!/bin/sh\ncat > /dev/null\nprintf "%%s\\n" "$STUB_QUERY" "$STUB_KEY" "$STUB_PICK"\n' \
+	# fzf with --print-query --expect prints: query, key, selection. It keeps what it was given
+	# (argv one per line, and the menu rows) so the active-profile marking can be asserted.
+	printf '#!/bin/sh\nprintf "%%s\\n" "$@" > "$STUB_ARGS"\ncat > "$STUB_IN"\nprintf "%%s\\n" "$STUB_QUERY" "$STUB_KEY" "$STUB_PICK"\n' \
 		> "$sd/bin/fzf"
 	chmod u+x "$sd/bin/kanshictl" "$sd/bin/dms" "$sd/bin/fzf"
 	pop() {  # pop <query> <key> <pick>
 		STUB_LOG="$sd/log" STUB_QUERY="$1" STUB_KEY="$2" STUB_PICK="$3" \
+		STUB_ARGS="$sd/args" STUB_IN="$sd/in" \
 		PATH="$sd/bin:$PATH" python3 "$HM" --fzf \
 			--config "$REPO/tests/fixtures/hypr-monitors-kanshi.conf" \
 			--monitors-json "$REPO/tests/fixtures/hypr-monitors-live.json" 2>&1 </dev/null
@@ -819,6 +828,21 @@ else
 
 	: > "$sd/log"; pop '' '' "$(printf 'solo\tx')" >/dev/null
 	is "$(cat "$sd/log")" 'kanshictl switch solo' 'ENTER switches to the highlighted profile'
+
+	# THE ACTIVE PROFILE is marked, and the cursor starts on it. `solo` is the fixture's 2nd row.
+	STUB_CURRENT=solo pop '' '' '' >/dev/null
+	is "$(grep -c 'active' "$sd/in")" '1' 'exactly one row is marked active'
+	is "$(grep 'active' "$sd/in" | sed 's/\x1b\[[0-9;]*m//g' | cut -f1)" 'solo' \
+		'...and it is the profile kanshi reports'
+	is "$(grep -c '^--bind=load:pos(2)$' "$sd/args")" '1' 'the cursor starts on the active row'
+	# Control: with nothing active, neither the mark nor the bind may appear — otherwise the
+	# assertions above would pass on a script that marks something unconditionally.
+	pop '' '' '' >/dev/null
+	is "$(grep -c 'active' "$sd/in")" '0' 'no mark when kanshi reports (none)'
+	is "$(grep -c '^--bind=load:pos' "$sd/args")" '0' 'no cursor bind when kanshi reports (none)'
+	# A marked row picked with ENTER must still switch by its bare name.
+	: > "$sd/log"; STUB_CURRENT=solo pop '' '' "$(printf '\033[1;32msolo\033[0m\tx \033[1;36m● active\033[0m')" >/dev/null
+	is "$(cat "$sd/log")" 'kanshictl switch solo' 'picking the marked row switches by its bare name'
 
 	# The popup closes when the script exits, so a failed switch must WAIT, or its error
 	# vanishes unread (mkDesktop 2026-10-06: every pick failed silently for weeks).
