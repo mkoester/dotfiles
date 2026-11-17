@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# stall-log — log what a desktop freeze looks like from the inside, every 2 s:
+#   CPU temp, avg/max core clock, PSI avg10 (cpu/io/memory), and every THREAD in D state with its
+#   kernel wait channel. Leave it running in a terminal, note the time of a freeze, then read the
+#   lines around it:
+#     high temp + clocks pinned near the minimum   -> thermal throttling
+#     `Hyprland(os_...)` / `nvidia-*` under D:[...] -> GPU/driver contention
+#     io= jumps with tasks under D:[...]           -> storage stalls
+#     nothing unusual                               -> look at the kernel log for that minute
+# Threads, not processes (`ps -eL`): a blocked thread inside a multi-threaded process is invisible
+# to `ps -e`. Run it OUTSIDE any sandbox, or it sees only its own processes.
+# Origin and a worked example: Workstation-Documentation/hardware/tuxedo-desktop-freezes.md.
+#
+# Usage: stall-log [logfile]     (default ~/stall-log.txt, appended)
+
+out="${1:-$HOME/stall-log.txt}"
+
+# First CPU package sensor this machine has: k10temp/zenpower (AMD) or coretemp (Intel).
+temp_file=""
+for h in /sys/class/hwmon/hwmon*; do
+	case "$(cat "$h/name" 2>/dev/null)" in
+	k10temp | zenpower | coretemp)
+		temp_file="$h/temp1_input"
+		break
+		;;
+	esac
+done
+
+echo "logging to $out (Ctrl-C to stop)"
+while sleep 2; do
+	temp=$([ -n "$temp_file" ] && awk '{printf "%.0f", $1 / 1000}' "$temp_file")
+	freq=$(awk '/MHz/{s+=$4; n++; if ($4>m) m=$4} END{printf "%.0f/%.0f", s/n, m}' /proc/cpuinfo)
+	psi=$(for r in cpu io memory; do awk -v r="$r" '/^some/{sub("avg10=","",$2); printf "%s=%s ", r, $2}' /proc/pressure/$r; done)
+	dstate=$(ps -eLo state=,comm=,wchan:24= | awk '$1=="D"{printf "%s(%s) ", $2, $3}')
+	printf '%s temp=%sC mhz(avg/max)=%s %s D:[%s]\n' "$(date +%T)" "${temp:-?}" "$freq" "$psi" "$dstate"
+done | tee -a "$out"
