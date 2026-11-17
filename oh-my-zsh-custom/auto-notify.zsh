@@ -34,9 +34,9 @@ AUTO_NOTIFY_IGNORE+=(
     # mkMac2014, 2026-08-10:
     #   claude  present
     #   agy     present  — Antigravity
-    #   codex   present on mkDell (package `openai-codex`); being rolled out to mkMac2014,
-    #           mkDesktop and mkMac2017. Listing it on a machine that does not have it yet is
-    #           harmless — an entry for a nonexistent command can never match.
+    #   codex   upstream installer -> ~/.local/bin since 2026-11-17 (was the `openai-codex`
+    #           package); not on every machine yet. Listing it on a machine that does not have
+    #           it is harmless — an entry for a nonexistent command can never match.
     #
     # `gemini` was here until 2026-08-10 and is REMOVED: the Gemini CLI is no longer
     # supported, and `agy` is its working successor. It is also already absent from PATH
