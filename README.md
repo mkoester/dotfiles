@@ -887,7 +887,7 @@ cd config-stow && stow -t $HOME/.config kanshi && cd ..
 
 ```sh
 niri msg outputs                             # real names, modes, make/model/serial
-$EDITOR ~/.config/kanshi/config.d/local.conf # same syntax; same-named profile wins
+$EDITOR ~/.config/kanshi/config.d/local.conf # same syntax; tried before same-named skeleton ones
 ```
 
 Keep `"Make Model Serial"` matching for `config.d/` only. It's the robust form — connector names are non-deterministic with multiple GPUs or thunderbolt docks — but serials are hardware identifiers and must not land in a public repo. These per-machine profiles live in the private overlay repo; `install.sh` symlinks them in from there. Because stow links the whole `kanshi` directory, files dropped in `config.d/` appear in `~/.config/kanshi/config.d/` automatically.
@@ -898,7 +898,9 @@ Enable it:
 systemctl --user enable --now kanshi.service
 ```
 
-If the package ships no unit (`pacman -Ql kanshi | grep systemd`), fall back to `spawn-at-startup "kanshi"` in the Niri config. `kanshictl status` shows the live profile; `kanshictl reload` re-reads the config.
+If the package ships no unit (`pacman -Ql kanshi | grep systemd`), fall back to `spawn-at-startup "kanshi"` in the Niri config. `kanshictl status` shows the live profile; `kanshictl reload` re-reads the config. On Hyprland, SUPER+P opens `hypr-monitors --fzf`, which lists the profiles, marks the live one `● active` (from `kanshictl status`) and starts the cursor on it.
+
+**Closing a laptop lid with the internal panel off needs no config.** logind's default `HandleLidSwitchDocked=ignore` applies whenever an external connector is connected *and enabled* (`/sys/class/drm/card*-*/{status,enabled}`), which is exactly the state a profile with the internal panel disabled leaves. Confirmed on a laptop with two externals (2026-11-17): lid closed, no suspend. Only an undocked lid close suspends.
 
 **Do not also install `nwg-displays`.** It writes `~/.config/niri/monitor.kdl`, and the resulting Niri config reload discards every transient change kanshi applied.
 
