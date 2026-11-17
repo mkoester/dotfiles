@@ -17,17 +17,24 @@ include ~/.config/kanshi/config.d/*
 # could "override them by defining a same-named profile in config.d/". BOTH HALVES WERE
 # WRONG, and together they silently broke multi-monitor switching.
 #
-# 1. DUPLICATE PROFILE NAMES DO NOT OVERRIDE — kanshi parses both and `kanshictl switch <name>`
-#    picks the LATER one, i.e. the generic profile here rather than the machine's real one.
-#    Measured on mkDesktop 2026-08-22, from kanshi's own log:
+# 1. DUPLICATE PROFILE NAMES DO NOT OVERRIDE — kanshi keeps both, and `kanshictl switch <name>`
+#    tries every profile with that name in parse order and applies the FIRST WHOSE OUTPUTS MATCH
+#    (kanshi 1.9.0, ipc.c handle_switch). A profile matches only if it accounts for EVERY
+#    connected screen (main.c match_profile). So whenever the machine's own profile does not fit
+#    the screens plugged in, the generic one here is next in line and wins. Seen on mkDesktop
+#    2026-08-22, from kanshi's own log:
 #
 #        applying profile 'docked'
 #        applying profile output 'HDMI-A-1' on connected head 'HDMI-A-1'
 #        applying profile output 'DP-1' on connected head 'DP-1'
 #
-#    Two outputs matched by CONNECTOR, where that machine's own `docked` matches three by
-#    "Make Model Serial". Auto-apply on reload had used the right one, so this failed only on
-#    an explicit switch — which is why it looked like an intermittent fault.
+#    Two outputs matched by CONNECTOR, where that machine's own `docked` names three by
+#    "Make Model Serial" — so at that moment two screens were connected, the machine's profile
+#    could not match, and the generic one applied. It looked intermittent because it depended
+#    on what was plugged in. (Recorded at the time as "switch picks the LATER one"; corrected
+#    2026-11-17 from the source.) Same-named variants are therefore a FEATURE when written on
+#    purpose: one name, one variant per set of connected screens — see mkTuxedoCachy's
+#    zz-extras-off.conf in workstation-private.
 #
 # 2. THE GEOMETRY OVERLAPPED ANY MODERN PRIMARY. The generic `docked` put a second output at
 #    x=1920, which collides with any first output wider than that — 2560 and 3440 panels are
