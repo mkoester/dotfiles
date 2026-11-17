@@ -23,22 +23,43 @@
 # 2026-08-07). When either tool grows completions, cache them the way forge.zsh caches gh/glab
 # rather than eval'ing per shell.
 #
-# ── codex: INSTALL FROM THE REPO, NOT THE UPSTREAM INSTALLER (updated 2026-08-10) ──
-# This file said "codex is not installed on any machine" until 2026-08-10; it is now on mkDell
-# and is being rolled out to mkMac2014, mkDesktop and mkMac2017.
+# ── claude and codex: UPSTREAM INSTALLERS, not packages (since 2026-11-17) ──
+# Both install to ~/.local/bin and have their own updater, so each can be updated on its own,
+# without a full system upgrade. The install commands, and the order that keeps the codex
+# installer out of ~/.zshrc, are in workstation-private/manifest/README.md.
 #
-# On Arch/CachyOS install it as the package **`openai-codex`** (official `extra`, plus a
-# CachyOS-optimised rebuild in `cachyos-extra-v3` — verified with `pacman -Si` on 2026-08-10,
-# both at 0.146.1). The command it provides is `codex`.
+#   agents-update            update every agent installed here
+#   agents-update codex      only the named one(s)
 #
-#     paru -S openai-codex
-#
-# That route matters for the reason this whole file exists: a packaged binary lands on PATH via
-# /usr/bin and touches nothing, whereas the npm/curl installers are the kind that append an
-# `export PATH=…` line to ~/.zshrc — a stow symlink into this public repo. Prefer the package.
-#
-# mkMac2017 is back on macOS (DOTFILES_PM=brew), so it needs the brew/npm route instead; the
-# ~/.zshrc hazard applies there too, so check `git diff` in this clone afterwards either way.
-#
-# So this file is currently a no-op by design — it exists to be the place the next such line
-# goes, instead of ~/.zshrc.
+# Each update runs through the fleet-vault launch guard when it is loaded, so an updater never
+# sees the fleet secrets. agy is not covered: it has no update command we know of. Add it to
+# _AGENTS_UPDATABLE once one is confirmed with `agy --help`.
+
+typeset -ga _AGENTS_UPDATABLE=(claude codex)
+typeset -g _AGENT_CLI_DOTFILES=${${(%):-%x}:A:h:h}
+
+agents-update() {
+  local -a todo failed
+  local a
+  todo=(${@:-$_AGENTS_UPDATABLE})
+  for a in $todo; do
+    if (( ! ${_AGENTS_UPDATABLE[(Ie)$a]} )); then
+      print -u2 "agents-update: unknown agent '$a' (known: $_AGENTS_UPDATABLE)"
+      failed+=$a
+    elif (( ! $+commands[$a] )); then
+      # Not being installed is fine for "update all", but an explicit request has to fail.
+      (( $# )) && { print -u2 "agents-update: $a is not installed"; failed+=$a; }
+    else
+      print -P "%B── $a%b"
+      $a update || failed+=$a
+    fi
+  done
+  # Installers may add a line to ~/.zshrc, which is a symlink into this public repo.
+  if ! git -C $_AGENT_CLI_DOTFILES diff --quiet -- '.zshrc' '.zprofile' '.bashrc' '.profile' 2>/dev/null; then
+    print -u2 "agents-update: a shell rc file in $_AGENT_CLI_DOTFILES changed. Check its git diff and move what is needed into agent-cli.zsh"
+  fi
+  (( ! $#failed )) || { print -u2 "agents-update: failed: $failed"; return 1; }
+}
+
+_agents-update() { compadd -a _AGENTS_UPDATABLE; }
+(( $+functions[compdef] )) && compdef _agents-update agents-update
