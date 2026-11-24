@@ -125,3 +125,16 @@ keybind = ctrl+v=paste_from_clipboard
 # `echo $GHOSTTY_SHELL_FEATURES` in a NEW PROCESS, never by re-reading this file or by trusting
 # `ghostty +show-config` — both were correct throughout while the live shells were not.
 shell-integration-features = ssh-terminfo
+
+# One process per window, not one process for all of them (2026-11-24, mkTuxedoCachy).
+# Symptom: opening a new terminal froze existing ones, even windows with nothing running in
+# them. `hyprctl -j clients` showed every ghostty window under ONE pid, i.e. the `detect`
+# default resolved to single-instance, so all windows shared one GTK main loop and renderer.
+# herdr was ruled out: its server log showed only one client connected at the time.
+# THIS IS A TRIAL, NOT A CONFIRMED FIX — the freeze is intermittent, so one quiet test proved
+# nothing. If a freeze still happens with separate processes, the cause is below ghostty
+# (Hyprland / NVIDIA, see Workstation-Documentation hardware/tuxedo-desktop-freezes.md) and
+# this line can go. Takes effect only after quitting EVERY ghostty window. Side effect: the
+# restart caveat above no longer bites, since each new window loads the config afresh.
+# Fleet-wide: macOS ignores gtk-* keys.
+gtk-single-instance = false
