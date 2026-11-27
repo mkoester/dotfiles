@@ -15,7 +15,8 @@
 [misc]
 cleanup = false             # topgrade's built-in cleanup is REPLACED by the [commands]
                             # block at the bottom — see the reasoning there.
-disable = ["hyprpm"]        # `hyprpm update` needs cmake (not installed) and there are
+disable = ["hyprpm", "dotnet"]  # dotnet: replaced by a [commands] entry at the bottom.
+                            # hyprpm: `hyprpm update` needs cmake (not installed) and there are
                             # NO Hyprland plugins on this box (~/.local/share/hyprpm
                             # does not exist), so the step could only ever fail.
                             # Re-enable + `paru -S cmake` if a plugin is ever installed
@@ -173,3 +174,12 @@ upgrade = true              # actually apply fwupd firmware updates (default: on
 # The exit code is the upgrade's, not the listing's — before, `; port outdated` reported OK
 # over a failed upgrade.
 "macports: binary-only upgrade" = "command -v port >/dev/null || exit 0; sudo port selfupdate && sudo port -N -b -p upgrade outdated; rc=$?; port outdated; exit $rc"
+# .NET global tools, prerelease-aware. Replaces topgrade's own `dotnet` step (disabled above, and
+# in any host overlay that sets its own `disable`), which runs a bare `dotnet tool update <id>
+# --global` per tool (src/steps/generic.rs at v17.17.0, no config knob). Without --prerelease the
+# SDK resolves the newest STABLE version and refuses to "downgrade" a prerelease to it:
+# cwtools.cli 0.6.0-alpha vs stable 0.0.15 failed the step on every run (2026-11-27). So
+# --prerelease is passed only for a tool whose installed version already is one (contains `-`);
+# a stable tool is never moved onto a prerelease. Any failed update fails the step — zsh runs
+# the last pipeline element in the current shell, so `rc` survives the loop (tested).
+".NET global tools" = "command -v dotnet >/dev/null || exit 0; rc=0; DOTNET_NOLOGO=1 dotnet tool list --global | sed '1,/^-----/d' | while read -r id ver _; do case $ver in *-*) pre=--prerelease ;; *) pre= ;; esac; dotnet tool update --global $pre $id || rc=1; done; exit $rc"
