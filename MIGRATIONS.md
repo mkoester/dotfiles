@@ -17,6 +17,29 @@ the order is wrong**, because an entry whose steps look independent will be run 
 
 ---
 
+## 2026-11-27 — Threema Desktop moves to Flathub
+
+**Applies to:** every `DF_MESSENGERS` Linux machine installed before this date. **Half done on
+mkTuxedoCachy** (Flathub copy installed alongside, old one not yet removed).
+
+Threema AG's own flatpak repo is end-of-life; `install.sh` now installs from Flathub. Same app
+ID, so the data in `~/.var/app/ch.threema.threema-desktop` is kept.
+
+**Order matters:** install the Flathub copy *before* removing the old one, or the machine is left
+without Threema if the install fails. Don't stop after step 1 either: while both branches are
+installed, `flatpak run ch.threema.threema-desktop` (what `hypr-messengers` launches) can start
+the stale one, and `remote-delete` refuses while anything is still installed from that remote.
+
+```sh
+# 1. Flathub copy (a no-op if already there)
+sudo flatpak install -y flathub ch.threema.threema-desktop
+# 2. Drop the EOL branch and its remote — NOT --delete-data, the profile is shared by both
+sudo flatpak uninstall -y ch.threema.threema-desktop//master
+sudo flatpak remote-delete threema-desktop
+# 3. Check: exactly one line, origin flathub, branch stable
+flatpak list --app --columns=application,origin,branch | grep threema
+```
+
 ## 2026-10-01 — `fv`, per-machine linkding tokens, and the agent launch guard
 
 **Applies to:** every `DF_DEV` machine. **Done on mkDell** (2026-10-01, `fv status` 3/3). Pending everywhere else.

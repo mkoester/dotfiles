@@ -1139,11 +1139,11 @@ Every `DF_DESKTOP` machine installs `flatpak` and registers the official Flathub
 sudo flatpak remote-add --if-not-exists --system flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 ```
 
-Not a preference — several desktop apps on this fleet have **no distro package in their current version**. ZapZap (the WhatsApp client) ships 7.4 on Flathub against 7.2 in the AUR, and Threema Desktop 2.0 comes from Threema AG's own flatpak repo, which cannot be added at all until flatpak itself works.
+Not a preference — several desktop apps on this fleet have **no distro package in their current version**. ZapZap (the WhatsApp client) ships 7.4 on Flathub against 7.2 in the AUR, and Threema Desktop 2.0 has no distro package at all — only Flathub (formerly Threema AG's own flatpak repo, now end-of-life).
 
 Three decisions worth not re-litigating:
 
-- **System remote, not `--user`.** Vendor install instructions are bare `flatpak install --from …` lines that resolve against the *system* installation — Threema's documented command is exactly that. A `--user` remote leaves those failing with a "no remote" error that reads like a broken URL rather than a wrong scope.
+- **System remote, not `--user`.** Vendor install instructions are bare `flatpak install --from …` lines that resolve against the *system* installation — Threema's old one was exactly that. A `--user` remote leaves those failing with a "no remote" error that reads like a broken URL rather than a wrong scope.
 - **`--if-not-exists`** is what makes a re-run a no-op instead of an error, so this is safe on every subsequent `install.sh` run.
 - **Not on `brew`.** macOS has no flatpak; the branch is skipped rather than guessed at.
 
@@ -1158,12 +1158,12 @@ Its own host-class question, **not** part of `DF_DESKTOP`. A desktop machine is 
 | **Signal** | `signal-desktop` (`extra`) | official native client; repo version tracks upstream releases 1:1 |
 | **Telegram** | `telegram-desktop` (`extra` / `cachyos-extra-v3`) | official native client, same |
 | **WhatsApp** | flatpak `com.rtosta.zapzap` | **no native client exists** — ZapZap wraps WhatsApp Web and is the most actively maintained of several wrappers |
-| **Threema** | flatpak `ch.threema.threema-desktop` | **no native client exists**; ships from Threema AG's own repo |
+| **Threema** | flatpak `ch.threema.threema-desktop` (Flathub) | **no native client exists**; Threema AG's own repo is end-of-life |
 
 Three things worth not re-deriving:
 
 - **ZapZap comes from Flathub even on Arch**, against this repo's prefer-the-distro-package habit: Flathub carried 7.4 against the AUR's 7.2 as of 2026-08-11, and the AUR build has a single maintainer. Avoid `wasistlos` entirely — still in the AUR, **archived upstream** since Oct 2024.
-- **Threema Desktop 2.0, not the Flathub `ch.threema.threema-web-desktop`.** The latter is the old Threema-Web-in-Electron, now in maintenance mode, and needs the phone online and reachable. Desktop 2.0 is multi-device (works with the phone off), open source, and installed with the `--from <flatpakref>` form — which adds Threema's own remote as a side effect, so no separate `remote-add` step is needed. It is labelled beta and limited to two linked computers.
+- **Threema Desktop 2.0, not the Flathub `ch.threema.threema-web-desktop`.** The latter is the old Threema-Web-in-Electron, now in maintenance mode, and needs the phone online and reachable. Desktop 2.0 is multi-device (works with the phone off), open source, and on Flathub since late 2026. Threema AG's own repo (`releases.threema.ch`, branch `master`) is end-of-life — flatpak warns about it on every update and it gets no new builds — so a machine installed before then migrates once (`MIGRATIONS.md`). It is labelled beta and limited to two linked computers.
 - **On apt/dnf all four come from Flathub.** `telegram-desktop` is packaged there but `signal-desktop` is not (Signal ships its own apt repo), and a guessed package name fails as "not found" rather than as "add the vendor repo" — the same reasoning as ghostty under `DF_DESKTOP`.
 
 ### macOS (casks) is a genuinely different branch, not a translation
@@ -1179,7 +1179,7 @@ brew install --cask signal telegram whatsapp
 | **WhatsApp** | `whatsapp` — **official native Meta client** | no native client exists at all; Linux gets the ZapZap wrapper |
 | **Telegram** | `telegram` — the native Swift app (macos.telegram.org, v12.9) | `telegram-desktop`, the cross-platform Qt build (v7.0.9) |
 | **Signal** | `signal` | `signal-desktop`, same app and version |
-| **Threema** | **no cask** — DMG by hand | flatpak from Threema AG's repo |
+| **Threema** | **no cask** — DMG by hand | flatpak from Flathub |
 
 Two traps:
 

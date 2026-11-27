@@ -862,10 +862,12 @@ fi
 # exists. WhatsApp and Threema have no native Linux client at all:
 #   * ZapZap is a WhatsApp Web wrapper — the most actively maintained of several, and Flathub
 #     carries a newer version than the AUR (7.4 vs 7.2 as of 2026-08-11), so flatpak even on Arch.
-#   * Threema Desktop 2.0 ships from Threema AG's OWN flatpak repo, not Flathub. The `--from`
-#     form adds that remote as a side effect, which is why no separate remote-add is needed.
-#     It is labelled beta and is still the right choice: the Flathub `ch.threema.threema-web-desktop`
-#     is the OLD Threema-Web-in-Electron, in maintenance mode, and needs the phone online.
+#   * Threema Desktop 2.0 (`ch.threema.threema-desktop`) is on Flathub since late 2026. Threema
+#     AG's own repo (releases.threema.ch, branch `master`) is END-OF-LIFE: flatpak reports it on
+#     every update and it gets no new builds (2.0~publicbeta67 there vs 68 on Flathub,
+#     2026-11-27). Existing machines migrate once — see MIGRATIONS.md. It is labelled beta and is
+#     still the right choice: the Flathub `ch.threema.threema-web-desktop` is the OLD
+#     Threema-Web-in-Electron, in maintenance mode, and needs the phone online.
 #
 # On apt/dnf ALL FOUR come from Flathub, deliberately: telegram-desktop is packaged there but
 # signal-desktop is NOT (Signal ships its own apt repo), and a guessed package name fails as
@@ -913,20 +915,7 @@ if ask_yn DF_MESSENGERS "Messengers (Signal, Telegram, WhatsApp/ZapZap, Threema)
 		[ "$PM" = pacman ] || run sudo flatpak install -y flathub org.signal.Signal
 		[ "$PM" = pacman ] || run sudo flatpak install -y flathub org.telegram.desktop
 		run sudo flatpak install -y flathub com.rtosta.zapzap
-		# `--from` ERRORS on an already-installed app; the `<remote> <id>` form above only warns.
-		# Not a cosmetic difference: under `set -e` the error aborts the whole installer, so every
-		# step below this one — through save_answers — silently never runs on a second pass.
-		# Verified against flatpak 1.18.1's source, because the two obvious flags do not help:
-		# install_from() (app/flatpak-builtins-install.c:217) never consults --or-update, which is
-		# handled only in the remote/ref path (:623), and --reinstall suppresses the error by
-		# uninstalling and re-downloading the app on every run. Hence an explicit guard. Keeping an
-		# installed Threema up to date is topgrade's job, not the installer's.
-		if have flatpak && flatpak info ch.threema.threema-desktop >/dev/null 2>&1; then
-			info "Threema Desktop already installed — leaving it to topgrade to update."
-		else
-			run sudo flatpak install -y --from \
-				https://releases.threema.ch/flatpak/threema-desktop/ch.threema.threema-desktop.flatpakref
-		fi
+		run sudo flatpak install -y flathub ch.threema.threema-desktop
 		# Threema's own documented workaround: the sandbox has no host file access by default,
 		# which breaks drag-and-drop of attachments.
 		run flatpak override --user ch.threema.threema-desktop --filesystem=host
